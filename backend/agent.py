@@ -1,0 +1,117 @@
+"""
+Agent factory for the Pokemon MCP Agent.
+
+Integration note: strands' LiteLLMModel calls litellm.completion() at the module level
+and has no native support for a LiteLLM Router. To enable Router-based routing and
+fallback, we monkey-patch litellm.completion / litellm.acompletion with the Router's
+methods before constructing LiteLLMModel. This ensures every inference call goes through
+the Router without any changes to the strands internals.
+
+Re-entrancy guard: the Router internally calls litellm.acompletion/completion to dispatch
+to the actual provider. Without a guard, patching those functions causes the Router to call
+itself recursively. _in_router_call (a ContextVar) breaks the cycle: the first call enters
+the Router; any nested call from inside the Router goes directly to the original litellm
+function instead.
+
+TODO: Replace monkey-patching with native Router support if strands adds it in a future release.
+"""
+
+import contextvars
+from typing import Optional
+
+import litellm as _litellm
+
+# Capture the real litellm functions once at import time, before any patching.
+_orig_completion = _litellm.completion
+_orig_acompletion = _litellm.acompletion
+
+# True while a Router call is in progress; prevents re-entrant patched calls.
+_in_router_call: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_in_router_call", default=False
+)
+
+# MCP SDK v1 and v2 use different function names for the streamable HTTP transport.
+try:
+    from mcp.client.streamable_http import streamablehttp_client as _http_transport
+except ImportError:
+    from mcp.client.streamable_http import streamable_http_client as _http_transport  # type: ignore[no-redef]
+
+from strands import Agent
+from strands.models.litellm import LiteLLMModel
+from strands.tools.mcp import MCPClient
+
+from backend.providers import build_litellm_router
+
+MCP_SERVER_URL = "http://mcppokemonserver-mcpserver-0xj423-904a0e-157-254-174-124.traefik.me/mcp"
+
+SYSTEM_PROMPT = """
+You are an expert Pokémon assistant with access to a live Pokémon
+database via tools. Always use the available tools to retrieve
+accurate data — never guess stats, types, or effectiveness values.
+When comparing Pokémon, call the relevant tools for each one before
+drawing conclusions. Be concise and educational in your responses.
+"""
+
+
+def build_agent(provider_name: Optional[str] = None):
+    """
+    Build and return (model, mcp_client, provider_label).
+
+    The Agent itself is created in the request handler after entering the MCP
+    client context because tools must be listed inside the context via
+    mcp_client.list_tools_sync().
+
+    Args:
+        provider_name: Pin to a specific provider key (e.g. "groq"), or None
+                       to use all configured providers with automatic fallback.
+
+    Returns:
+        (LiteLLMModel, MCPClient, str) — model, mcp client, active provider label
+    """
+    router, provider_label = build_litellm_router(provider_name)
+
+    # Wrap Router calls with a re-entrancy guard so the Router's own internal
+    # litellm.completion / litellm.acompletion calls reach the real functions
+    # instead of looping back into the Router.
+    def _routed_completion(*args, **kwargs):
+        if _in_router_call.get():
+            return _orig_completion(*args, **kwargs)
+        token = _in_router_call.set(True)
+        try:
+            return router.completion(*args, **kwargs)
+        finally:
+            _in_router_call.reset(token)
+
+    async def _routed_acompletion(*args, **kwargs):
+        if _in_router_call.get():
+            return await _orig_acompletion(*args, **kwargs)
+        token = _in_router_call.set(True)
+        try:
+            return await router.acompletion(*args, **kwargs)
+        finally:
+            _in_router_call.reset(token)
+
+    _litellm.completion = _routed_completion
+    _litellm.acompletion = _routed_acompletion
+
+    model = LiteLLMModel(model_id="agent-model")
+
+    mcp_client = MCPClient(lambda: _http_transport(MCP_SERVER_URL))
+
+    return model, mcp_client, provider_label
+
+
+def create_agent(model: LiteLLMModel, tools: list, hooks: list | None = None) -> Agent:
+    """
+    Create a Strands Agent with the given model and MCP tools.
+    Must be called inside an active MCPClient context.
+    callback_handler=None prevents the default stdout callback from interfering
+    with SSE streaming.
+    """
+    return Agent(
+        model=model,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT,
+        callback_handler=None,
+        hooks=hooks or [],
+    )
