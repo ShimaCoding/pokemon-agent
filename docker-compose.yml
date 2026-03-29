@@ -39,13 +39,10 @@ services:
         max-file: "3"
 
     volumes:
-      - pokemon-data:/app/data
+      - ./data:/app/data
 
     networks:
       - pokemon-net
-
-volumes:
-  pokemon-data:
 
 networks:
   pokemon-net:
