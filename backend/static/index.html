@@ -3,488 +3,1391 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pokémon MCP Agent</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>MCPokédex GBC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
-    /* Custom scrollbar for trace panel */
-    .trace-scroll::-webkit-scrollbar { width: 4px; }
-    .trace-scroll::-webkit-scrollbar-track { background: transparent; }
-    .trace-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+    /* ── CSS Variables ─────────────────────────────────────── */
+    :root {
+      --gbc-bg:        #d4d4d4;   /* gris claro - fondo contenido */
+      --gbc-screen:    #a0a0a0;   /* gris medio - accents */
+      --gbc-dark:      #1a1a1a;   /* casi negro - texto principal */
+      --gbc-mid:       #666666;   /* gris texto secundario */
+      --gbc-light:     #b8b8b8;   /* gris claro hover */
+      --gbc-cream:     #e8e8e8;   /* gris muy claro - fondo paneles */
+      --gbc-gold:      #555555;   /* barra título modo avanzado */
+      --gbc-border:    #3a3a3a;   /* bordes de paneles */
+      --gbc-red:       #4a4a4a;   /* barras de stats */
 
-    /* Smooth appear animation for trace cards */
-    @keyframes fadeSlideIn {
-      from { opacity: 0; transform: translateY(6px); }
+      /* colores MCP - se mantienen para distinguibilidad */
+      --mcp-tool:      #3b6ea5;   /* azul tool */
+      --mcp-resource:  #5a9e5a;   /* verde resource */
+      --mcp-prompt:    #c0547a;   /* rosa/magenta prompt */
+
+      --font-pixel: 'Press Start 2P', monospace;
+    }
+
+    /* ── Reset ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-pixel);
+      background: #2a2a2a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 12px;
+      color: var(--gbc-dark);
+    }
+
+    /* ── Outer shell ───────────────────────────────────────── */
+    #app {
+      width: 100%;
+      max-width: 1000px;
+      background: var(--gbc-cream);
+      border: 3px solid var(--gbc-border);
+      image-rendering: pixelated;
+    }
+
+    /* ── Title bar ─────────────────────────────────────────── */
+    #titlebar {
+      background: var(--gbc-dark);
+      color: var(--gbc-cream);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 7px;
+      line-height: 1.6;
+      border-bottom: 2px solid var(--gbc-border);
+    }
+
+    #titlebar .title-left { display: flex; flex-direction: column; gap: 2px; }
+    #titlebar .title-left .main-title { font-size: 9px; color: var(--gbc-screen); }
+
+    /* Botones TOOL / RESOURCE / PROMPT */
+    .mcp-badges {
+      display: flex;
+      gap: 4px;
+    }
+    .mcp-badge {
+      font-size: 6px;
+      padding: 3px 6px;
+      border: 2px solid;
+      cursor: default;
+    }
+    .mcp-badge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool);     }
+    .mcp-badge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+    .mcp-badge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt);   }
+
+    /* ── Mode toggle bar ───────────────────────────────────── */
+    #modebar {
+      background: var(--gbc-gold);
+      padding: 5px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid var(--gbc-border);
+    }
+    #modebar .mode-title {
+      font-size: 8px;
+      color: var(--gbc-dark);
+    }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 6px;
+      color: var(--gbc-dark);
+    }
+    .toggle-switch {
+      width: 36px;
+      height: 16px;
+      background: var(--gbc-dark);
+      border: 2px solid var(--gbc-border);
+      position: relative;
+      cursor: pointer;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 10px;
+      height: 10px;
+      background: var(--gbc-cream);
+      transition: left 0.15s;
+    }
+    .toggle-switch.on::after  { left: 23px; background: var(--gbc-screen); }
+    .toggle-label { font-size: 6px; }
+
+    /* ── Main content area ─────────────────────────────────── */
+    #content {
+      display: flex;
+      min-height: 420px;
+    }
+
+    /* ── LEFT PANEL ────────────────────────────────────────── */
+    #left-panel {
+      width: 42%;
+      border-right: 3px solid var(--gbc-border);
+      display: flex;
+      flex-direction: column;
+      background: var(--gbc-cream);
+    }
+
+    /* Search row */
+    #search-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 8px;
+      border-bottom: 2px dashed var(--gbc-border);
+    }
+    #search-icon {
+      font-size: 8px;
+      padding: 4px 6px;
+      border: 2px solid var(--gbc-border);
+      border-right: none;
+      background: var(--gbc-cream);
+      color: var(--gbc-dark);
+    }
+    #search-input {
+      flex: 1;
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      padding: 5px 6px;
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-cream);
+      color: var(--gbc-dark);
+      outline: none;
+    }
+    #search-input:focus { background: #fff; }
+    #search-btn {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      padding: 5px 7px;
+      border: 2px solid var(--gbc-border);
+      border-left: none;
+      background: var(--gbc-dark);
+      color: var(--gbc-cream);
+      cursor: pointer;
+    }
+    #search-btn:hover { background: var(--gbc-mid); }
+    #search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Sprite area */
+    #sprite-area {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      border-bottom: 2px dashed var(--gbc-border);
+      min-height: 170px;
+      position: relative;
+    }
+    #sprite-frame {
+      border: 3px solid var(--gbc-border);
+      padding: 6px;
+      background: var(--gbc-bg);
+      image-rendering: pixelated;
+      position: relative;
+    }
+    #sprite-frame::before, #sprite-frame::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-cream);
+    }
+    #sprite-frame::before { top: -4px; left: -4px; }
+    #sprite-frame::after  { bottom: -4px; right: -4px; }
+
+    #pokemon-sprite {
+      display: block;
+      width: 112px;
+      height: 112px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+    #sprite-placeholder {
+      width: 112px;
+      height: 112px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 6px;
+      color: var(--gbc-mid);
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    /* Stats bar area */
+    #stats-area {
+      padding: 8px 10px;
+      border-bottom: 2px dashed var(--gbc-border);
+      flex: 0 0 auto;
+    }
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+      font-size: 6px;
+    }
+    .stat-label {
+      width: 28px;
+      text-align: right;
+      color: var(--gbc-dark);
+    }
+    .stat-bar-track {
+      flex: 1;
+      height: 8px;
+      border: 1px solid var(--gbc-border);
+      background: var(--gbc-bg);
+      display: flex;
+      overflow: hidden;
+    }
+    .stat-bar-cell {
+      width: 8.333%;
+      height: 100%;
+      border-right: 1px solid var(--gbc-bg);
+    }
+    .stat-bar-cell.filled { background: var(--gbc-red); }
+    .stat-bar-cell.empty  { background: transparent; }
+    .stat-value {
+      width: 22px;
+      text-align: right;
+      color: var(--gbc-dark);
+    }
+
+    /* "Ver magia MCP" button at bottom of left panel */
+    #mcp-magic-btn {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      color: var(--gbc-dark);
+      background: none;
+      border: none;
+      padding: 7px 10px;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-top: 2px solid var(--gbc-border);
+    }
+    #mcp-magic-btn:hover { background: var(--gbc-bg); }
+    #mcp-magic-btn::before { content: '▶'; font-size: 6px; }
+
+    /* ── RIGHT PANEL ───────────────────────────────────────── */
+    #right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--gbc-cream);
+    }
+
+    /* Tab bar */
+    #tab-bar {
+      display: flex;
+      align-items: center;
+      border-bottom: 2px solid var(--gbc-border);
+      padding: 0 6px;
+      gap: 0;
+    }
+    .tab-arrow {
+      font-size: 7px;
+      padding: 6px 4px;
+      color: var(--gbc-dark);
+    }
+    .tab-btn {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      padding: 7px 8px;
+      border: none;
+      background: none;
+      color: var(--gbc-mid);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+    }
+    .tab-btn:hover  { color: var(--gbc-dark); }
+    .tab-btn.active {
+      color: var(--gbc-dark);
+      border-bottom-color: var(--gbc-dark);
+    }
+
+    /* Tab content panels */
+    .tab-content { display: none; padding: 10px; flex: 1; }
+    .tab-content.active { display: block; }
+
+    /* INFO tab */
+    #tab-info .pokemon-name-display {
+      font-size: 9px;
+      margin-bottom: 8px;
+      color: var(--gbc-dark);
+    }
+    #tab-info .dex-entry {
+      font-size: 6px;
+      line-height: 2;
+      color: var(--gbc-dark);
+      border: 2px solid var(--gbc-border);
+      padding: 8px;
+      background: var(--gbc-bg);
+      margin-bottom: 8px;
+    }
+    #tab-info .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+    #tab-info .info-item {
+      font-size: 6px;
+      line-height: 2;
+      border: 1px solid var(--gbc-border);
+      padding: 4px 6px;
+      background: var(--gbc-bg);
+    }
+    .info-key { color: var(--gbc-mid); display: block; }
+    .info-val { color: var(--gbc-dark); }
+
+    /* Types & weaknesses */
+    .type-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .type-chip {
+      font-size: 6px;
+      padding: 3px 7px;
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-bg);
+      color: var(--gbc-dark);
+    }
+    .type-chip.multiplier-2x  { background: #c8a060; border-color: #8a6020; }
+    .type-chip.multiplier-half { background: #60a0c8; border-color: #204060; color: var(--gbc-cream); }
+    .type-chip.multiplier-0x  { background: var(--gbc-dark); color: var(--gbc-cream); }
+
+    /* MOVES tab */
+    #tab-moves .moves-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .move-item {
+      font-size: 6px;
+      padding: 5px 7px;
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-bg);
+      line-height: 1.8;
+    }
+    .move-name { color: var(--gbc-dark); font-size: 6px; }
+    .move-meta { color: var(--gbc-mid); font-size: 5px; margin-top: 2px; }
+
+    /* EVOS tab */
+    #tab-evos .evo-chain {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 10px 0;
+    }
+    .evo-pokemon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .evo-frame {
+      border: 2px solid var(--gbc-border);
+      padding: 4px;
+      background: var(--gbc-bg);
+    }
+    .evo-frame img {
+      width: 56px;
+      height: 56px;
+      image-rendering: pixelated;
+      display: block;
+    }
+    .evo-name { font-size: 5px; color: var(--gbc-dark); }
+    .evo-arrow { font-size: 10px; color: var(--gbc-dark); }
+
+    /* STATS tab */
+    #tab-stats .stat-big-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 6px;
+    }
+    .stat-big-label { width: 40px; color: var(--gbc-dark); }
+    .stat-big-bar-track {
+      flex: 1;
+      height: 10px;
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-bg);
+      overflow: hidden;
+    }
+    .stat-big-bar-fill {
+      height: 100%;
+      background: var(--gbc-red);
+      transition: width 0.5s;
+    }
+    .stat-big-val { width: 28px; text-align: right; color: var(--gbc-dark); }
+
+    /* ═══════════════════════════════════════════════════════════
+       MODO AVANZADO MCP
+       ═══════════════════════════════════════════════════════════ */
+    #advanced-panel {
+      display: none;
+      flex: 1;
+    }
+    #advanced-panel.active {
+      display: flex;
+    }
+
+    /* Left side - datos + leyenda + ¿Qué es MCP? */
+    #adv-left {
+      width: 42%;
+      border-right: 3px solid var(--gbc-border);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .adv-section {
+      border-bottom: 2px solid var(--gbc-border);
+      padding: 8px 10px;
+    }
+    .adv-section-title {
+      font-size: 6px;
+      color: var(--gbc-mid);
+      border-bottom: 1px solid var(--gbc-border);
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .adv-section-content {
+      font-size: 6px;
+      line-height: 2;
+      color: var(--gbc-dark);
+    }
+    .adv-data-row { margin-bottom: 3px; }
+    .adv-data-key { color: var(--gbc-mid); }
+
+    /* Leyenda MCP */
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 6px;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border: 2px solid;
+      flex-shrink: 0;
+    }
+    .legend-dot.tool     { background: var(--mcp-tool);     border-color: #1a3d6e; }
+    .legend-dot.resource { background: var(--mcp-resource); border-color: #2d6e2d; }
+    .legend-dot.prompt   { background: var(--mcp-prompt);   border-color: #8a2050; }
+
+    /* Right side - trace MCP en vivo */
+    #adv-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    #trace-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-bottom: 2px solid var(--gbc-border);
+      font-size: 6px;
+    }
+    #trace-header .trace-title {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #trace-header .trace-title::before {
+      content: '□';
+      font-size: 8px;
+    }
+    #trace-stats { color: var(--gbc-mid); font-size: 6px; }
+
+    #trace-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    #trace-list::-webkit-scrollbar { width: 4px; }
+    #trace-list::-webkit-scrollbar-track { background: var(--gbc-bg); }
+    #trace-list::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+
+    .trace-empty {
+      font-size: 6px;
+      color: var(--gbc-mid);
+      text-align: center;
+      padding: 20px;
+      line-height: 2;
+    }
+
+    /* Trace cards */
+    .trace-card {
+      border: 2px solid;
+      padding: 6px 8px;
+      font-size: 6px;
+      line-height: 1.8;
+      animation: slideIn 0.15s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-    .card-enter { animation: fadeSlideIn 0.2s ease-out forwards; }
+    .trace-card.tool     { border-color: var(--mcp-tool);     background: #dce8f5; }
+    .trace-card.resource { border-color: var(--mcp-resource); background: #dceede; }
+    .trace-card.prompt   { border-color: var(--mcp-prompt);   background: #f5dce8; }
+    .trace-card.result   { border-color: var(--gbc-border);   background: var(--gbc-bg); border-style: dashed; }
 
-    /* Spinner */
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner { animation: spin 0.8s linear infinite; }
-
-    /* Typing indicator dots */
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); }
-      40%           { transform: translateY(-4px); }
+    .trace-card-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 3px;
     }
-    .dot { animation: bounce 1.2s infinite; }
-    .dot:nth-child(2) { animation-delay: 0.2s; }
-    .dot:nth-child(3) { animation-delay: 0.4s; }
+    .trace-type-badge {
+      font-size: 5px;
+      padding: 1px 4px;
+      border: 1px solid;
+      text-transform: uppercase;
+    }
+    .trace-type-badge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool); }
+    .trace-type-badge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+    .trace-type-badge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt); }
+
+    .trace-name { color: var(--gbc-dark); font-size: 6px; }
+    .trace-timing { color: var(--gbc-mid); font-size: 5px; margin-left: auto; }
+
+    .trace-meta {
+      font-size: 5px;
+      color: var(--gbc-mid);
+      line-height: 1.8;
+    }
+    .trace-meta span { color: var(--gbc-dark); }
+
+    /* Summary card */
+    .trace-summary {
+      border: 2px solid var(--gbc-border);
+      background: var(--gbc-cream);
+      padding: 6px 8px;
+      font-size: 6px;
+      line-height: 2;
+    }
+    .trace-summary-title { color: var(--gbc-dark); margin-bottom: 2px; }
+    .trace-summary-vals { color: var(--gbc-mid); }
+
+    /* Future phase dashed */
+    .trace-future {
+      border: 2px dashed var(--gbc-border);
+      padding: 6px 8px;
+      font-size: 6px;
+      color: var(--gbc-mid);
+      line-height: 1.8;
+      background: var(--gbc-bg);
+    }
+
+    /* ── Bottom bar: search input (modo normal) ────────────── */
+    #bottom-bar {
+      border-top: 3px solid var(--gbc-border);
+      background: var(--gbc-dark);
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      gap: 6px;
+    }
+
+    #query-input {
+      flex: 1;
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      padding: 6px 8px;
+      border: 2px solid var(--gbc-mid);
+      background: var(--gbc-screen);
+      color: var(--gbc-dark);
+      outline: none;
+    }
+    #query-input::placeholder { color: var(--gbc-mid); }
+    #query-input:focus { border-color: var(--gbc-cream); }
+    #query-input:disabled { opacity: 0.5; }
+
+    #send-btn {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      padding: 6px 10px;
+      background: var(--gbc-screen);
+      border: 2px solid var(--gbc-mid);
+      color: var(--gbc-dark);
+      cursor: pointer;
+    }
+    #send-btn:hover:not(:disabled)   { background: var(--gbc-light); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #provider-select {
+      font-family: var(--font-pixel);
+      font-size: 6px;
+      padding: 5px 4px;
+      background: var(--gbc-dark);
+      border: 2px solid var(--gbc-mid);
+      color: var(--gbc-screen);
+      outline: none;
+    }
+
+    #status-badge {
+      font-size: 5px;
+      padding: 3px 5px;
+      border: 1px solid;
+      white-space: nowrap;
+      color: var(--gbc-screen);
+      border-color: var(--gbc-mid);
+    }
+    #status-badge.error { color: #ff6060; border-color: #c03030; }
+
+    /* ── Thinking blink ────────────────────────────────────── */
+    #thinking {
+      display: none;
+      font-size: 6px;
+      color: var(--gbc-screen);
+      animation: blink 0.8s step-end infinite;
+    }
+    #thinking.visible { display: block; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Chat answer overlay (normal mode) ─────────────────── */
+    #answer-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-size: 6px;
+      line-height: 2;
+      color: var(--gbc-dark);
+      background: var(--gbc-cream);
+      display: none;
+    }
+    #answer-area.visible { display: block; }
+    #answer-area::-webkit-scrollbar { width: 4px; }
+    #answer-area::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      #content, #advanced-panel { flex-direction: column; }
+      #left-panel, #adv-left { width: 100%; border-right: none; border-bottom: 3px solid var(--gbc-border); }
+      #advanced-panel.active { flex-direction: column; }
+    }
   </style>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col">
+<body>
 
-  <!-- ===== HEADER ===== -->
-  <header class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center gap-4 flex-wrap">
-    <div class="flex items-center gap-2">
-      <span class="text-2xl">⚡</span>
-      <h1 class="text-lg font-bold text-yellow-400 whitespace-nowrap">Pokémon MCP Agent</h1>
+<div id="app">
+
+  <!-- ── TITLE BAR ──────────────────────────────────────────── -->
+  <header id="titlebar">
+    <div class="title-left">
+      <span class="main-title">MCPokédex GBC</span>
+      <span id="subtitle">Press Start 2P</span>
     </div>
-
-    <div class="flex items-center gap-2 ml-auto">
-      <label for="providerSelect" class="text-xs text-gray-400 whitespace-nowrap">Proveedor:</label>
-      <select
-        id="providerSelect"
-        class="bg-gray-700 border border-gray-600 text-sm rounded px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-yellow-500"
-      >
-        <option value="">Cargando…</option>
-      </select>
-      <span id="statusBadge" class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-400 whitespace-nowrap">
-        Listo
-      </span>
+    <div class="mcp-badges">
+      <span class="mcp-badge tool">TOOL</span>
+      <span class="mcp-badge resource">RESOURCE</span>
+      <span class="mcp-badge prompt">PROMPT</span>
     </div>
   </header>
 
-  <!-- ===== MAIN LAYOUT ===== -->
-  <main class="flex flex-1 overflow-hidden flex-col md:flex-row">
+  <!-- ── MODE BAR ───────────────────────────────────────────── -->
+  <div id="modebar">
+    <span class="mode-title" id="mode-label">Modo Normal</span>
+    <div class="toggle-wrap">
+      <span class="toggle-label">Ver magia MCP</span>
+      <div class="toggle-switch" id="mode-toggle" role="button" tabindex="0" aria-label="Cambiar modo"></div>
+      <span class="toggle-label" id="toggle-state">OFF</span>
+    </div>
+  </div>
 
-    <!-- ===== CHAT PANEL (60%) ===== -->
-    <section class="flex flex-col md:w-3/5 border-b md:border-b-0 md:border-r border-gray-700 overflow-hidden">
+  <!-- ════════════════════════════════════════════════════════
+       MODO NORMAL
+       ════════════════════════════════════════════════════════ -->
+  <div id="normal-panel">
+    <div id="content">
 
-      <!-- Message history -->
-      <div id="chatHistory" class="flex-1 overflow-y-auto p-4 space-y-3 trace-scroll">
-        <!-- Initial welcome message -->
-        <div class="flex justify-start">
-          <div class="bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2 max-w-prose text-sm text-gray-200">
-            ¡Hola! Soy tu asistente Pokémon. Puedo consultar estadísticas, tipos, efectividades y más usando herramientas en tiempo real. ¿En qué te puedo ayudar?
+      <!-- LEFT: sprite + stats -->
+      <div id="left-panel">
+        <div id="search-row">
+          <span id="search-icon">🔍</span>
+          <input id="search-input" type="text" placeholder="buscar pokémon..." maxlength="30" />
+          <button id="search-btn">▶</button>
+        </div>
+
+        <div id="sprite-area">
+          <div id="sprite-frame">
+            <div id="sprite-placeholder">ingresa un<br>pokémon para<br>comenzar</div>
+            <img id="pokemon-sprite" src="" alt="" style="display:none;" />
           </div>
         </div>
+
+        <div id="stats-area">
+          <div class="stat-row" id="stat-HP">
+            <span class="stat-label">HP</span>
+            <div class="stat-bar-track" id="bar-HP"></div>
+            <span class="stat-value" id="val-HP">--</span>
+          </div>
+          <div class="stat-row" id="stat-ATK">
+            <span class="stat-label">ATK</span>
+            <div class="stat-bar-track" id="bar-ATK"></div>
+            <span class="stat-value" id="val-ATK">--</span>
+          </div>
+          <div class="stat-row" id="stat-DEF">
+            <span class="stat-label">DEF</span>
+            <div class="stat-bar-track" id="bar-DEF"></div>
+            <span class="stat-value" id="val-DEF">--</span>
+          </div>
+          <div class="stat-row" id="stat-SPD">
+            <span class="stat-label">SPD</span>
+            <div class="stat-bar-track" id="bar-SPD"></div>
+            <span class="stat-value" id="val-SPD">--</span>
+          </div>
+        </div>
+
+        <button id="mcp-magic-btn">Ver magia MCP</button>
       </div>
 
-      <!-- Thinking indicator -->
-      <div id="thinkingIndicator" class="hidden px-4 pb-2">
-        <div class="flex items-center gap-1 text-gray-400 text-xs">
-          <div class="dot w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
-          <div class="dot w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
-          <div class="dot w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
-          <span class="ml-1">Pensando…</span>
+      <!-- RIGHT: tabs -->
+      <div id="right-panel">
+        <div id="tab-bar">
+          <span class="tab-arrow">▶</span>
+          <button class="tab-btn active" data-tab="info">INFO</button>
+          <button class="tab-btn" data-tab="stats">STATS</button>
+          <button class="tab-btn" data-tab="moves">MOVES</button>
+          <button class="tab-btn" data-tab="evos">EVOS</button>
+        </div>
+
+        <!-- INFO -->
+        <div class="tab-content active" id="tab-info">
+          <div class="pokemon-name-display" id="info-name">???</div>
+          <div class="dex-entry" id="dex-entry">Consulta un Pokémon para ver su entrada en la Pokédex.</div>
+          <div class="info-grid">
+            <div class="info-item"><span class="info-key">Tipo</span><span class="info-val" id="info-type">--</span></div>
+            <div class="info-item"><span class="info-key">Altura</span><span class="info-val" id="info-height">--</span></div>
+            <div class="info-item"><span class="info-key">Peso</span><span class="info-val" id="info-weight">--</span></div>
+            <div class="info-item"><span class="info-key">Nº</span><span class="info-val" id="info-number">--</span></div>
+          </div>
+          <div class="type-chips" id="weakness-chips"></div>
+        </div>
+
+        <!-- STATS -->
+        <div class="tab-content" id="tab-stats">
+          <div style="padding: 4px 0;">
+            <div class="stat-big-row"><span class="stat-big-label">HP</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-HP" style="width:0%"></div></div><span class="stat-big-val" id="big-val-HP">--</span></div>
+            <div class="stat-big-row"><span class="stat-big-label">ATK</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-ATK" style="width:0%"></div></div><span class="stat-big-val" id="big-val-ATK">--</span></div>
+            <div class="stat-big-row"><span class="stat-big-label">DEF</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-DEF" style="width:0%"></div></div><span class="stat-big-val" id="big-val-DEF">--</span></div>
+            <div class="stat-big-row"><span class="stat-big-label">SP.ATK</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-SPATK" style="width:0%"></div></div><span class="stat-big-val" id="big-val-SPATK">--</span></div>
+            <div class="stat-big-row"><span class="stat-big-label">SP.DEF</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-SPDEF" style="width:0%"></div></div><span class="stat-big-val" id="big-val-SPDEF">--</span></div>
+            <div class="stat-big-row"><span class="stat-big-label">SPD</span><div class="stat-big-bar-track"><div class="stat-big-bar-fill" id="big-bar-SPD" style="width:0%"></div></div><span class="stat-big-val" id="big-val-SPD">--</span></div>
+          </div>
+        </div>
+
+        <!-- MOVES -->
+        <div class="tab-content" id="tab-moves">
+          <div class="moves-grid" id="moves-grid">
+            <div class="move-item" style="color:var(--gbc-mid); font-size:6px; grid-column:1/-1;">consulta un pokémon para ver sus movimientos</div>
+          </div>
+        </div>
+
+        <!-- EVOS -->
+        <div class="tab-content" id="tab-evos">
+          <div class="evo-chain" id="evo-chain">
+            <div class="trace-empty">consulta un pokémon<br>para ver su cadena<br>evolutiva</div>
+          </div>
+        </div>
+
+        <!-- Answer overlay for free queries -->
+        <div id="answer-area"></div>
+      </div>
+
+    </div><!-- #content -->
+  </div><!-- #normal-panel -->
+
+  <!-- ════════════════════════════════════════════════════════
+       MODO AVANZADO MCP
+       ════════════════════════════════════════════════════════ -->
+  <div id="advanced-panel">
+
+    <!-- LEFT: datos pokémon + leyenda + qué es MCP -->
+    <div id="adv-left">
+      <div class="adv-section" id="adv-data-section">
+        <div class="adv-section-title">
+          <span>GBC Pokémon Data</span>
+        </div>
+        <div class="adv-section-content" id="adv-pokemon-info">
+          <div class="adv-data-row"><span class="adv-data-key">Pokémon · </span><span id="adv-name">--</span></div>
+          <div class="adv-data-row"><span class="adv-data-key">Tipos · </span><span id="adv-types">--</span></div>
+          <div class="adv-data-row"><span class="adv-data-key">Altura · </span><span id="adv-height">--</span></div>
+          <div class="adv-data-row"><span class="adv-data-key">Peso · </span><span id="adv-weight">--</span></div>
+          <div class="adv-data-row"><span class="adv-data-key">Nº Dex · </span><span id="adv-number">--</span></div>
         </div>
       </div>
 
-      <!-- Example chips -->
-      <div class="px-4 pb-2 flex flex-wrap gap-2">
-        <span class="text-xs text-gray-500">Sugerencias:</span>
-        <button class="chip text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-full transition-colors" data-query="¿Cuáles son las fortalezas y debilidades de Charizard?">Fortalezas de Charizard</button>
-        <button class="chip text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-full transition-colors" data-query="Compara a Blastoise vs Venusaur en batalla">Blastoise vs Venusaur</button>
-        <button class="chip text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-full transition-colors" data-query="¿Qué tipo es más efectivo contra Mewtwo?">Contra Mewtwo</button>
-        <button class="chip text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-full transition-colors" data-query="Analiza las estadísticas de Pikachu">Stats de Pikachu</button>
+      <div class="adv-section">
+        <div class="adv-section-title">LEYENDA MCP</div>
+        <div class="adv-section-content">
+          <div class="legend-item"><div class="legend-dot tool"></div><span>· Tool call</span></div>
+          <div class="legend-item"><div class="legend-dot resource"></div><span>· Resource</span></div>
+          <div class="legend-item"><div class="legend-dot prompt"></div><span>· Prompt template</span></div>
+        </div>
       </div>
 
-      <!-- Input row -->
-      <div class="px-4 pb-4 flex gap-2">
-        <textarea
-          id="queryInput"
-          rows="1"
-          placeholder="Pregunta sobre Pokémon…"
-          class="flex-1 bg-gray-800 border border-gray-600 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-yellow-500 placeholder-gray-500"
-          style="max-height:120px; overflow-y:auto;"
-        ></textarea>
-        <button
-          id="sendBtn"
-          class="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-gray-900 font-semibold text-sm px-4 py-2 rounded-xl transition-colors flex-shrink-0"
-        >
-          Enviar
-        </button>
+      <div class="adv-section" style="flex:1;">
+        <div class="adv-section-title">¿Qué es MCP?</div>
+        <div class="adv-section-content" style="line-height:2.2;">
+          MCP (Model Context Protocol) conecta LLMs con herramientas externas. Cada consulta puede usar Tools, Resources y Prompts del servidor pokemcp.com para traer datos en tiempo real.
+        </div>
       </div>
-    </section>
+    </div>
 
-    <!-- ===== TOOL TRACE PANEL (40%) ===== -->
-    <section class="flex flex-col md:w-2/5 overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-gray-300">Traza de Herramientas</h2>
-        <span id="toolCountBadge" class="text-xs text-gray-500"></span>
+    <!-- RIGHT: trace en vivo -->
+    <div id="adv-right">
+      <div id="trace-header">
+        <div class="trace-title">Trace MCP en vivo</div>
+        <div id="trace-stats">esperando consulta…</div>
       </div>
-      <div id="tracePanel" class="flex-1 overflow-y-auto p-3 space-y-3 trace-scroll">
-        <!-- Initial empty state -->
-        <p id="traceEmpty" class="text-xs text-gray-500 text-center pt-8">
-          Ejecuta una consulta para ver la traza
-        </p>
+      <div id="trace-list">
+        <div class="trace-empty" id="trace-empty-msg">ejecuta una consulta<br>en el panel inferior<br>para ver la traza MCP</div>
       </div>
-    </section>
+    </div>
 
-  </main>
+  </div><!-- #advanced-panel -->
 
-  <!-- ===== JAVASCRIPT ===== -->
-  <script>
-  (() => {
-    'use strict';
+  <!-- ── BOTTOM BAR ─────────────────────────────────────────── -->
+  <div id="bottom-bar">
+    <select id="provider-select">
+      <option value="">cargando…</option>
+    </select>
+    <input id="query-input" type="text" placeholder="pregunta sobre pokémon…" />
+    <span id="thinking">█ pensando…</span>
+    <span id="status-badge">listo</span>
+    <button id="send-btn">ENVIAR</button>
+  </div>
 
-    // ── DOM refs ──────────────────────────────────────────────────────────
-    const chatHistory      = document.getElementById('chatHistory');
-    const queryInput       = document.getElementById('queryInput');
-    const sendBtn          = document.getElementById('sendBtn');
-    const tracePanel       = document.getElementById('tracePanel');
-    const traceEmpty       = document.getElementById('traceEmpty');
-    const thinkingIndicator= document.getElementById('thinkingIndicator');
-    const providerSelect   = document.getElementById('providerSelect');
-    const statusBadge      = document.getElementById('statusBadge');
-    const toolCountBadge   = document.getElementById('toolCountBadge');
+</div><!-- #app -->
 
-    let inFlight = false;
-    let currentAssistantEl = null;  // streaming text target
-    let toolCallCount = 0;
+<!-- ══════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════════════════════════════════ -->
+<script>
+(() => {
+'use strict';
 
-    // ── Provider dropdown ─────────────────────────────────────────────────
-    async function loadProviders() {
+// ── DOM refs ──────────────────────────────────────────────────
+const modeToggle      = document.getElementById('mode-toggle');
+const modeLabel       = document.getElementById('mode-label');
+const toggleState     = document.getElementById('toggle-state');
+const normalPanel     = document.getElementById('normal-panel');
+const advancedPanel   = document.getElementById('advanced-panel');
+const mcpMagicBtn     = document.getElementById('mcp-magic-btn');
+
+const queryInput      = document.getElementById('query-input');
+const sendBtn         = document.getElementById('send-btn');
+const providerSelect  = document.getElementById('provider-select');
+const statusBadge     = document.getElementById('status-badge');
+const thinkingEl      = document.getElementById('thinking');
+
+const searchInput     = document.getElementById('search-input');
+const searchBtn       = document.getElementById('search-btn');
+const pokemonSprite   = document.getElementById('pokemon-sprite');
+const spritePlaceholder = document.getElementById('sprite-placeholder');
+
+const answerArea      = document.getElementById('answer-area');
+const traceList       = document.getElementById('trace-list');
+const traceStats      = document.getElementById('trace-stats');
+const traceEmptyMsg   = document.getElementById('trace-empty-msg');
+
+// Tab buttons
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    answerArea.classList.remove('visible');
+  });
+});
+
+// ── Mode toggle ───────────────────────────────────────────────
+let advancedMode = false;
+
+function setMode(adv) {
+  advancedMode = adv;
+  modeToggle.classList.toggle('on', adv);
+  toggleState.textContent = adv ? 'ON' : 'OFF';
+  modeLabel.textContent   = adv ? 'Modo Avanzado MCP' : 'Modo Normal';
+  normalPanel.style.display   = adv ? 'none'  : 'block';
+  advancedPanel.classList.toggle('active', adv);
+}
+
+modeToggle.addEventListener('click', () => setMode(!advancedMode));
+modeToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') setMode(!advancedMode); });
+mcpMagicBtn.addEventListener('click',  () => setMode(true));
+
+// ── Providers ─────────────────────────────────────────────────
+async function loadProviders() {
+  try {
+    const res  = await fetch('/providers');
+    const list = await res.json();
+    const avail = list.filter(p => p.available);
+    providerSelect.innerHTML = '';
+    if (!avail.length) {
+      providerSelect.innerHTML = '<option value="">sin proveedores</option>';
+      return;
+    }
+    for (const p of avail) {
+      const o = document.createElement('option');
+      o.value = p.name;
+      o.textContent = p.label;
+      providerSelect.appendChild(o);
+    }
+  } catch { providerSelect.innerHTML = '<option value="">error</option>'; }
+}
+
+// ── Stats bar renderer (mini, 12 cells) ───────────────────────
+function renderMiniBar(trackId, valId, value, max = 255) {
+  const track = document.getElementById(trackId);
+  const valEl = document.getElementById(valId);
+  if (!track || !valEl) return;
+  const filled = Math.round((value / max) * 12);
+  track.innerHTML = Array.from({length:12}, (_, i) =>
+    `<div class="stat-bar-cell ${i < filled ? 'filled' : 'empty'}"></div>`
+  ).join('');
+  valEl.textContent = value;
+}
+
+function renderBigBar(barId, valId, value, max = 255) {
+  const bar = document.getElementById(barId);
+  const val = document.getElementById(valId);
+  if (!bar || !val) return;
+  bar.style.width = Math.min(100, (value / max) * 100) + '%';
+  val.textContent = value;
+}
+
+// ── Populate UI from parsed Pokémon data ──────────────────────
+function populatePokemon(data) {
+  // data shape expected:
+  // { name, number, types:[], height, weight, sprite,
+  //   stats: {hp,atk,def,spatk,spdef,spd},
+  //   moves:[], dex_entry, evolution_chain:[], weaknesses:[] }
+
+  const name = data.name || '???';
+
+  // Normal mode
+  document.getElementById('info-name').textContent    = name.toUpperCase();
+  document.getElementById('dex-entry').textContent    = data.dex_entry || '—';
+  document.getElementById('info-type').textContent    = (data.types || []).join(' / ') || '--';
+  document.getElementById('info-height').textContent  = data.height || '--';
+  document.getElementById('info-weight').textContent  = data.weight || '--';
+  document.getElementById('info-number').textContent  = data.number ? '#' + String(data.number).padStart(3,'0') : '--';
+
+  // Sprite
+  if (data.sprite) {
+    pokemonSprite.src = data.sprite;
+    pokemonSprite.alt = name;
+    pokemonSprite.style.display = 'block';
+    spritePlaceholder.style.display = 'none';
+  }
+
+  // Mini stats
+  const s = data.stats || {};
+  renderMiniBar('bar-HP',  'val-HP',  s.hp  || 0);
+  renderMiniBar('bar-ATK', 'val-ATK', s.atk || 0);
+  renderMiniBar('bar-DEF', 'val-DEF', s.def || 0);
+  renderMiniBar('bar-SPD', 'val-SPD', s.spd || 0);
+
+  // Big stats tab
+  renderBigBar('big-bar-HP',    'big-val-HP',    s.hp    || 0);
+  renderBigBar('big-bar-ATK',   'big-val-ATK',   s.atk   || 0);
+  renderBigBar('big-bar-DEF',   'big-val-DEF',   s.def   || 0);
+  renderBigBar('big-bar-SPATK', 'big-val-SPATK', s.spatk || 0);
+  renderBigBar('big-bar-SPDEF', 'big-val-SPDEF', s.spdef || 0);
+  renderBigBar('big-bar-SPD',   'big-val-SPD',   s.spd   || 0);
+
+  // Weaknesses chips
+  const wChips = document.getElementById('weakness-chips');
+  wChips.innerHTML = '';
+  (data.weaknesses || []).forEach(w => {
+    const chip = document.createElement('span');
+    chip.className = 'type-chip ' + (w.multiplier === 2 ? 'multiplier-2x' : w.multiplier === 0.5 ? 'multiplier-half' : '');
+    chip.textContent = (w.multiplier === 2 ? '2× ' : w.multiplier === 0.5 ? '½ ' : '') + (w.type || w).toUpperCase();
+    wChips.appendChild(chip);
+  });
+
+  // Moves tab
+  const movesGrid = document.getElementById('moves-grid');
+  movesGrid.innerHTML = '';
+  (data.moves || []).slice(0,8).forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'move-item';
+    const moveName = typeof m === 'string' ? m : (m.name || m);
+    const moveMeta = typeof m === 'object' ? (m.type || '') : '';
+    div.innerHTML = `<div class="move-name">${moveName.toUpperCase()}</div>${moveMeta ? `<div class="move-meta">${moveMeta}</div>` : ''}`;
+    movesGrid.appendChild(div);
+  });
+
+  // Evolution chain
+  const evoChain = document.getElementById('evo-chain');
+  evoChain.innerHTML = '';
+  const evos = data.evolution_chain || [];
+  evos.forEach((evo, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('span');
+      arrow.className = 'evo-arrow';
+      arrow.textContent = '→';
+      evoChain.appendChild(arrow);
+    }
+    const evoEl = document.createElement('div');
+    evoEl.className = 'evo-pokemon';
+    const evoName = typeof evo === 'string' ? evo : evo.name;
+    const evoSprite = typeof evo === 'object' && evo.sprite ? evo.sprite : '';
+    evoEl.innerHTML = `
+      <div class="evo-frame">${evoSprite ? `<img src="${evoSprite}" alt="${evoName}" />` : `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;font-size:5px;color:var(--gbc-mid);">${evoName.slice(0,4)}</div>`}</div>
+      <span class="evo-name">${evoName.toUpperCase()}</span>
+    `;
+    evoChain.appendChild(evoEl);
+  });
+  if (!evos.length) evoChain.innerHTML = '<div class="trace-empty">sin cadena evolutiva</div>';
+
+  // Advanced mode data panel
+  document.getElementById('adv-name').textContent   = name.toUpperCase();
+  document.getElementById('adv-types').textContent  = (data.types || []).join(' / ') || '--';
+  document.getElementById('adv-height').textContent = data.height || '--';
+  document.getElementById('adv-weight').textContent = data.weight || '--';
+  document.getElementById('adv-number').textContent = data.number ? '#' + String(data.number).padStart(3,'0') : '--';
+}
+
+// ── Parse pokémon info from agent text response ───────────────
+// The agent answers in free text; we use PokeAPI as fallback for structured data.
+async function fetchPokemonStructured(name) {
+  try {
+    const cleanName = name.trim().toLowerCase().replace(/\s+/g,'-');
+    const [pokeRes, speciesRes] = await Promise.all([
+      fetch(`https://pokeapi.co/api/v2/pokemon/${cleanName}`),
+      fetch(`https://pokeapi.co/api/v2/pokemon-species/${cleanName}`)
+    ]);
+    if (!pokeRes.ok) return null;
+    const poke    = await pokeRes.json();
+    const species = speciesRes.ok ? await speciesRes.json() : null;
+
+    // dex entry
+    let dex_entry = '';
+    if (species) {
+      const es = species.flavor_text_entries.find(e => e.language.name === 'es');
+      const en = species.flavor_text_entries.find(e => e.language.name === 'en');
+      dex_entry = (es || en || {}).flavor_text || '';
+      dex_entry = dex_entry.replace(/\f/g,' ').replace(/\n/g,' ');
+    }
+
+    // evolution chain
+    let evolution_chain = [];
+    if (species && species.evolution_chain) {
       try {
-        const res = await fetch('/providers');
-        const providers = await res.json();
-        const available = providers.filter(p => p.available);
-
-        providerSelect.innerHTML = '';
-        if (available.length === 0) {
-          providerSelect.innerHTML = '<option value="">Sin proveedores</option>';
-          return;
-        }
-        for (const p of available) {
-          const opt = document.createElement('option');
-          opt.value = p.name;
-          opt.textContent = p.label;
-          providerSelect.appendChild(opt);
-        }
-      } catch (e) {
-        providerSelect.innerHTML = '<option value="">Error al cargar</option>';
-      }
+        const evoRes  = await fetch(species.evolution_chain.url);
+        const evoData = await evoRes.json();
+        const walk = (chain) => {
+          const evoName = chain.species.name;
+          const spriteUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${chain.species.url.split('/').filter(Boolean).pop()}.png`;
+          evolution_chain.push({ name: evoName, sprite: spriteUrl });
+          if (chain.evolves_to && chain.evolves_to.length) walk(chain.evolves_to[0]);
+        };
+        walk(evoData.chain);
+      } catch {}
     }
 
-    // ── Chat helpers ──────────────────────────────────────────────────────
-    function appendUserMessage(text) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'flex justify-end';
-      const bubble = document.createElement('div');
-      bubble.className = 'bg-yellow-600 text-gray-900 rounded-2xl rounded-tr-sm px-4 py-2 max-w-prose text-sm whitespace-pre-wrap break-words';
-      bubble.textContent = text;
-      wrapper.appendChild(bubble);
-      chatHistory.appendChild(wrapper);
-      scrollChat();
-    }
-
-    function createAssistantBubble() {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'flex justify-start';
-      const bubble = document.createElement('div');
-      bubble.className = 'bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-2 max-w-prose text-sm text-gray-200 whitespace-pre-wrap break-words';
-      wrapper.appendChild(bubble);
-      chatHistory.appendChild(wrapper);
-      scrollChat();
-      return bubble;
-    }
-
-    function appendErrorMessage(msg) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'flex justify-start';
-      const bubble = document.createElement('div');
-      bubble.className = 'bg-red-900 border border-red-700 rounded-2xl rounded-tl-sm px-4 py-2 max-w-prose text-sm text-red-200';
-      bubble.textContent = `⚠️ Error: ${msg}. Intenta de nuevo o cambia el proveedor.`;
-      wrapper.appendChild(bubble);
-      chatHistory.appendChild(wrapper);
-      scrollChat();
-    }
-
-    function scrollChat() {
-      chatHistory.scrollTop = chatHistory.scrollHeight;
-    }
-
-    // ── Trace helpers ─────────────────────────────────────────────────────
-    const TOOL_COLORS = {
-      get_pokemon_info:       'text-blue-400',
-      search_pokemon:         'text-purple-400',
-      get_type_effectiveness: 'text-green-400',
-      analyze_pokemon_stats:  'text-orange-400',
-    };
-
-    function getToolColor(name) {
-      return TOOL_COLORS[name] || 'text-yellow-400';
-    }
-
-    function clearTrace() {
-      tracePanel.innerHTML = '';
-      toolCallCount = 0;
-      toolCountBadge.textContent = '';
-      traceEmpty.textContent = 'Esperando herramientas…';
-      traceEmpty.className = 'text-xs text-gray-500 text-center pt-8';
-      tracePanel.appendChild(traceEmpty);
-    }
-
-    function createTraceCard(index, toolName, timestampMs) {
-      // Remove empty state
-      if (traceEmpty.parentNode === tracePanel) {
-        tracePanel.removeChild(traceEmpty);
-      }
-
-      const card = document.createElement('div');
-      card.id = `trace-card-${index}`;
-      card.className = 'card-enter bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs space-y-2';
-
-      // Header row
-      const header = document.createElement('div');
-      header.className = 'flex items-center justify-between gap-2';
-
-      const nameEl = document.createElement('span');
-      nameEl.className = `font-bold ${getToolColor(toolName)}`;
-      nameEl.textContent = toolName;
-
-      const tsEl = document.createElement('span');
-      tsEl.className = 'text-gray-500 font-mono flex-shrink-0';
-      tsEl.textContent = `+${timestampMs}ms`;
-
-      header.appendChild(nameEl);
-      header.appendChild(tsEl);
-      card.appendChild(header);
-
-      // Args section (placeholder until filled)
-      const argsLabel = document.createElement('div');
-      argsLabel.className = 'text-gray-500 uppercase tracking-wider text-[10px]';
-      argsLabel.textContent = 'Argumentos';
-      card.appendChild(argsLabel);
-
-      return card;
-    }
-
-    function fillTraceCardArgs(card, args) {
-      const pre = document.createElement('pre');
-      pre.className = 'bg-gray-900 rounded p-2 overflow-x-auto text-gray-300 leading-relaxed';
-      pre.style.maxHeight = '120px';
-      pre.textContent = JSON.stringify(args, null, 2);
-      card.appendChild(pre);
-    }
-
-    function addTraceCard(index, toolName, args, timestampMs) {
-      const card = createTraceCard(index, toolName, timestampMs);
-
-      // Spinner while waiting for result
-      const spinnerRow = document.createElement('div');
-      spinnerRow.id = `trace-spinner-${index}`;
-      spinnerRow.className = 'flex items-center gap-1 text-gray-500';
-      const spinnerIcon = document.createElement('div');
-      spinnerIcon.className = 'spinner w-3 h-3 border-2 border-gray-600 border-t-yellow-400 rounded-full';
-      spinnerRow.appendChild(spinnerIcon);
-      spinnerRow.appendChild(Object.assign(document.createElement('span'), { textContent: 'Esperando resultado…' }));
-      card.appendChild(spinnerRow);
-
-      fillTraceCardArgs(card, args);
-      tracePanel.appendChild(card);
-      tracePanel.scrollTop = tracePanel.scrollHeight;
-
-      toolCallCount++;
-      toolCountBadge.textContent = `${toolCallCount} llamada${toolCallCount !== 1 ? 's' : ''}`;
-    }
-
-    function fillTraceResult(index, result, timestampMs) {
-      const card = document.getElementById(`trace-card-${index}`);
-      if (!card) return;
-
-      // Remove spinner
-      const spinner = document.getElementById(`trace-spinner-${index}`);
-      if (spinner) spinner.remove();
-
-      const resultLabel = document.createElement('div');
-      resultLabel.className = 'text-gray-500 uppercase tracking-wider text-[10px]';
-      resultLabel.textContent = 'Resultado';
-      card.appendChild(resultLabel);
-
-      const pre = document.createElement('pre');
-      pre.className = 'bg-gray-900 rounded p-2 overflow-y-auto text-gray-300 leading-relaxed';
-      pre.style.maxHeight = '200px';
-      pre.textContent = result;
-      card.appendChild(pre);
-
-      const tsEl = document.createElement('div');
-      tsEl.className = 'text-gray-600 text-right';
-      tsEl.textContent = `completado en +${timestampMs}ms`;
-      card.appendChild(tsEl);
-
-      tracePanel.scrollTop = tracePanel.scrollHeight;
-    }
-
-    // ── SSE consumer ──────────────────────────────────────────────────────
-    async function runQuery(query) {
-      if (inFlight) return;
-      inFlight = true;
-
-      setUIState('loading');
-      appendUserMessage(query);
-      clearTrace();
-      currentAssistantEl = null;
-
-      const provider = providerSelect.value || null;
-
-      let reader;
+    // type effectiveness (simplified)
+    const types = poke.types.map(t => t.type.name);
+    const weaknesses = [];
+    // fetch damage relations per type
+    for (const t of types) {
       try {
-        const res = await fetch('/api/agent/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, provider }),
+        const tr = await fetch(`https://pokeapi.co/api/v2/type/${t}`);
+        const td = await tr.json();
+        td.damage_relations.double_damage_from.forEach(dt => {
+          if (!weaknesses.find(w => w.type === dt.name))
+            weaknesses.push({ type: dt.name, multiplier: 2 });
         });
+        td.damage_relations.half_damage_from.forEach(dt => {
+          const ex = weaknesses.find(w => w.type === dt.name);
+          if (ex) ex.multiplier /= 2; else weaknesses.push({ type: dt.name, multiplier: 0.5 });
+        });
+      } catch {}
+    }
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const stats = {};
+    poke.stats.forEach(s => {
+      const map = { hp:'hp', attack:'atk', defense:'def', 'special-attack':'spatk', 'special-defense':'spdef', speed:'spd' };
+      stats[map[s.stat.name] || s.stat.name] = s.base_stat;
+    });
+
+    return {
+      name:            poke.name,
+      number:          poke.id,
+      types,
+      height:          (poke.height / 10).toFixed(1) + 'm',
+      weight:          (poke.weight / 10).toFixed(1) + 'kg',
+      sprite:          poke.sprites.front_default,
+      stats,
+      moves:           poke.moves.slice(0,8).map(m => m.move.name),
+      dex_entry,
+      evolution_chain,
+      weaknesses:      weaknesses.filter(w => w.multiplier >= 2),
+    };
+  } catch { return null; }
+}
+
+// ── Trace card builder ────────────────────────────────────────
+function addTraceCard(type, name, details, timingMs) {
+  if (traceEmptyMsg && traceEmptyMsg.parentNode === traceList) {
+    traceList.removeChild(traceEmptyMsg);
+  }
+  const card = document.createElement('div');
+  card.className = `trace-card ${type}`;
+  card.innerHTML = `
+    <div class="trace-card-header">
+      <span class="trace-type-badge ${type}">${type.toUpperCase()}</span>
+      <span class="trace-name">${name}</span>
+      <span class="trace-timing">+${timingMs}ms</span>
+    </div>
+    <div class="trace-meta">${details}</div>
+  `;
+  traceList.appendChild(card);
+  traceList.scrollTop = traceList.scrollHeight;
+  return card;
+}
+
+function addTraceSummary(totalCalls, elapsedMs) {
+  const card = document.createElement('div');
+  card.className = 'trace-summary';
+  card.innerHTML = `
+    <div class="trace-summary-title">Resumen de esta consulta</div>
+    <div class="trace-summary-vals">Llamadas: ${totalCalls} · Tiempo: ${elapsedMs}ms</div>
+  `;
+  traceList.appendChild(card);
+}
+
+// ── SSE runner ────────────────────────────────────────────────
+let inFlight = false;
+
+async function runQuery(query) {
+  if (inFlight) return;
+  inFlight = true;
+
+  // Reset trace
+  traceList.innerHTML = '';
+  const emptyEl = document.createElement('div');
+  emptyEl.className = 'trace-empty';
+  emptyEl.textContent = 'Esperando herramientas…';
+  traceList.appendChild(emptyEl);
+
+  traceStats.textContent = 'procesando…';
+
+  // UI state
+  queryInput.disabled = true;
+  sendBtn.disabled    = true;
+  searchBtn.disabled  = true;
+  thinkingEl.classList.add('visible');
+  statusBadge.textContent = 'procesando';
+  statusBadge.className   = 'status-badge';
+
+  answerArea.innerHTML = '';
+  answerArea.classList.remove('visible');
+
+  let toolIndex = 0;
+  let elapsedMs = 0;
+  const toolCards = {};
+
+  // Try to detect pokemon name from query for PokeAPI lookup
+  const pokemonFromQuery = extractPokemonName(query);
+
+  try {
+    const res = await fetch('/api/agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, provider: providerSelect.value || null }),
+    });
+
+    const reader   = res.body.getReader();
+    const decoder  = new TextDecoder();
+    let   buffer   = '';
+    let   fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
+
+        switch (evt.type) {
+          case 'tool_call': {
+            const typeKey = guessToolType(evt.tool);
+            const card = addTraceCard(
+              typeKey,
+              evt.tool,
+              `<span>Args:</span> ${JSON.stringify(evt.args || {})}`,
+              evt.timestamp_ms || 0
+            );
+            toolCards[evt.index] = card;
+            toolIndex++;
+            break;
+          }
+          case 'tool_result': {
+            const card = toolCards[evt.index];
+            if (card) {
+              const resultEl = document.createElement('div');
+              resultEl.className = 'trace-meta';
+              resultEl.style.marginTop = '3px';
+              resultEl.style.borderTop = '1px dashed var(--gbc-border)';
+              resultEl.style.paddingTop = '3px';
+              const preview = String(evt.result || '').slice(0, 80);
+              resultEl.innerHTML = `<span>Resultado:</span> ${preview}${preview.length === 80 ? '…' : ''}`;
+              card.appendChild(resultEl);
+            }
+            break;
+          }
+          case 'text':
+            fullText += evt.delta || '';
+            // Show answer in normal mode
+            answerArea.textContent = fullText;
+            answerArea.classList.add('visible');
+            break;
+          case 'done':
+            elapsedMs = evt.elapsed_ms || 0;
+            traceStats.textContent = `${toolIndex} llamadas · ${elapsedMs}ms`;
+            addTraceSummary(toolIndex, elapsedMs);
+            statusBadge.textContent = 'listo';
+            break;
+          case 'error':
+            statusBadge.textContent = 'error';
+            statusBadge.className = 'error';
+            break;
         }
-
-        reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // SSE frames are separated by \n\n; extract complete frames
-          const frames = buffer.split('\n\n');
-          buffer = frames.pop(); // last element may be incomplete
-
-          for (const frame of frames) {
-            const line = frame.trim();
-            if (!line.startsWith('data:')) continue;
-            const jsonStr = line.slice('data:'.length).trim();
-            if (!jsonStr) continue;
-
-            let evt;
-            try { evt = JSON.parse(jsonStr); } catch { continue; }
-
-            handleEvent(evt);
-          }
-        }
-      } catch (err) {
-        appendErrorMessage(err.message || 'Conexión fallida');
-        if (reader) try { reader.cancel(); } catch {}
-      } finally {
-        inFlight = false;
-        setUIState('idle');
       }
     }
 
-    function handleEvent(evt) {
-      switch (evt.type) {
-        case 'start':
-          setStatus(`${evt.provider}`, 'active');
-          break;
-
-        case 'tool_call':
-          thinkingIndicator.classList.add('hidden');
-          addTraceCard(evt.index, evt.tool, evt.args, evt.timestamp_ms);
-          break;
-
-        case 'tool_result':
-          fillTraceResult(evt.index, evt.result, evt.timestamp_ms);
-          break;
-
-        case 'text':
-          if (!currentAssistantEl) {
-            thinkingIndicator.classList.add('hidden');
-            currentAssistantEl = createAssistantBubble();
-          }
-          currentAssistantEl.textContent += evt.delta;
-          scrollChat();
-          break;
-
-        case 'done':
-          setStatus('Listo', 'idle');
-          if (!currentAssistantEl) {
-            // Agent responded with only tool calls and no text — show summary
-            currentAssistantEl = createAssistantBubble();
-            currentAssistantEl.textContent = `✅ Completado (${evt.total_tool_calls} herramienta${evt.total_tool_calls !== 1 ? 's' : ''} usada${evt.total_tool_calls !== 1 ? 's' : ''})`;
-          }
-          if (evt.total_tool_calls === 0) {
-            traceEmpty.textContent = 'No se usaron herramientas para esta consulta';
-            tracePanel.appendChild(traceEmpty);
-          }
-          break;
-
-        case 'error':
-          appendErrorMessage(evt.message);
-          setStatus('Error', 'error');
-          break;
-      }
+    // After response: try to hydrate pokémon panel from PokeAPI
+    const detectedName = pokemonFromQuery || detectPokemonInText(fullText);
+    if (detectedName) {
+      const data = await fetchPokemonStructured(detectedName);
+      if (data) populatePokemon(data);
     }
 
-    // ── UI state helpers ──────────────────────────────────────────────────
-    function setUIState(state) {
-      const loading = state === 'loading';
-      queryInput.disabled = loading;
-      sendBtn.disabled = loading;
-      providerSelect.disabled = loading;
-      if (loading) {
-        thinkingIndicator.classList.remove('hidden');
-        sendBtn.textContent = '…';
-      } else {
-        thinkingIndicator.classList.add('hidden');
-        sendBtn.textContent = 'Enviar';
-      }
-    }
+  } catch (err) {
+    statusBadge.textContent = 'error';
+    statusBadge.className   = 'error';
+    console.error(err);
+  } finally {
+    inFlight = false;
+    queryInput.disabled = false;
+    sendBtn.disabled    = false;
+    searchBtn.disabled  = false;
+    thinkingEl.classList.remove('visible');
+  }
+}
 
-    function setStatus(text, mode) {
-      statusBadge.textContent = text;
-      statusBadge.className = 'text-xs px-2 py-0.5 rounded-full whitespace-nowrap';
-      if (mode === 'active') {
-        statusBadge.classList.add('bg-green-800', 'text-green-300');
-      } else if (mode === 'error') {
-        statusBadge.classList.add('bg-red-900', 'text-red-300');
-      } else {
-        statusBadge.classList.add('bg-gray-700', 'text-gray-400');
-      }
-    }
+function guessToolType(toolName) {
+  if (!toolName) return 'tool';
+  if (toolName.includes('resource') || toolName.startsWith('pokemon://')) return 'resource';
+  if (toolName.includes('prompt')   || toolName.includes('educational'))  return 'prompt';
+  return 'tool';
+}
 
-    // ── Auto-resize textarea ──────────────────────────────────────────────
-    queryInput.addEventListener('input', () => {
-      queryInput.style.height = 'auto';
-      queryInput.style.height = Math.min(queryInput.scrollHeight, 120) + 'px';
-    });
+function extractPokemonName(query) {
+  // Simple heuristic: last word or quoted name
+  const q = query.toLowerCase();
+  const match = q.match(/(?:de|sobre|el|la|pokemon|pokémon)\s+([a-záéíóúñ]+)/i);
+  if (match) return match[1];
+  // Just try the last meaningful word
+  const words = q.split(/\s+/).filter(w => w.length > 3);
+  return words[words.length - 1] || null;
+}
 
-    // ── Enter to send (Shift+Enter for newline) ───────────────────────────
-    queryInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        submitQuery();
-      }
-    });
+function detectPokemonInText(text) {
+  // Common pokemon names mentioned in the agent response
+  const known = ['pikachu','charizard','blastoise','venusaur','mewtwo','gengar',
+    'snorlax','eevee','meowth','raichu','bulbasaur','charmander','squirtle',
+    'jigglypuff','psyduck','machamp','gyarados','lapras','ditto','vaporeon',
+    'jolteon','flareon','alakazam','machoke','geodude','slowpoke','magikarp'];
+  const lower = text.toLowerCase();
+  return known.find(n => lower.includes(n)) || null;
+}
 
-    // ── Send button ───────────────────────────────────────────────────────
-    sendBtn.addEventListener('click', submitQuery);
+// ── Quick search (just hits PokeAPI directly) ─────────────────
+async function quickSearch(name) {
+  if (!name.trim()) return;
+  searchBtn.disabled = true;
+  statusBadge.textContent = 'buscando…';
+  const data = await fetchPokemonStructured(name.trim());
+  if (data) {
+    populatePokemon(data);
+    statusBadge.textContent = 'listo';
+    // Clear any previous answer
+    answerArea.classList.remove('visible');
+    // Show INFO tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="info"]').classList.add('active');
+    document.getElementById('tab-info').classList.add('active');
+  } else {
+    statusBadge.textContent = 'no encontrado';
+    statusBadge.className   = 'error';
+    setTimeout(() => { statusBadge.className = ''; statusBadge.textContent = 'listo'; }, 2000);
+  }
+  searchBtn.disabled = false;
+}
 
-    function submitQuery() {
-      const q = queryInput.value.trim();
-      if (!q || inFlight) return;
-      queryInput.value = '';
-      queryInput.style.height = 'auto';
-      runQuery(q);
-    }
+// ── Event listeners ───────────────────────────────────────────
+sendBtn.addEventListener('click', () => {
+  const q = queryInput.value.trim();
+  if (q) { queryInput.value = ''; runQuery(q); }
+});
+queryInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+searchBtn.addEventListener('click',   () => quickSearch(searchInput.value));
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') quickSearch(searchInput.value);
+});
 
-    // ── Example chips ─────────────────────────────────────────────────────
-    document.querySelectorAll('.chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const q = btn.dataset.query;
-        if (!q || inFlight) return;
-        runQuery(q);
-      });
-    });
+// ── Init ──────────────────────────────────────────────────────
+loadProviders();
+queryInput.focus();
 
-    // ── Init ──────────────────────────────────────────────────────────────
-    loadProviders();
-    queryInput.focus();
-  })();
-  </script>
+})();
+</script>
 </body>
 </html>
