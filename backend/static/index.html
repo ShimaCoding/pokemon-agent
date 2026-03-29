@@ -268,23 +268,6 @@
       color: var(--gbc-dark);
     }
 
-    /* "Ver magia MCP" button at bottom of left panel */
-    #mcp-magic-btn {
-      font-family: var(--font-pixel);
-      font-size: 7px;
-      color: var(--gbc-dark);
-      background: none;
-      border: none;
-      padding: 7px 10px;
-      cursor: pointer;
-      text-align: left;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      border-top: 2px solid var(--gbc-border);
-    }
-    #mcp-magic-btn:hover { background: var(--gbc-bg); }
-    #mcp-magic-btn::before { content: '▶'; font-size: 6px; }
 
     /* ── RIGHT PANEL ───────────────────────────────────────── */
     #right-panel {
@@ -531,6 +514,7 @@
 
     #trace-list {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 6px;
       display: flex;
@@ -750,14 +734,6 @@
     #tab-dexter::-webkit-scrollbar { width: 4px; }
     #tab-dexter::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
-    /* ── Consola de Dexter (logs panel) ─────────────────────── */
-    #dexter-console {
-      display: flex;
-      flex-direction: column;
-      height: 190px;
-      border-top: 3px solid var(--gbc-border);
-      background: var(--gbc-cream);
-    }
 
     /* ── Markdown rendered content ────────────────────────── */
     .md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
@@ -1107,7 +1083,13 @@
           </div>
         </div>
 
-        <button id="mcp-magic-btn">Consola de Dexter (Logs)</button>
+        <div id="trace-header">
+          <div class="trace-title">Consola de Dexter (Logs)</div>
+          <div id="trace-stats">esperando…</div>
+        </div>
+        <div id="trace-list">
+          <div class="trace-empty" id="trace-empty-msg">ejecuta una consulta<br>para ver la traza MCP</div>
+        </div>
       </div>
 
       <!-- RIGHT: tabs -->
@@ -1215,17 +1197,6 @@
 
   </div><!-- #advanced-panel -->
 
-  <!-- ── CONSOLA DE DEXTER (logs colapsables) ──────────────── -->
-  <div id="dexter-console">
-    <div id="trace-header">
-      <div class="trace-title">Consola de Dexter: Traza en vivo</div>
-      <div id="trace-stats">esperando consulta…</div>
-    </div>
-    <div id="trace-list">
-      <div class="trace-empty" id="trace-empty-msg">ejecuta una consulta<br>para ver la traza MCP</div>
-    </div>
-  </div>
-
   <!-- ── BOTTOM BAR ─────────────────────────────────────────── -->
   <div id="bottom-bar">
     <div id="slash-menu" class="hidden"></div>
@@ -1256,7 +1227,6 @@ const modeLabel       = document.getElementById('mode-label');
 const toggleState     = document.getElementById('toggle-state');
 const normalPanel     = document.getElementById('normal-panel');
 const advancedPanel   = document.getElementById('advanced-panel');
-const mcpMagicBtn     = document.getElementById('mcp-magic-btn');
 
 const queryInput      = document.getElementById('query-input');
 const sendBtn         = document.getElementById('send-btn');
@@ -1271,7 +1241,7 @@ const pokemonSprite   = document.getElementById('pokemon-sprite');
 const spritePlaceholder = document.getElementById('sprite-placeholder');
 
 const tabDexter       = document.getElementById('tab-dexter');
-const dexterConsole   = document.getElementById('dexter-console');
+
 const traceList       = document.getElementById('trace-list');
 const traceStats      = document.getElementById('trace-stats');
 const traceEmptyMsg   = document.getElementById('trace-empty-msg');
@@ -1357,9 +1327,7 @@ function setMode(adv) {
 
 modeToggle.addEventListener('click', () => setMode(!advancedMode));
 modeToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') setMode(!advancedMode); });
-mcpMagicBtn.addEventListener('click', () => {
-  dexterConsole.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-});
+
 
 // ── Providers ─────────────────────────────────────────────────
 async function loadProviders() {
