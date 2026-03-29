@@ -14,31 +14,33 @@ export default function TitleBar() {
 
   return (
     <header className={styles.titlebar} id="titlebar">
-      <div className={styles.titleLeft}>
+      <div className={styles.topRow}>
         <div className={styles.titleMain}>
           <img src="/favicon.svg" alt="" className={styles.titleLogo} />
           <span className={styles.mainTitle}>MCPokédex</span>
         </div>
         <div className={styles.githubLinks}>
+          <img src="/github.svg" alt="GitHub" className={styles.githubIcon} />
           <a
             className={styles.githubLink}
             href="https://github.com/ShimaCoding/mcp-pokemon-server"
             target="_blank"
             rel="noopener noreferrer"
           >
-            ★ mcp-pokemon-server
+            mcp-pokemon-server
           </a>
+          <span className={styles.githubSep}>·</span>
           <a
             className={styles.githubLink}
             href="https://github.com/ShimaCoding/pokemon-agent"
             target="_blank"
             rel="noopener noreferrer"
           >
-            ★ pokemon-agent
+            pokemon-agent
           </a>
         </div>
       </div>
-      <div className={styles.titleRight}>
+      <div className={styles.bottomRow}>
         <div className={styles.mcpBadges}>
           <McpBadgeDropdown kind="tool"     items={mcpTools}     />
           <McpBadgeDropdown kind="resource" items={mcpResources} />

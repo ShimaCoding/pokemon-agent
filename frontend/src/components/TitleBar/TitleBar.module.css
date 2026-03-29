@@ -1,25 +1,32 @@
 .titlebar {
   background: var(--gbc-dark);
   color: var(--gbc-cream);
-  padding: 6px 10px;
+  padding: 5px 10px 4px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 4px;
   font-size: 7px;
   line-height: 1.6;
   border-bottom: 2px solid var(--gbc-border);
 }
 
-.titleLeft {
+.topRow {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
+}
+
+.bottomRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .titleMain {
   display: flex;
   align-items: center;
   gap: 5px;
+  flex-shrink: 0;
 }
 
 .titleLogo {
@@ -32,11 +39,22 @@
 .mainTitle {
   font-size: 9px;
   color: var(--gbc-screen);
+  white-space: nowrap;
 }
 
 .githubLinks {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.githubIcon {
+  height: 8px;
+  width: 8px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+  filter: invert(60%) sepia(0%) saturate(0%) brightness(90%);
 }
 
 .githubLink {
@@ -44,16 +62,16 @@
   color: var(--gbc-mid);
   text-decoration: none;
   transition: color 0.15s;
+  white-space: nowrap;
 }
 
 .githubLink:hover {
   color: var(--gbc-screen);
 }
 
-.titleRight {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.githubSep {
+  font-size: 6px;
+  color: var(--gbc-border);
 }
 
 .mcpBadges {
