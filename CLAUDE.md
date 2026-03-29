@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pokémon MCP Agent — a FastAPI web app that uses the Strands Agents SDK to answer Pokémon questions via a live MCP server (`pokemcp.com/mcp`). LLM requests are routed through LiteLLM with automatic provider fallback (Groq → Gemini → OpenAI). The browser receives both tool traces and final answers in real time via SSE.
+Pokémon MCP Agent — a FastAPI web app that uses the Strands Agents SDK to answer Pokémon questions via a live MCP server (`mcpokedex.com/mcp`). LLM requests are routed through LiteLLM with automatic provider fallback (Groq → Gemini → OpenAI). The browser receives both tool traces and final answers in real time via SSE.
 
 ## Running the App
 

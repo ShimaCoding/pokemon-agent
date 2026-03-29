@@ -1,6 +1,6 @@
 # Pokémon MCP Agent
 
-A production-ready AI agent sandbox that connects to the live Pokémon MCP server at `pokemcp.com/mcp` and lets you query Pokémon data through a conversational web interface. The agent uses the Strands Agents SDK, routes LLM calls through a LiteLLM Router with automatic provider fallback (Groq → Gemini → OpenAI), and streams every tool call and its result back to the browser in real time via Server-Sent Events.
+A production-ready AI agent sandbox that connects to the live Pokémon MCP server at `mcpokedex.com/mcp` and lets you query Pokémon data through a conversational web interface. The agent uses the Strands Agents SDK, routes LLM calls through a LiteLLM Router with automatic provider fallback (Groq → Gemini → OpenAI), and streams every tool call and its result back to the browser in real time via Server-Sent Events.
 
 ---
 
@@ -45,14 +45,14 @@ You only need **one** key to run the agent. If multiple keys are set, the LiteLL
 
 ## How the Tool Trace Works
 
-When you ask a question, the agent may call one or more tools against the live Pokémon database (e.g. `get_pokemon_info`, `analyze_pokemon_stats`). Each tool call is forwarded through the backend to the MCP server at `pokemcp.com/mcp`; results come back and are fed into the next model turn.
+When you ask a question, the agent may call one or more tools against the live Pokémon database (e.g. `get_pokemon_info`, `analyze_pokemon_stats`). Each tool call is forwarded through the backend to the MCP server at `mcpokedex.com/mcp`; results come back and are fed into the next model turn.
 
 The right-hand panel shows every tool invocation in real time:
 - The card appears immediately when the tool is called, with a spinner.
 - The spinner is replaced by the raw result as soon as it comes back.
 - Each card shows the tool name, the arguments it was called with, the response, and the time elapsed since the query started.
 
-All MCP calls are made **server-side** — your browser never talks directly to `pokemcp.com`.
+All MCP calls are made **server-side** — your browser never talks directly to `mcpokedex.com`.
 
 ---
 
