@@ -1756,6 +1756,14 @@ async function runQuery(query) {
     statusBadge.textContent = 'error';
     statusBadge.className   = 'error';
     console.error(err);
+    const msg = err.message || '';
+    const isRateLimit = msg.toLowerCase().includes('demasiadas') || msg.includes('429') || msg.toLowerCase().includes('too many');
+    const displayMsg = isRateLimit
+      ? '⚡ ¡Pi-ka-pi! ¡Pika pika chu! *(Demasiadas consultas... El Maestro Pokémon dice: espera un momento antes de volver a intentarlo.)*'
+      : `❌ *${escHtml(msg) || 'Error desconocido'}*`;
+    answerArea.innerHTML = marked.parse(displayMsg);
+    answerArea.classList.add('visible', 'md-content');
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   } finally {
     inFlight = false;
     queryInput.disabled = false;
