@@ -1,9 +1,21 @@
+import importlib.metadata as _meta
 import os
+import sys
 from typing import Optional
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Guard against known-malicious LiteLLM versions (supply chain attack, March 2026).
+# Versions 1.82.7 and 1.82.8 exfiltrate API keys; refuse to start.
+_litellm_version = _meta.version("litellm")
+if _litellm_version in ("1.82.7", "1.82.8"):
+    sys.exit(
+        f"SECURITY ERROR: litellm=={_litellm_version} contains a supply chain compromise "
+        "that exfiltrates API keys. Downgrade to litellm==1.82.6 immediately and rotate "
+        "any keys that may have been exposed."
+    )
 
 PROVIDERS: dict[str, dict] = {
     "groq": {
@@ -24,6 +36,16 @@ PROVIDERS: dict[str, dict] = {
         "label": "OpenAI (gpt-4o-mini)",
         "order": 3,
     },
+    "openrouter": {
+        # Two frontier models with native tool-calling support via OpenRouter.
+        "model_ids": [
+            "openrouter/anthropic/claude-3.5-sonnet",
+            "openrouter/google/gemini-2.5-flash",
+        ],
+        "env_var": "OPENROUTER_API_KEY",
+        "label": "OpenRouter (Claude 3.5 Sonnet + Gemini 2.5 Flash)",
+        "order": 4,
+    },
 }
 
 
@@ -37,11 +59,43 @@ def get_available_providers() -> list[dict]:
     return sorted(available, key=lambda p: p["order"])
 
 
+def _build_router_model_list(providers: list[dict]) -> list[dict]:
+    """
+    Expand providers into LiteLLM Router deployment entries, all aliased to
+    "agent-model" so the Strands agent never needs provider-aware logic.
+
+    Providers with a single model_id produce one entry; providers with model_ids
+    produce one entry per model. OpenRouter deployments inject the HTTP-Referer
+    and X-Title headers required by OpenRouter's routing layer — LiteLLM strips
+    unknown top-level keys, so the headers must live inside litellm_params.
+    """
+    site_url = os.environ.get("OR_SITE_URL", "")
+    app_name = os.environ.get("OR_APP_NAME", "pokemon-agent")
+
+    model_list: list[dict] = []
+    for p in providers:
+        model_ids: list[str] = p.get("model_ids") or [p["model_id"]]
+        for model_id in model_ids:
+            litellm_params: dict = {
+                "model": model_id,
+                "api_key": p["api_key"],
+            }
+            if p["name"] == "openrouter":
+                extra_headers: dict = {"X-Title": app_name}
+                if site_url:
+                    extra_headers["HTTP-Referer"] = site_url
+                litellm_params["extra_headers"] = extra_headers
+            model_list.append(
+                {"model_name": "agent-model", "litellm_params": litellm_params}
+            )
+    return model_list
+
+
 def build_litellm_router(provider_name: Optional[str] = None):
     """
     Build and return a LiteLLM Router.
 
-    If provider_name is given and available, returns a single-model Router (no fallback).
+    If provider_name is given and available, returns a single-provider Router (no fallback).
     If provider_name is None or unavailable, returns a Router with all available providers.
 
     All entries use the shared model_name alias "agent-model" so LiteLLMModel can use
@@ -62,15 +116,7 @@ def build_litellm_router(provider_name: Optional[str] = None):
     if provider_name and provider_name in PROVIDERS:
         pinned = next((p for p in available if p["name"] == provider_name), None)
         if pinned:
-            model_list = [
-                {
-                    "model_name": "agent-model",
-                    "litellm_params": {
-                        "model": pinned["model_id"],
-                        "api_key": pinned["api_key"],
-                    },
-                }
-            ]
+            model_list = _build_router_model_list([pinned])
             router = Router(
                 model_list=model_list,
                 num_retries=3,
@@ -82,16 +128,7 @@ def build_litellm_router(provider_name: Optional[str] = None):
             return router, pinned["label"]
 
     # Full router with all available providers and automatic fallback
-    model_list = [
-        {
-            "model_name": "agent-model",
-            "litellm_params": {
-                "model": p["model_id"],
-                "api_key": p["api_key"],
-            },
-        }
-        for p in available
-    ]
+    model_list = _build_router_model_list(available)
     router = Router(
         model_list=model_list,
         num_retries=3,
@@ -100,6 +137,5 @@ def build_litellm_router(provider_name: Optional[str] = None):
         cooldown_time=60,
         routing_strategy="least-busy",
     )
-    # Label reflects the primary (first-priority) provider
     primary_label = available[0]["label"]
     return router, f"{primary_label} (auto-fallback)"

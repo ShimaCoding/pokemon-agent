@@ -1,6 +1,6 @@
 strands-agents>=1.0.0
 strands-agents[litellm]>=1.0.0
-litellm>=1.80.0
+litellm==1.82.6
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-dotenv>=1.0.0
