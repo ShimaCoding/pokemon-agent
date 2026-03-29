@@ -51,7 +51,7 @@ body {
 }
 
 /* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
-.md-content { font-size: 12px; line-height: 2; color: var(--gbc-dark); }
+.md-content { font-size: 14px; line-height: 2; color: var(--gbc-dark); }
 .md-content p { margin-bottom: 6px; }
 .md-content h1, .md-content h2, .md-content h3 {
   font-family: var(--font-pixel);
@@ -78,7 +78,7 @@ body {
 }
 .md-content code {
   font-family: monospace;
-  font-size: 12px;
+  font-size: 14px;
   background: var(--gbc-bg);
   border: 1px solid var(--gbc-border);
   padding: 1px 4px;
@@ -95,7 +95,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin: 6px 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 .md-content th {
   background: var(--gbc-dark);
