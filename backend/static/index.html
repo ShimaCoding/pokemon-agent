@@ -752,14 +752,12 @@
 
     /* ── Consola de Dexter (logs panel) ─────────────────────── */
     #dexter-console {
-      display: none;
+      display: flex;
       flex-direction: column;
       height: 190px;
       border-top: 3px solid var(--gbc-border);
       background: var(--gbc-cream);
     }
-    #dexter-console.open { display: flex; }
-    #mcp-magic-btn.console-open::before { content: '▼'; }
 
     /* ── Markdown rendered content ────────────────────────── */
     .md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
@@ -1360,8 +1358,7 @@ function setMode(adv) {
 modeToggle.addEventListener('click', () => setMode(!advancedMode));
 modeToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') setMode(!advancedMode); });
 mcpMagicBtn.addEventListener('click', () => {
-  const open = dexterConsole.classList.toggle('open');
-  mcpMagicBtn.classList.toggle('console-open', open);
+  dexterConsole.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
 // ── Providers ─────────────────────────────────────────────────
