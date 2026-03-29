@@ -17,6 +17,7 @@ TODO: Replace monkey-patching with native Router support if strands adds it in a
 """
 
 import contextvars
+import os
 from typing import Any, Optional
 
 import litellm as _litellm
@@ -51,7 +52,10 @@ from strands.tools.mcp import MCPClient
 
 from backend.providers import build_litellm_router
 
-MCP_SERVER_URL = "http://mcppokemonserver-mcpserver-0xj423-904a0e-157-254-174-124.traefik.me/mcp"
+MCP_SERVER_URL = os.environ.get(
+    "MCP_SERVER_URL",
+    "http://mcppokemonserver-mcpserver-0xj423-904a0e-157-254-174-124.traefik.me/mcp",
+)
 
 SYSTEM_PROMPT = """
 You are an expert Pokémon assistant with access to a live Pokémon

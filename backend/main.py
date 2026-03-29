@@ -4,12 +4,16 @@ FastAPI application for the Pokemon MCP Agent.
 Routes:
   GET  /health             — health check + active providers
   GET  /providers          — list all providers with availability
+  GET  /config             — public frontend config (e.g. require_api_key flag)
   POST /api/agent/run      — SSE stream: agent response + tool call trace
   GET  /                   — serves index.html (via StaticFiles mount)
 
-TODO: Add authentication before exposing to the public internet.
-TODO: Add rate limiting (e.g. slowapi) to prevent abuse.
-TODO: Restrict CORS origins to your production domain.
+Security:
+  - API key auth: set API_KEY env var; clients must send X-API-Key header.
+    If API_KEY is unset, auth is disabled (suitable for local dev).
+  - Rate limiting: /api/agent/run is capped at 5 req/min per IP via slowapi.
+  - CORS: controlled by ALLOWED_ORIGINS env var (comma-separated).
+    Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
 
 import json
@@ -20,11 +24,15 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from backend.providers import PROVIDERS, build_litellm_router, get_available_providers
 
@@ -32,6 +40,27 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Rate limiter
+# ---------------------------------------------------------------------------
+
+limiter = Limiter(key_func=get_remote_address)
+
+# ---------------------------------------------------------------------------
+# API key authentication
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(api_key: str = Security(_api_key_header)) -> None:
+    """Dependency: reject requests when API_KEY is set but header is missing/wrong."""
+    expected = os.environ.get("API_KEY", "").strip()
+    if not expected:
+        return  # Auth disabled — no API_KEY configured
+    if api_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 @asynccontextmanager
@@ -54,12 +83,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Pokemon MCP Agent", lifespan=lifespan)
 
-# TODO: Restrict to specific origins before going to production.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS: read from ALLOWED_ORIGINS (comma-separated). Defaults to "*" for local dev.
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+_cors_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
 
 
@@ -76,6 +111,12 @@ class RunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@app.get("/config")
+async def config():
+    """Public endpoint: tells the frontend whether an API key is required."""
+    return {"require_api_key": bool(os.environ.get("API_KEY", "").strip())}
 
 
 @app.get("/health")
@@ -101,7 +142,7 @@ async def providers():
     return result
 
 
-@app.get("/api/prompts")
+@app.get("/api/prompts", dependencies=[Depends(verify_api_key)])
 async def get_prompts():
     """Fetch the list of prompts from the MCP server."""
     import asyncio
@@ -134,8 +175,9 @@ async def get_prompts():
         return []
 
 
-@app.post("/api/agent/run")
-async def run_agent(body: RunRequest):
+@app.post("/api/agent/run", dependencies=[Depends(verify_api_key)])
+@limiter.limit("5/minute")
+async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),
         media_type="text/event-stream",
