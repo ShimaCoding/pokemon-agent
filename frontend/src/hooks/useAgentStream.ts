@@ -11,7 +11,7 @@ import type {
 
 // ── Loading phrases ───────────────────────────────────────────────
 
-const LOADING_PHRASES = [
+export const LOADING_PHRASES = [
   'Conectando con el PC de Bill...',
   'Despertando al Snorlax del servidor...',
   'Analizando espécimen (y tus nulas habilidades)...',

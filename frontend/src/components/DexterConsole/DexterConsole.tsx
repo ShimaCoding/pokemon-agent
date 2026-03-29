@@ -1,16 +1,24 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import useStore from '../../store/useStore'
 import TraceCard from './TraceCard'
 import TraceSummary from './TraceSummary'
 import type { DoneEvent, ToolCallEvent } from '../../types'
-import { getRandomLoadingPhrase } from '../../hooks/useAgentStream'
+import { LOADING_PHRASES } from '../../hooks/useAgentStream'
 import styles from './DexterConsole.module.css'
 
 export default function DexterConsole() {
   const traceLogs   = useStore((s) => s.traceLogs)
   const inFlight    = useStore((s) => s.inFlight)
   const bottomRef   = useRef<HTMLDivElement>(null)
-  const phraseRef   = useRef(getRandomLoadingPhrase())
+  const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
+
+  useEffect(() => {
+    if (!inFlight) return
+    const id = setInterval(() => {
+      setPhraseIdx((i) => (i + 1) % LOADING_PHRASES.length)
+    }, 2500)
+    return () => clearInterval(id)
+  }, [inFlight])
 
   // Auto-scroll to bottom on new log
   useEffect(() => {
@@ -27,7 +35,7 @@ export default function DexterConsole() {
           : ''
       }`
     : inFlight
-      ? phraseRef.current
+      ? LOADING_PHRASES[phraseIdx]
       : 'esperando…'
 
   const renderableLogs = traceLogs.filter(
