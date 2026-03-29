@@ -883,6 +883,32 @@
 
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 640px) {
+      body {
+        height: 100dvh;
+        overflow: hidden;
+        padding: 0;
+        justify-content: stretch;
+        align-items: stretch;
+      }
+      #app {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        max-width: 100%;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+      }
+      #content {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+      }
+      #advanced-panel.active {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+      }
       #content, #advanced-panel { flex-direction: column; }
       #left-panel, #adv-left { width: 100%; border-right: none; border-bottom: 3px solid var(--gbc-border); }
       #advanced-panel.active { flex-direction: column; }
