@@ -51,7 +51,7 @@ body {
 }
 
 /* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
-.md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
+.md-content { font-size: 12px; line-height: 2; color: var(--gbc-dark); }
 .md-content p { margin-bottom: 6px; }
 .md-content h1, .md-content h2, .md-content h3 {
   font-family: var(--font-pixel);
@@ -60,9 +60,9 @@ body {
   padding-bottom: 3px;
   margin: 8px 0 5px;
 }
-.md-content h1 { font-size: 8px; }
-.md-content h2 { font-size: 7px; }
-.md-content h3 { font-size: 6px; }
+.md-content h1 { font-size: 16px; }
+.md-content h2 { font-size: 14px; }
+.md-content h3 { font-size: 12px; }
 .md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 2px; }
 .md-content em    { font-style: normal; color: var(--gbc-mid); }
 .md-content ul, .md-content ol {
@@ -78,7 +78,7 @@ body {
 }
 .md-content code {
   font-family: monospace;
-  font-size: 6px;
+  font-size: 12px;
   background: var(--gbc-bg);
   border: 1px solid var(--gbc-border);
   padding: 1px 4px;
@@ -95,7 +95,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin: 6px 0;
-  font-size: 6px;
+  font-size: 12px;
 }
 .md-content th {
   background: var(--gbc-dark);
@@ -103,7 +103,7 @@ body {
   padding: 4px 8px;
   text-align: left;
   font-family: var(--font-pixel);
-  font-size: 5px;
+  font-size: 10px;
   border: 1px solid var(--gbc-border);
 }
 .md-content td {
