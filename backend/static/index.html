@@ -1619,12 +1619,21 @@ function guessToolType(toolName) {
 }
 
 function extractPokemonName(query) {
+  const NON_POKEMON = new Set([
+    'prompt', 'battle', 'matchup', 'analysis', 'educational', 'template',
+    'usando', 'utiliza', 'muestra', 'dame', 'dime', 'sobre', 'consulta',
+    'agente', 'agent', 'modelo', 'model', 'recurso', 'resource', 'tipo',
+    'type', 'nombre', 'name', 'lista', 'list', 'info', 'datos', 'data',
+    'genera', 'generate', 'crear', 'create', 'cual', 'cuales', 'como',
+    'para', 'entre', 'versus', 'contra', 'with', 'from', 'that', 'this',
+    'what', 'which', 'give', 'show', 'tell', 'find', 'get', 'make',
+  ]);
   // Simple heuristic: last word or quoted name
   const q = query.toLowerCase();
   const match = q.match(/(?:de|sobre|el|la|pokemon|pokémon)\s+([a-záéíóúñ]+)/i);
-  if (match) return match[1];
+  if (match && !NON_POKEMON.has(match[1])) return match[1];
   // Just try the last meaningful word
-  const words = q.split(/\s+/).filter(w => w.length > 3);
+  const words = q.split(/\s+/).filter(w => w.length > 3 && !NON_POKEMON.has(w));
   return words[words.length - 1] || null;
 }
 
