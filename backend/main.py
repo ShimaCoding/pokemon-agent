@@ -438,12 +438,24 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                         yield frame
                     async for frame in _drain_results():
                         yield frame
+
+                    # Extract token usage from Strands AgentResult metrics
+                    _result = event["result"]
+                    _usage: dict = {}
+                    try:
+                        _usage = _result.metrics.accumulated_usage or {}
+                    except Exception:
+                        pass
+
                     yield _sse(
                         {
                             "type": "done",
                             "total_tool_calls": tool_index,
                             "elapsed_ms": elapsed_ms(),
                             "models_tried": list(dict.fromkeys(_all_model_attempts)),
+                            "input_tokens": _usage.get("inputTokens", 0),
+                            "output_tokens": _usage.get("outputTokens", 0),
+                            "total_tokens": _usage.get("totalTokens", 0),
                         }
                     )
 
@@ -467,6 +479,9 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                 "total_tool_calls": tool_index,
                 "elapsed_ms": elapsed_ms(),
                 "models_tried": list(dict.fromkeys(_all_model_attempts)),
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
             }
         )
     finally:

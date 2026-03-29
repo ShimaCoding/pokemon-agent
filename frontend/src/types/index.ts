@@ -78,6 +78,10 @@ export interface DoneEvent {
   type: 'done'
   elapsed_ms: number
   models_tried: string[]
+  total_tool_calls?: number
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
 }
 
 export interface ErrorEvent {
