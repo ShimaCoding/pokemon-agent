@@ -104,14 +104,13 @@ async def providers():
 @app.get("/api/prompts")
 async def get_prompts():
     """Fetch the list of prompts from the MCP server."""
+    import asyncio
     from backend.agent import build_agent
-    _model, mcp_client, _label = build_agent()
-    try:
+
+    def _fetch_sync():
+        _model, mcp_client, _label = build_agent()
         with mcp_client:
-            mcp_client.start()
             prompts_result = mcp_client.list_prompts_sync()
-            # prompts_result is a ListPromptsResult object (from mcp-sdk)
-            # We want to return a clean list for the frontend
             return [
                 {
                     "name": p.name,
@@ -120,13 +119,16 @@ async def get_prompts():
                         {
                             "name": arg.name,
                             "description": arg.description or "",
-                            "required": arg.required,
+                            "required": bool(arg.required),
                         }
                         for arg in (p.arguments or [])
                     ],
                 }
                 for p in prompts_result.prompts
             ]
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
     except Exception as exc:
         logger.error("Error fetching prompts: %s", exc)
         return []
@@ -290,33 +292,41 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 
     try:
         with mcp_client:
-            mcp_client.start()
             tools = mcp_client.list_tools_sync()
 
             # --- Check if query is a prompt call ---
             # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"
-            import re
-            m = re.match(r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_-]+)(?:\s+con\s+(.+))?", query, re.I)
+            import re, json as _json
+            m = re.match(r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_./-]+)(?:\s+con\s+(.+))?", query, re.I)
             if m:
                 prompt_name = m.group(1)
                 args_str = m.group(2) or ""
                 args = {}
                 if args_str:
-                    # Simple key=value parser
-                    for pair in re.split(r",\s*", args_str):
+                    # Accept both comma-separated and space-separated key=value pairs
+                    for pair in re.split(r"[,\s]+", args_str):
                         if "=" in pair:
                             k, v = pair.split("=", 1)
                             args[k.strip()] = v.strip()
-                
+
                 try:
                     prompt_res = mcp_client.get_prompt_sync(prompt_name, args)
-                    # A prompt result usually contains a list of messages.
-                    # We inject these into the agent as the starting point.
-                    prompt_text = "\n".join(
-                        msg.content.text if hasattr(msg.content, "text") else str(msg.content)
-                        for msg in prompt_res.messages
-                    )
-                    query = f"I am using the MCP prompt '{prompt_name}' with these instructions:\n\n{prompt_text}\n\nPlease follow these instructions and provide the final answer."
+                    # Extract the actual prompt text.
+                    # This MCP server wraps its instructions in a nested JSON object
+                    # inside msg.content.text, so we unwrap it when possible.
+                    parts: list[str] = []
+                    for msg in prompt_res.messages:
+                        raw = msg.content.text if hasattr(msg.content, "text") else str(msg.content)
+                        try:
+                            blob = _json.loads(raw)
+                            for inner in blob.get("messages", []):
+                                txt = inner.get("content", {}).get("text", "")
+                                if txt:
+                                    parts.append(txt)
+                        except Exception:
+                            parts.append(raw)
+                    prompt_text = "\n".join(parts)
+                    query = f"Using MCP prompt '{prompt_name}':\n\n{prompt_text}\n\nPlease follow these instructions and provide the complete answer using the available tools."
                 except Exception as p_exc:
                     logger.warning(f"Could not fetch prompt {prompt_name}: {p_exc}")
 

@@ -1663,35 +1663,70 @@ async function quickSearch(name) {
 }
 
 // ── Slash menu ────────────────────────────────────────────────
-let SLASH_PROMPTS = [
-  { group: 'Ejemplos', name: 'Listado inicial',  desc: 'Primeros Pokémon',                         template: 'Muéstrame los primeros 5 Pokémon' },
-  { group: 'Ejemplos', name: 'Info de Pokémon',  desc: 'Datos técnicos y stats',                   template: 'Dame información de Mewtwo' },
-  { group: 'Ejemplos', name: 'Habilidades',      desc: 'Habilidades de un Pokémon',                template: 'Cuáles son las habilidades de Gengar?' },
-  { group: 'Ejemplos', name: 'Análisis de stats',desc: 'Potencial de combate',                     template: 'Analiza las estadísticas de Shuckle' },
-  { group: 'Ejemplos', name: 'Velocidad vs stats',desc: 'Comparar velocidad con otros stats',      template: 'Qué tan rápido es Jolteon comparado con sus otros stats?' },
-  { group: 'Ejemplos', name: 'Ventaja de tipo',  desc: 'Fortalezas elementales',                   template: 'Contra qué tipos es fuerte el tipo Agua?' },
-  { group: 'Ejemplos', name: 'Inmunidad de tipo',desc: 'Tipos inmunes a un elemento',              template: 'Qué tipo no recibe daño de ataques tipo Fantasma?' },
-  { group: 'Ejemplos', name: 'Comparativa 1v1',  desc: 'Analizar dos Pokémon a la vez',            template: '¿Quién tiene mejor ataque: Arcanine o Gyarados? Analiza a ambos.' },
-  { group: 'Ejemplos', name: 'Equipo anti-tipo', desc: 'Contrarrestar debilidad de equipo',        template: 'Tengo un equipo débil al tipo Hielo. ¿Qué tipo debería buscar para contrarrestarlo y qué Pokémon me recomiendas?' },
-  { group: 'Ejemplos', name: 'Reporte completo', desc: 'Info + stats + tipos juntos',              template: 'Hazme un reporte completo de Lucario incluyendo su efectividad de tipos.' },
+// Default arg values used when auto-building prompt templates
+const PROMPT_ARG_DEFAULTS = {
+  pokemon_name:    'pikachu',
+  pokemon1:        'pikachu',
+  pokemon2:        'charizard',
+  user_team:       'pikachu,charizard,bulbasaur',
+  opponent_team:   'gengar,starmie,vaporeon',
+  team:            'gengar,mewtwo,dragonite',
+  analysis_type:   'general',
+  user_level:      'beginner',
+  theme:           'balanced',
+  format:          'casual',
+  scenario:        'learning',
+  attacking_type:  'fire',
+  defending_types: 'water',
+  battle_format:   'singles',
+  strategy_focus:  'balanced',
+  analysis_depth:  'standard',
+  focus_areas:     'offense',
+  environment:     'neutral',
+  restrictions:    '',
+};
+
+function _promptGroupLabel(name) {
+  const prefix = name.split('/')[0];
+  const MAP = { educational: 'Educativo', battle: 'Batalla' };
+  return MAP[prefix] || prefix.charAt(0).toUpperCase() + prefix.slice(1);
+}
+
+function _buildPromptTemplate(promptName, args) {
+  if (!args || args.length === 0) return `Usa el prompt ${promptName}`;
+  const parts = args
+    .filter(a => a.name && PROMPT_ARG_DEFAULTS[a.name] !== '')
+    .map(a => `${a.name}=${PROMPT_ARG_DEFAULTS[a.name] || '[' + a.name + ']'}`);
+  return `Usa el prompt ${promptName}` + (parts.length ? ` con ${parts.join(' ')}` : '');
+}
+
+// Fallback examples shown when the MCP server is unreachable
+const _FALLBACK_PROMPTS = [
+  { group: 'Ejemplos', name: 'Info de Pokémon',  desc: 'Datos técnicos y stats',    template: 'Dame información de Mewtwo' },
+  { group: 'Ejemplos', name: 'Análisis de stats',desc: 'Potencial de combate',       template: 'Analiza las estadísticas de Shuckle' },
+  { group: 'Ejemplos', name: 'Ventaja de tipo',  desc: 'Fortalezas elementales',     template: 'Contra qué tipos es fuerte el tipo Agua?' },
+  { group: 'Ejemplos', name: 'Comparativa 1v1',  desc: 'Analizar dos Pokémon',       template: '¿Quién tiene mejor ataque: Arcanine o Gyarados? Analiza a ambos.' },
 ];
+
+let SLASH_PROMPTS = [..._FALLBACK_PROMPTS];
 
 async function loadMcpPrompts() {
   try {
     const resp = await fetch('/api/prompts');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    if (Array.isArray(data)) {
-      const mcpPrompts = data.map(p => ({
-        group: 'MCP',
-        name: '/' + p.name,
-        desc: p.description || 'Prompt del servidor MCP',
-        template: `Usa el prompt ${p.name} ` + (p.arguments && p.arguments.length ? `con ${p.arguments[0].name}=` : '')
+    if (Array.isArray(data) && data.length > 0) {
+      // Replace the list entirely with real MCP prompts
+      SLASH_PROMPTS = data.map(p => ({
+        group:    _promptGroupLabel(p.name),
+        name:     p.name,
+        desc:     p.description || 'Prompt MCP',
+        template: _buildPromptTemplate(p.name, p.arguments),
+        isMcp:    true,
       }));
-      // Prepend MCP prompts to slash list
-      SLASH_PROMPTS = [...mcpPrompts, ...SLASH_PROMPTS];
     }
   } catch (err) {
-    console.error('Error loading MCP prompts:', err);
+    console.warn('Could not load MCP prompts, using fallback:', err);
   }
 }
 
@@ -1738,8 +1773,9 @@ function renderSlashMenu() {
     const item = document.createElement('div');
     item.className = 'slash-item' + (flatIdx === slashSelectedIdx ? ' selected' : '');
     item.dataset.idx = flatIdx;
+    const mcpBadge = p.isMcp ? '<span style="font-size:5px;color:var(--mcp-prompt);margin-left:4px;">MCP</span>' : '';
     item.innerHTML =
-      '<span class="slash-item-name">' + escHtml(p.name) + '</span>' +
+      '<span class="slash-item-name">' + escHtml(p.name) + mcpBadge + '</span>' +
       '<span class="slash-item-desc">' + escHtml(p.desc) + '</span>';
     slashMenu.appendChild(item);
     flatIdx++;
