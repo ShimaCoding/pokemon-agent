@@ -131,31 +131,51 @@ def _extract_result_text(tool_result: dict) -> str:
     return str(content)
 
 
-class _ToolResultHook:
+class _ToolHook:
     """
-    Strands HookProvider that captures AfterToolCallEvent results.
+    Strands HookProvider that captures tool calls and results via hooks.
 
-    ToolResultEvent has is_callback_event=False and is never yielded by
-    stream_async, so hooks are the only way to receive tool results.
-    Results are stored by toolUseId and consumed by _sse_generator.
+    BeforeToolCallEvent / AfterToolCallEvent are used instead of streaming
+    current_tool_use detection because the streaming approach is unreliable:
+    current_tool_use["input"] is a string during streaming and only becomes a
+    dict after the contentBlockStop mutation, which happens after the consumer
+    has already processed those events.  Hooks fire with the fully-parsed ToolUse
+    at the correct moment and are the reliable way to capture this data.
     """
 
     def register_hooks(self, registry) -> None:
-        from strands.hooks import AfterToolCallEvent
+        from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 
-        registry.add_callback(AfterToolCallEvent, self._capture)
+        registry.add_callback(BeforeToolCallEvent, self._capture_call)
+        registry.add_callback(AfterToolCallEvent, self._capture_result)
 
     def __init__(self) -> None:
-        # toolUseId → result text, populated by the hook callback
-        self._pending: dict[str, str] = {}
+        # toolUseId → (name, input_dict), populated before each tool runs
+        self._pending_calls: dict[str, tuple[str, dict]] = {}
+        # toolUseId → result text, populated after each tool runs
+        self._pending_results: dict[str, str] = {}
 
-    def _capture(self, event) -> None:
+    def _capture_call(self, event) -> None:
         uid = event.tool_use.get("toolUseId", "")
         if uid:
-            self._pending[uid] = _extract_result_text(event.result)
+            self._pending_calls[uid] = (
+                event.tool_use.get("name", "unknown"),
+                dict(event.tool_use.get("input") or {}),
+            )
 
-    def pop(self, tool_use_id: str) -> Optional[str]:
-        return self._pending.pop(tool_use_id, None)
+    def _capture_result(self, event) -> None:
+        uid = event.tool_use.get("toolUseId", "")
+        if uid:
+            self._pending_results[uid] = _extract_result_text(event.result)
+
+    def pending_call_ids(self) -> list[str]:
+        return list(self._pending_calls.keys())
+
+    def pop_call(self, uid: str) -> Optional[tuple[str, dict]]:
+        return self._pending_calls.pop(uid, None)
+
+    def pop_result(self, uid: str) -> Optional[str]:
+        return self._pending_results.pop(uid, None)
 
 
 async def _sse_generator(query: str, provider: Optional[str] = None):
@@ -197,23 +217,21 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     yield _sse({"type": "start", "provider": provider_label})
 
     tool_index = 0
-    # Maps toolUseId → stream index so hook results can be matched back.
+    # Maps toolUseId → stream index so results can be matched back to calls.
     tool_use_id_to_index: dict[str, int] = {}
     # Maps stream index → tool_name for result events.
     tool_names: dict[int, str] = {}
     # Track which indices have had their result emitted.
     emitted_results: set[int] = set()
-    # Track the last-seen toolUseId to deduplicate streaming repeats.
-    last_tool_use_id: Optional[str] = None
 
-    result_hook = _ToolResultHook()
+    tool_hook = _ToolHook()
 
     async def _drain_results():
-        """Yield SSE frames for any tool results collected by the hook."""
+        """Yield SSE frames for any tool results collected by AfterToolCallEvent."""
         for uid, idx in list(tool_use_id_to_index.items()):
             if idx in emitted_results:
                 continue
-            result_text = result_hook.pop(uid)
+            result_text = tool_hook.pop_result(uid)
             if result_text is None:
                 continue
             emitted_results.add(idx)
@@ -242,39 +260,35 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     try:
         with mcp_client:
             tools = mcp_client.list_tools_sync()
-            agent = create_agent(model, tools, hooks=[result_hook])
+            agent = create_agent(model, tools, hooks=[tool_hook])
 
             async for event in agent.stream_async(query):
                 # --- Drain LLM prompt + model attempt events ---
                 async for frame in _drain_llm_events():
                     yield frame
 
-                # --- Drain any tool results that arrived since the last event ---
+                # --- Drain tool calls captured by BeforeToolCallEvent hook ---
+                for uid in tool_hook.pending_call_ids():
+                    call = tool_hook.pop_call(uid)
+                    if call is None:
+                        continue
+                    t_name, t_args = call
+                    tool_use_id_to_index[uid] = tool_index
+                    tool_names[tool_index] = t_name
+                    yield _sse(
+                        {
+                            "type": "tool_call",
+                            "index": tool_index,
+                            "tool": t_name,
+                            "args": t_args,
+                            "timestamp_ms": elapsed_ms(),
+                        }
+                    )
+                    tool_index += 1
+
+                # --- Drain tool results captured by AfterToolCallEvent hook ---
                 async for frame in _drain_results():
                     yield frame
-
-                # --- Tool call events ---
-                tool_use = event.get("current_tool_use", {})
-                tool_name = tool_use.get("name")
-                tool_input = tool_use.get("input")
-                tool_use_id = tool_use.get("toolUseId", "")
-
-                if tool_name and isinstance(tool_input, dict) and tool_use_id:
-                    # Emit once per unique toolUseId (input is a dict when fully streamed).
-                    if tool_use_id != last_tool_use_id:
-                        tool_use_id_to_index[tool_use_id] = tool_index
-                        tool_names[tool_index] = tool_name
-                        last_tool_use_id = tool_use_id
-                        yield _sse(
-                            {
-                                "type": "tool_call",
-                                "index": tool_index,
-                                "tool": tool_name,
-                                "args": tool_input,
-                                "timestamp_ms": elapsed_ms(),
-                            }
-                        )
-                        tool_index += 1
 
                 # --- Text delta events ---
                 text_delta = event.get("data")
