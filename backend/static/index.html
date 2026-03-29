@@ -886,6 +886,31 @@
       #content, #advanced-panel { flex-direction: column; }
       #left-panel, #adv-left { width: 100%; border-right: none; border-bottom: 3px solid var(--gbc-border); }
       #advanced-panel.active { flex-direction: column; }
+
+      /* Bottom bar: selector en fila propia, input+botón debajo */
+      #bottom-bar {
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 6px;
+      }
+      #provider-select {
+        width: 100%;
+        font-size: 7px;
+        padding: 6px 4px;
+      }
+      #query-input {
+        flex: 1;
+        min-width: 0;
+        font-size: 7px;
+      }
+      #send-btn {
+        font-size: 7px;
+        padding: 6px 10px;
+        touch-action: manipulation;
+      }
+      #status-badge {
+        display: none;
+      }
     }
 
     /* ── Settings button (titlebar) ────────────────────────── */
@@ -1561,6 +1586,25 @@ function addTraceSummary(totalCalls, elapsedMs, modelsTriedArr) {
   traceList.appendChild(card);
 }
 
+// ── Frases de carga estilo Dexter ─────────────────────────────
+const dexterLoadingPhrases = [
+  "Conectando con el PC de Bill...",
+  "Despertando al Snorlax del servidor...",
+  "Analizando espécimen (y tus nulas habilidades)...",
+  "Alimentando a los Porygon del sistema...",
+  "Buscando algo que deberías haber estudiado...",
+  "Calculando si este Pokémon te desobedecerá...",
+  "Traduciendo antiguos textos Unown...",
+  "Sincronizando con el Profesor Oak...",
+  "Girando los engranajes de Klinklang...",
+  "Procesando... ten paciencia de Maestro Pokémon."
+];
+
+function getRandomLoadingPhrase() {
+  const randomIndex = Math.floor(Math.random() * dexterLoadingPhrases.length);
+  return dexterLoadingPhrases[randomIndex];
+}
+
 // ── SSE runner ────────────────────────────────────────────────
 let inFlight = false;
 
@@ -1574,14 +1618,15 @@ async function runQuery(query) {
   traceEmptyMsg.textContent = 'Esperando herramientas…';
   traceList.appendChild(traceEmptyMsg);
 
-  traceStats.textContent = 'procesando…';
+  const funnyPhrase = getRandomLoadingPhrase();
+  traceStats.textContent = funnyPhrase;
 
   // UI state
   queryInput.disabled = true;
   sendBtn.disabled    = true;
   searchBtn.disabled  = true;
   thinkingEl.classList.add('visible');
-  statusBadge.textContent = 'procesando';
+  statusBadge.textContent = 'analizando';
   statusBadge.className   = 'status-badge';
 
   answerArea.innerHTML = '';
@@ -1815,7 +1860,7 @@ async function quickSearch(name) {
   if (!cleanName) return;
 
   searchBtn.disabled = true;
-  statusBadge.textContent = 'escaneando...';
+  statusBadge.textContent = getRandomLoadingPhrase();
 
   // 1. Cargar datos visuales (sprite y barras) en el panel izquierdo para una respuesta rápida
   const data = await fetchPokemonStructured(cleanName);
