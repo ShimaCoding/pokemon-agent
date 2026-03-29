@@ -101,6 +101,37 @@ async def providers():
     return result
 
 
+@app.get("/api/prompts")
+async def get_prompts():
+    """Fetch the list of prompts from the MCP server."""
+    from backend.agent import build_agent
+    _model, mcp_client, _label = build_agent()
+    try:
+        with mcp_client:
+            mcp_client.start()
+            prompts_result = mcp_client.list_prompts_sync()
+            # prompts_result is a ListPromptsResult object (from mcp-sdk)
+            # We want to return a clean list for the frontend
+            return [
+                {
+                    "name": p.name,
+                    "description": p.description or "",
+                    "arguments": [
+                        {
+                            "name": arg.name,
+                            "description": arg.description or "",
+                            "required": arg.required,
+                        }
+                        for arg in (p.arguments or [])
+                    ],
+                }
+                for p in prompts_result.prompts
+            ]
+    except Exception as exc:
+        logger.error("Error fetching prompts: %s", exc)
+        return []
+
+
 @app.post("/api/agent/run")
 async def run_agent(body: RunRequest):
     return StreamingResponse(
@@ -259,7 +290,36 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 
     try:
         with mcp_client:
+            mcp_client.start()
             tools = mcp_client.list_tools_sync()
+
+            # --- Check if query is a prompt call ---
+            # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"
+            import re
+            m = re.match(r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_-]+)(?:\s+con\s+(.+))?", query, re.I)
+            if m:
+                prompt_name = m.group(1)
+                args_str = m.group(2) or ""
+                args = {}
+                if args_str:
+                    # Simple key=value parser
+                    for pair in re.split(r",\s*", args_str):
+                        if "=" in pair:
+                            k, v = pair.split("=", 1)
+                            args[k.strip()] = v.strip()
+                
+                try:
+                    prompt_res = mcp_client.get_prompt_sync(prompt_name, args)
+                    # A prompt result usually contains a list of messages.
+                    # We inject these into the agent as the starting point.
+                    prompt_text = "\n".join(
+                        msg.content.text if hasattr(msg.content, "text") else str(msg.content)
+                        for msg in prompt_res.messages
+                    )
+                    query = f"I am using the MCP prompt '{prompt_name}' with these instructions:\n\n{prompt_text}\n\nPlease follow these instructions and provide the final answer."
+                except Exception as p_exc:
+                    logger.warning(f"Could not fetch prompt {prompt_name}: {p_exc}")
+
             agent = create_agent(model, tools, hooks=[tool_hook])
 
             async for event in agent.stream_async(query):

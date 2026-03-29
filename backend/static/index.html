@@ -1663,10 +1663,7 @@ async function quickSearch(name) {
 }
 
 // ── Slash menu ────────────────────────────────────────────────
-const SLASH_PROMPTS = [
-  { group: 'MCP',      name: '/pokedex-entry',   desc: 'Entrada estilo Pokédex clásica',           template: 'Usa el prompt pokedex-entry para ' },
-  { group: 'MCP',      name: '/battle-strategy', desc: 'Estrategia de combate por tipos',          template: 'Aplica battle-strategy contra ' },
-  { group: 'MCP',      name: '/stat-comparison', desc: 'Comparar stats de dos Pokémon',            template: 'Ejecuta stat-comparison entre ' },
+let SLASH_PROMPTS = [
   { group: 'Ejemplos', name: 'Listado inicial',  desc: 'Primeros Pokémon',                         template: 'Muéstrame los primeros 5 Pokémon' },
   { group: 'Ejemplos', name: 'Info de Pokémon',  desc: 'Datos técnicos y stats',                   template: 'Dame información de Mewtwo' },
   { group: 'Ejemplos', name: 'Habilidades',      desc: 'Habilidades de un Pokémon',                template: 'Cuáles son las habilidades de Gengar?' },
@@ -1678,6 +1675,25 @@ const SLASH_PROMPTS = [
   { group: 'Ejemplos', name: 'Equipo anti-tipo', desc: 'Contrarrestar debilidad de equipo',        template: 'Tengo un equipo débil al tipo Hielo. ¿Qué tipo debería buscar para contrarrestarlo y qué Pokémon me recomiendas?' },
   { group: 'Ejemplos', name: 'Reporte completo', desc: 'Info + stats + tipos juntos',              template: 'Hazme un reporte completo de Lucario incluyendo su efectividad de tipos.' },
 ];
+
+async function loadMcpPrompts() {
+  try {
+    const resp = await fetch('/api/prompts');
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      const mcpPrompts = data.map(p => ({
+        group: 'MCP',
+        name: '/' + p.name,
+        desc: p.description || 'Prompt del servidor MCP',
+        template: `Usa el prompt ${p.name} ` + (p.arguments && p.arguments.length ? `con ${p.arguments[0].name}=` : '')
+      }));
+      // Prepend MCP prompts to slash list
+      SLASH_PROMPTS = [...mcpPrompts, ...SLASH_PROMPTS];
+    }
+  } catch (err) {
+    console.error('Error loading MCP prompts:', err);
+  }
+}
 
 let slashSelectedIdx = -1;
 let slashVisible     = false;
@@ -1735,10 +1751,6 @@ function selectSlashItem(idx) {
   queryInput.value = slashFiltered[idx].template;
   hideSlashMenu();
   queryInput.focus();
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 slashMenu.addEventListener('click', e => {
@@ -1802,6 +1814,7 @@ searchInput.addEventListener('keydown', e => {
 
 // ── Init ──────────────────────────────────────────────────────
 loadProviders();
+loadMcpPrompts();
 queryInput.focus();
 
 })();
