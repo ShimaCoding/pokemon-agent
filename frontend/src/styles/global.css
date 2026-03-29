@@ -23,7 +23,8 @@
 body {
   font-family: var(--font-pixel);
   background: #2a2a2a;
-  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -37,6 +38,8 @@ body {
   max-width: 1000px;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
@@ -126,15 +129,12 @@ body {
 /* ── Responsive (mobile) ────────────────────────────────────────── */
 @media (max-width: 640px) {
   body {
-    height: 100dvh;
-    overflow: hidden;
     padding: 0;
     justify-content: stretch;
     align-items: stretch;
   }
 
   #root {
-    height: 100%;
     max-width: 100%;
   }
 }
