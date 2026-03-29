@@ -50,14 +50,23 @@ function LlmCallCard({ e }: { e: LlmCallEvent }) {
       )}
       {open && (
         <div className={styles.expandable}>
-          {messages.map((m, i) => (
-            <div key={i}>
-              <div className={styles.msgRole}>[{m.role}]</div>
-              <pre className={styles.msgContent}>
-                {typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2)}
-              </pre>
-            </div>
-          ))}
+          {messages.map((m, i) => {
+            const parsed = typeof m.content === 'string'
+              ? tryParseJson(m.content)
+              : m.content
+            return (
+              <div key={i}>
+                <div className={styles.msgRole}>[{m.role}]</div>
+                {parsed !== null && typeof parsed === 'object' ? (
+                  <JsonViewer data={parsed} maxHeight="200px" />
+                ) : (
+                  <pre className={styles.msgContent}>
+                    {typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

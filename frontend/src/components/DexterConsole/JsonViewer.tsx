@@ -29,7 +29,7 @@ interface NodeProps {
 }
 
 function JsonNode({ value, depth, isLast }: NodeProps): ReactNode {
-  const [collapsed, setCollapsed] = useState(depth >= 2)
+  const [collapsed, setCollapsed] = useState(false)
 
   const comma = !isLast ? <span className={styles.punct}>,</span> : null
 
