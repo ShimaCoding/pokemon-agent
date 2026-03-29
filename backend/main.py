@@ -45,7 +45,19 @@ logger = logging.getLogger(__name__)
 # Rate limiter
 # ---------------------------------------------------------------------------
 
-limiter = Limiter(key_func=get_remote_address)
+def _get_real_ip(request: Request) -> str:
+    """Return real client IP, respecting reverse-proxy forwarding headers."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Header may be a comma-separated list; leftmost is the original client
+        return forwarded_for.split(",")[0].strip()
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_get_real_ip)
 
 # ---------------------------------------------------------------------------
 # API key authentication
@@ -187,7 +199,7 @@ async def get_prompts():
 
 
 @app.post("/api/agent/run", dependencies=[Depends(verify_api_key)])
-@limiter.limit("3/minute")
+@limiter.limit("10/minute")
 async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),

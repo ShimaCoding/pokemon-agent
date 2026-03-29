@@ -122,8 +122,8 @@ def build_litellm_router(provider_name: Optional[str] = None):
                 model_list=model_list,
                 num_retries=3,
                 retry_after=2,
-                allowed_fails=2,
-                cooldown_time=60,
+                allowed_fails=1,
+                cooldown_time=3600,
                 routing_strategy="least-busy",
             )
             return router, pinned["label"]
@@ -134,8 +134,8 @@ def build_litellm_router(provider_name: Optional[str] = None):
         model_list=model_list,
         num_retries=3,
         retry_after=2,
-        allowed_fails=2,
-        cooldown_time=60,
+        allowed_fails=1,
+        cooldown_time=3600,
         routing_strategy="least-busy",
     )
     primary_label = available[0]["label"]
