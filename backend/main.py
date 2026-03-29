@@ -210,9 +210,9 @@ async def get_tools():
             tools_result = mcp_client.list_tools_sync()
             return [
                 {
-                    "name": t.name,
-                    "description": t.description or "",
-                    "input_schema": t.inputSchema if hasattr(t, "inputSchema") else {},
+                    "name": t.mcp_tool.name,
+                    "description": t.mcp_tool.description or "",
+                    "input_schema": t.mcp_tool.inputSchema if hasattr(t.mcp_tool, "inputSchema") else {},
                 }
                 for t in tools_result
             ]
