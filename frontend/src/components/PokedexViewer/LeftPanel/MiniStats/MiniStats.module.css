@@ -1,0 +1,43 @@
+.statsArea {
+  padding: 8px 10px;
+  border-bottom: 2px dashed var(--gbc-border);
+  flex: 0 0 auto;
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  font-size: 6px;
+}
+
+.statLabel {
+  width: 28px;
+  text-align: right;
+  color: var(--gbc-dark);
+}
+
+.barTrack {
+  flex: 1;
+  height: 8px;
+  border: 1px solid var(--gbc-border);
+  background: var(--gbc-bg);
+  display: flex;
+  overflow: hidden;
+}
+
+.barCell {
+  width: 8.333%;
+  height: 100%;
+  border-right: 1px solid var(--gbc-bg);
+}
+
+.barCell.filled { background: var(--gbc-red);   }
+.barCell.empty  { background: transparent; }
+
+.statValue {
+  width: 22px;
+  text-align: right;
+  color: var(--gbc-dark);
+}

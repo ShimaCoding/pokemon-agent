@@ -1,0 +1,60 @@
+.tabContent {
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.evoChain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+
+.evoGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.evoPokemon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.evoFrame {
+  border: 2px solid var(--gbc-border);
+  padding: 4px;
+  background: var(--gbc-bg);
+}
+
+.evoSprite {
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+  display: block;
+}
+
+.evoNoSprite {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5px;
+  color: var(--gbc-mid);
+}
+
+.evoName  { font-size: 5px; color: var(--gbc-dark); }
+.evoArrow { font-size: 10px; color: var(--gbc-dark); }
+
+.empty {
+  font-size: 6px;
+  color: var(--gbc-mid);
+  text-align: center;
+  line-height: 2;
+}

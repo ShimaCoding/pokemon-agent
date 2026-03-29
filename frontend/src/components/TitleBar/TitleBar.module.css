@@ -1,0 +1,62 @@
+.titlebar {
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 7px;
+  line-height: 1.6;
+  border-bottom: 2px solid var(--gbc-border);
+}
+
+.titleLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mainTitle {
+  font-size: 9px;
+  color: var(--gbc-screen);
+}
+
+.subtitle {
+  font-size: 6px;
+  color: var(--gbc-mid);
+}
+
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcpBadges {
+  display: flex;
+  gap: 4px;
+}
+
+.mcpBadge {
+  font-size: 6px;
+  padding: 3px 6px;
+  border: 2px solid;
+  cursor: default;
+}
+
+.mcpBadge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool);     }
+.mcpBadge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+.mcpBadge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt);   }
+
+.settingsBtn {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: none;
+  border: 1px solid var(--gbc-mid);
+  color: var(--gbc-screen);
+  padding: 3px 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+.settingsBtn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
+.settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }

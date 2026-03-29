@@ -1,0 +1,15 @@
+.leftPanel {
+  width: 42%;
+  border-right: 3px solid var(--gbc-border);
+  display: flex;
+  flex-direction: column;
+  background: var(--gbc-cream);
+}
+
+@media (max-width: 640px) {
+  .leftPanel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 3px solid var(--gbc-border);
+  }
+}

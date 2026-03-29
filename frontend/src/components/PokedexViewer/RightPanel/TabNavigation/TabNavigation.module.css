@@ -1,0 +1,30 @@
+.tabBar {
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid var(--gbc-border);
+  padding: 0 6px;
+  gap: 0;
+}
+
+.tabArrow {
+  font-size: 7px;
+  padding: 6px 4px;
+  color: var(--gbc-dark);
+}
+
+.tabBtn {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  padding: 7px 8px;
+  border: none;
+  background: none;
+  color: var(--gbc-mid);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+.tabBtn:hover { color: var(--gbc-dark); }
+.tabBtn.active {
+  color: var(--gbc-dark);
+  border-bottom-color: var(--gbc-dark);
+}

@@ -1,0 +1,140 @@
+/* ── CSS Variables ─────────────────────────────────────────────── */
+:root {
+  --gbc-bg:        #d4d4d4;
+  --gbc-screen:    #a0a0a0;
+  --gbc-dark:      #1a1a1a;
+  --gbc-mid:       #666666;
+  --gbc-light:     #b8b8b8;
+  --gbc-cream:     #e8e8e8;
+  --gbc-gold:      #555555;
+  --gbc-border:    #3a3a3a;
+  --gbc-red:       #4a4a4a;
+
+  --mcp-tool:      #3b6ea5;
+  --mcp-resource:  #5a9e5a;
+  --mcp-prompt:    #c0547a;
+
+  --font-pixel: 'Press Start 2P', monospace;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-pixel);
+  background: #2a2a2a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px;
+  color: var(--gbc-dark);
+}
+
+#root {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
+.md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
+.md-content p { margin-bottom: 6px; }
+.md-content h1, .md-content h2, .md-content h3 {
+  font-family: var(--font-pixel);
+  color: var(--gbc-dark);
+  border-bottom: 2px solid var(--gbc-border);
+  padding-bottom: 3px;
+  margin: 8px 0 5px;
+}
+.md-content h1 { font-size: 8px; }
+.md-content h2 { font-size: 7px; }
+.md-content h3 { font-size: 6px; }
+.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 2px; }
+.md-content em    { font-style: normal; color: var(--gbc-mid); }
+.md-content ul, .md-content ol {
+  margin: 4px 0 6px 14px;
+  line-height: 2.2;
+}
+.md-content li { margin-bottom: 1px; }
+.md-content li::marker { color: var(--gbc-mid); }
+.md-content hr {
+  border: none;
+  border-top: 2px dashed var(--gbc-border);
+  margin: 8px 0;
+}
+.md-content code {
+  font-family: monospace;
+  font-size: 6px;
+  background: var(--gbc-bg);
+  border: 1px solid var(--gbc-border);
+  padding: 1px 4px;
+}
+.md-content pre {
+  background: var(--gbc-bg);
+  border: 2px solid var(--gbc-border);
+  padding: 6px 8px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.md-content pre code { border: none; padding: 0; background: none; }
+.md-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 6px;
+}
+.md-content th {
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+  padding: 4px 8px;
+  text-align: left;
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  border: 1px solid var(--gbc-border);
+}
+.md-content td {
+  border: 1px solid var(--gbc-border);
+  padding: 4px 8px;
+  background: var(--gbc-bg);
+}
+.md-content tr:nth-child(odd) td  { background: var(--gbc-cream); }
+.md-content tr:nth-child(even) td { background: var(--gbc-bg); }
+.md-content blockquote {
+  border-left: 3px solid var(--gbc-border);
+  margin: 4px 0;
+  padding: 2px 8px;
+  color: var(--gbc-mid);
+  background: var(--gbc-bg);
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Scrollbars ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--gbc-bg); }
+::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+
+/* ── Responsive (mobile) ────────────────────────────────────────── */
+@media (max-width: 640px) {
+  body {
+    height: 100dvh;
+    overflow: hidden;
+    padding: 0;
+    justify-content: stretch;
+    align-items: stretch;
+  }
+
+  #root {
+    height: 100%;
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,126 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { PokemonData, Provider, SlashPrompt, TabKey, TraceEvent } from '../types'
+
+// ── Types ────────────────────────────────────────────────────────
+
+interface AppState {
+  // API Key (persisted)
+  apiKey: string
+  setApiKey: (key: string) => void
+  clearApiKey: () => void
+
+  // Settings modal
+  settingsOpen: boolean
+  setSettingsOpen: (open: boolean) => void
+
+  // Mode
+  isAdvancedMode: boolean
+  toggleMode: () => void
+
+  // Provider list & selection
+  providers: Provider[]
+  setProviders: (providers: Provider[]) => void
+  selectedProvider: string
+  setSelectedProvider: (name: string) => void
+
+  // Prompts (slash menu)
+  prompts: SlashPrompt[]
+  setPrompts: (prompts: SlashPrompt[]) => void
+
+  // Active tab
+  activeTab: TabKey
+  setActiveTab: (tab: TabKey) => void
+
+  // Pokémon data panel
+  pokemonData: PokemonData | null
+  setPokemonData: (data: PokemonData | null) => void
+
+  // Agent stream response (markdown)
+  agentResponse: string
+  appendText: (delta: string) => void
+
+  // Trace logs
+  traceLogs: TraceEvent[]
+  appendTraceLog: (event: TraceEvent) => void
+
+  // In-flight status (for disabling UI inputs)
+  inFlight: boolean
+  setInFlight: (v: boolean) => void
+
+  // Session reset (between queries)
+  resetSession: () => void
+
+  // Pre-query mobile state
+  preQuery: boolean
+  setPreQuery: (v: boolean) => void
+}
+
+// ── Store ────────────────────────────────────────────────────────
+
+// The apiKey is persisted in localStorage; everything else is ephemeral.
+const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      // API Key
+      apiKey: '',
+      setApiKey: (key) => set({ apiKey: key }),
+      clearApiKey: () => set({ apiKey: '' }),
+
+      // Settings modal
+      settingsOpen: false,
+      setSettingsOpen: (open) => set({ settingsOpen: open }),
+
+      // Mode
+      isAdvancedMode: false,
+      toggleMode: () => set((s) => ({ isAdvancedMode: !s.isAdvancedMode })),
+
+      // Providers
+      providers: [],
+      setProviders: (providers) => set({ providers }),
+      selectedProvider: '',
+      setSelectedProvider: (name) => set({ selectedProvider: name }),
+
+      // Prompts
+      prompts: [],
+      setPrompts: (prompts) => set({ prompts }),
+
+      // Active tab
+      activeTab: 'info',
+      setActiveTab: (tab) => set({ activeTab: tab }),
+
+      // Pokémon data
+      pokemonData: null,
+      setPokemonData: (data) => set({ pokemonData: data }),
+
+      // Agent response text (streaming markdown)
+      agentResponse: '',
+      appendText: (delta) =>
+        set((s) => ({ agentResponse: s.agentResponse + delta })),
+
+      // Trace logs
+      traceLogs: [],
+      appendTraceLog: (event) =>
+        set((s) => ({ traceLogs: [...s.traceLogs, event] })),
+
+      // In-flight
+      inFlight: false,
+      setInFlight: (v) => set({ inFlight: v }),
+
+      // Session reset
+      resetSession: () =>
+        set({ agentResponse: '', traceLogs: [], activeTab: 'dexter' }),
+
+      // Pre-query (mobile)
+      preQuery: true,
+      setPreQuery: (v) => set({ preQuery: v }),
+    }),
+    {
+      name: 'mcpokedex-storage',
+      // Only persist the API key — UI state resets on reload
+      partialize: (state) => ({ apiKey: state.apiKey }),
+    }
+  )
+)
+
+export default useStore

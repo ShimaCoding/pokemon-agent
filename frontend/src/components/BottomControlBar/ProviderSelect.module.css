@@ -1,0 +1,23 @@
+.providerSelect {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: var(--gbc-bg);
+  color: var(--gbc-cream);
+  border: 2px solid var(--gbc-border);
+  padding: 4px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 120px;
+}
+
+.providerSelect:focus {
+  outline: 2px solid var(--gbc-gold);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .providerSelect {
+    max-width: 90px;
+    font-size: 7px;
+  }
+}
