@@ -20,8 +20,9 @@ export default function DexterConsole() {
     return () => clearInterval(id)
   }, [inFlight])
 
-  // Auto-scroll to bottom on new log
+  // Auto-scroll to bottom on new log (skip on initial mount when there are no logs)
   useEffect(() => {
+    if (traceLogs.length === 0) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [traceLogs.length])
 
