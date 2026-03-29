@@ -1,0 +1,94 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.badge {
+  font-size: 6px;
+  padding: 3px 6px;
+  border: 2px solid;
+  cursor: pointer;
+  background: none;
+  font-family: var(--font-pixel);
+  transition: background 0.12s;
+  user-select: none;
+}
+.badge:hover {
+  opacity: 0.85;
+}
+.badge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool);     }
+.badge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+.badge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt);   }
+
+.badge.active.tool     { background: var(--mcp-tool);     color: #fff; }
+.badge.active.resource { background: var(--mcp-resource); color: #fff; }
+.badge.active.prompt   { background: var(--mcp-prompt);   color: #fff; }
+
+.count {
+  font-size: 5px;
+  margin-left: 3px;
+  opacity: 0.8;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #1a1a1a;
+  border: 1px solid var(--gbc-border);
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+
+.header {
+  font-size: 6px;
+  font-family: var(--font-pixel);
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--gbc-border);
+  letter-spacing: 0.05em;
+}
+.header.tool     { color: var(--mcp-tool); }
+.header.resource { color: var(--mcp-resource); }
+.header.prompt   { color: var(--mcp-prompt); }
+
+.item {
+  padding: 6px 8px;
+  border-bottom: 1px solid #2a2a2a;
+  cursor: default;
+}
+.item:last-child { border-bottom: none; }
+
+.itemName {
+  font-size: 6px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-cream);
+  word-break: break-all;
+}
+
+.itemDesc {
+  font-size: 5px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.empty {
+  font-size: 6px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  padding: 8px;
+  text-align: center;
+}
+
+.loading {
+  font-size: 6px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  padding: 8px;
+  text-align: center;
+}

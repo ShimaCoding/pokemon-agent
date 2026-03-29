@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { PokemonData, Provider, SlashPrompt, TabKey, TraceEvent } from '../types'
+import type { McpResource, McpTool, PokemonData, Provider, SlashPrompt, TabKey, TraceEvent } from '../types'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -23,6 +23,12 @@ interface AppState {
   // Prompts (slash menu)
   prompts: SlashPrompt[]
   setPrompts: (prompts: SlashPrompt[]) => void
+
+  // MCP capabilities
+  mcpTools: McpTool[]
+  setMcpTools: (tools: McpTool[]) => void
+  mcpResources: McpResource[]
+  setMcpResources: (resources: McpResource[]) => void
 
   // Active tab
   activeTab: TabKey
@@ -76,6 +82,12 @@ const useStore = create<AppState>()(
       // Prompts
       prompts: [],
       setPrompts: (prompts) => set({ prompts }),
+
+      // MCP capabilities
+      mcpTools: [],
+      setMcpTools: (mcpTools) => set({ mcpTools }),
+      mcpResources: [],
+      setMcpResources: (mcpResources) => set({ mcpResources }),
 
       // Active tab
       activeTab: 'info',

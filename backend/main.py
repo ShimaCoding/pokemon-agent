@@ -198,6 +198,59 @@ async def get_prompts():
         return []
 
 
+@app.get("/api/tools", dependencies=[Depends(verify_api_key)])
+async def get_tools():
+    """Fetch the list of tools from the MCP server."""
+    import asyncio
+    from backend.agent import build_agent
+
+    def _fetch_sync():
+        _model, mcp_client, _label = build_agent()
+        with mcp_client:
+            tools_result = mcp_client.list_tools_sync()
+            return [
+                {
+                    "name": t.name,
+                    "description": t.description or "",
+                    "input_schema": t.inputSchema if hasattr(t, "inputSchema") else {},
+                }
+                for t in tools_result
+            ]
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
+    except Exception as exc:
+        logger.error("Error fetching tools: %s", exc)
+        return []
+
+
+@app.get("/api/resources", dependencies=[Depends(verify_api_key)])
+async def get_resources():
+    """Fetch the list of resources from the MCP server."""
+    import asyncio
+    from backend.agent import build_agent
+
+    def _fetch_sync():
+        _model, mcp_client, _label = build_agent()
+        with mcp_client:
+            resources_result = mcp_client.list_resources_sync()
+            return [
+                {
+                    "uri": r.uri,
+                    "name": r.name or "",
+                    "description": r.description or "",
+                    "mime_type": r.mimeType or "",
+                }
+                for r in resources_result.resources
+            ]
+
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
+    except Exception as exc:
+        logger.error("Error fetching resources: %s", exc)
+        return []
+
+
 @app.post("/api/agent/run", dependencies=[Depends(verify_api_key)])
 @limiter.limit("10/minute")
 async def run_agent(request: Request, body: RunRequest):

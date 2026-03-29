@@ -17,8 +17,8 @@ export default function TabNavigation() {
 
   return (
     <div id="tab-bar" className={styles.tabBar}>
-      <span className={styles.tabArrow}>▶</span>
-      {TABS.map(({ key, label, mobileOnly }) => (
+      {TABS.flatMap(({ key, label, mobileOnly }) => [
+        activeTab === key ? <span key={`arrow-${key}`} className={styles.tabArrow}>▶</span> : null,
         <button
           key={key}
           className={[
@@ -30,8 +30,8 @@ export default function TabNavigation() {
           onClick={() => setActiveTab(key)}
         >
           {label}
-        </button>
-      ))}
+        </button>,
+      ])}
     </div>
   )
 }

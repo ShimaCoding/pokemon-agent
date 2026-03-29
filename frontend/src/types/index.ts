@@ -126,6 +126,19 @@ export interface SlashPrompt {
   isMcp?: boolean
 }
 
+export interface McpTool {
+  name: string
+  description: string
+  input_schema?: Record<string, unknown>
+}
+
+export interface McpResource {
+  uri: string
+  name: string
+  description: string
+  mime_type: string
+}
+
 // ── UI ──────────────────────────────────────────────────────────
 
 export type TabKey = 'info' | 'stats' | 'moves' | 'evos' | 'dexter' | 'consola'
