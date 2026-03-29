@@ -1539,7 +1539,7 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function toggleTrace(id) {
+window.toggleTrace = function(id) {
   const el = document.getElementById(id);
   if (!el) return;
   const isOpen = el.classList.toggle('open');
