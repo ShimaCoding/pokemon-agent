@@ -1,25 +1,20 @@
 .normalPanel {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .content {
   display: flex;
-  min-height: 420px;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Mobile */
 @media (max-width: 640px) {
-  .normalPanel {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
   .content {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
     flex-direction: column;
+    overflow-y: auto;
   }
 }

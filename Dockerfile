@@ -1,3 +1,16 @@
+# ── frontend builder ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app
+
+# Install deps as a separate layer for better cache reuse
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+
+# Copy source and build; vite.config.ts outputs to ../backend/static
+COPY frontend/ ./frontend/
+RUN mkdir -p backend/static && cd frontend && npm run build
+
 # ── builder ───────────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS builder
 
@@ -33,6 +46,9 @@ RUN addgroup --system --gid 1001 appgroup && \
 # Copy only the venv and app code from builder
 COPY --from=builder --chown=appuser:appgroup /app/.venv ./.venv
 COPY --chown=appuser:appgroup backend/ ./backend/
+
+# Overwrite backend/static with the freshly compiled React app
+COPY --from=frontend-builder --chown=appuser:appgroup /app/backend/static ./backend/static/
 
 # Drop root privileges
 USER appuser

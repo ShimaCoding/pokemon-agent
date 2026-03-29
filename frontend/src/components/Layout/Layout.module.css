@@ -4,6 +4,11 @@
   background: var(--gbc-cream);
   border: 3px solid var(--gbc-border);
   image-rendering: pixelated;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .loadingPanel {
@@ -19,9 +24,6 @@
 /* ── Mobile responsive ───────────────────── */
 @media (max-width: 640px) {
   .app {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
     max-width: 100%;
     border-left: none;
     border-right: none;
