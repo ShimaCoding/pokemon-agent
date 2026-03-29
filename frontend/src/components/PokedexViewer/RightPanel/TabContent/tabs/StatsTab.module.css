@@ -1,0 +1,31 @@
+.tabContent {
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 6px;
+}
+
+.statLabel { width: 40px; color: var(--gbc-dark); }
+
+.barTrack {
+  flex: 1;
+  height: 10px;
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-bg);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--gbc-red);
+  transition: width 0.5s;
+}
+
+.statVal { width: 28px; text-align: right; color: var(--gbc-dark); }

@@ -1,0 +1,10 @@
+.summary {
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-cream);
+  padding: 6px 8px;
+  font-size: 6px;
+  line-height: 2;
+}
+
+.title { color: var(--gbc-dark); margin-bottom: 2px; }
+.vals  { color: var(--gbc-mid); }

@@ -1,0 +1,27 @@
+.sendButton {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: var(--gbc-gold);
+  color: var(--gbc-dark);
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  font-weight: bold;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.sendButton:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.sendButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.sendButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -1,0 +1,64 @@
+.slashMenu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--gbc-dark);
+  border: 2px solid var(--gbc-gold);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 200;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+}
+
+.groupHeader {
+  padding: 4px 8px;
+  color: var(--gbc-gold);
+  font-size: 7px;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.slashItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.1s;
+}
+
+.slashItem:hover,
+.slashItem.selected {
+  background: var(--gbc-gold);
+  color: var(--gbc-dark);
+}
+
+.slashItem:hover .slashItemDesc,
+.slashItem.selected .slashItemDesc {
+  color: var(--gbc-dark);
+}
+
+.slashItemName {
+  color: var(--gbc-cream);
+  font-weight: bold;
+}
+
+.slashItem.selected .slashItemName {
+  color: var(--gbc-dark);
+}
+
+.slashItemDesc {
+  color: var(--gbc-mid);
+  font-size: 7px;
+}
+
+.mcpBadge {
+  background: var(--mcp-prompt);
+  color: white;
+  padding: 1px 3px;
+  font-size: 6px;
+  margin-left: 4px;
+}

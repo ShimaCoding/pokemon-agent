@@ -1,0 +1,48 @@
+.bottomBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--gbc-dark);
+  border-top: 2px solid var(--gbc-border);
+  flex-wrap: nowrap;
+}
+
+.thinking {
+  display: block;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: var(--gbc-gold);
+  animation: blink 1s step-start infinite;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.statusBadge {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--gbc-mid);
+  border: 1px solid var(--gbc-border);
+  padding: 2px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.statusBadge.busy {
+  color: var(--gbc-gold);
+  border-color: var(--gbc-gold);
+}
+
+@media (max-width: 640px) {
+  .bottomBar {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .thinking,
+  .statusBadge {
+    display: none;
+  }
+}

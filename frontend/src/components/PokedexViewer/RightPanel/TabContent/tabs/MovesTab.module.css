@@ -1,0 +1,28 @@
+.tabContent {
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.movesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.moveItem {
+  font-size: 6px;
+  padding: 5px 7px;
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-bg);
+  line-height: 1.8;
+}
+
+.moveName { color: var(--gbc-dark); font-size: 6px; }
+.moveMeta { color: var(--gbc-mid); font-size: 5px; margin-top: 2px; }
+
+.empty {
+  color: var(--gbc-mid);
+  font-size: 6px;
+  grid-column: 1 / -1;
+}

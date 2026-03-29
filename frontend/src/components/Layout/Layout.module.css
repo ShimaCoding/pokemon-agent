@@ -1,0 +1,30 @@
+.app {
+  width: 100%;
+  max-width: 1000px;
+  background: var(--gbc-cream);
+  border: 3px solid var(--gbc-border);
+  image-rendering: pixelated;
+}
+
+.loadingPanel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: var(--gbc-mid);
+  padding: 20px;
+}
+
+/* ── Mobile responsive ───────────────────── */
+@media (max-width: 640px) {
+  .app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    max-width: 100%;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+}

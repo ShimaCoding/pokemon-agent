@@ -1,0 +1,56 @@
+.tabContent {
+  padding: 10px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.pokemonName {
+  font-size: 9px;
+  margin-bottom: 8px;
+  color: var(--gbc-dark);
+}
+
+.dexEntry {
+  font-size: 6px;
+  line-height: 2;
+  color: var(--gbc-dark);
+  border: 2px solid var(--gbc-border);
+  padding: 8px;
+  background: var(--gbc-bg);
+  margin-bottom: 8px;
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.infoItem {
+  font-size: 6px;
+  line-height: 2;
+  border: 1px solid var(--gbc-border);
+  padding: 4px 6px;
+  background: var(--gbc-bg);
+}
+
+.infoKey { color: var(--gbc-mid); display: block; }
+.infoVal { color: var(--gbc-dark); }
+
+.typeChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.typeChip {
+  font-size: 6px;
+  padding: 3px 7px;
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-bg);
+  color: var(--gbc-dark);
+}
+
+.mult2x   { background: #c8a060; border-color: #8a6020; }
+.multHalf { background: #60a0c8; border-color: #204060; color: var(--gbc-cream); }

@@ -1,0 +1,25 @@
+.normalPanel {
+  display: block;
+}
+
+.content {
+  display: flex;
+  min-height: 420px;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .normalPanel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+}

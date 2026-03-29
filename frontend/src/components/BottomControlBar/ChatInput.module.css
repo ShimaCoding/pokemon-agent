@@ -1,0 +1,26 @@
+.chatInput {
+  flex: 1;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  background: var(--gbc-bg);
+  color: var(--gbc-cream);
+  border: 2px solid var(--gbc-border);
+  padding: 6px 8px;
+  min-width: 0;
+}
+
+.chatInput::placeholder {
+  color: var(--gbc-mid);
+  font-size: 8px;
+}
+
+.chatInput:focus {
+  outline: 2px solid var(--gbc-gold);
+  outline-offset: 2px;
+  border-color: var(--gbc-gold);
+}
+
+.chatInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

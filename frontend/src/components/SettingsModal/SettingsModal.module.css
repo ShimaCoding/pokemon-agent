@@ -1,0 +1,84 @@
+.modal {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+}
+
+.box {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--gbc-dark);
+  border: 3px solid var(--gbc-border);
+  padding: 16px;
+  min-width: 260px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-cream);
+}
+
+.title {
+  font-size: 8px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--gbc-border);
+  padding-bottom: 6px;
+}
+
+.label {
+  font-size: 6px;
+  color: var(--gbc-screen);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.input {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--gbc-screen);
+  border: 2px solid var(--gbc-mid);
+  color: var(--gbc-dark);
+  outline: none;
+  margin-bottom: 10px;
+}
+.input:focus { border-color: var(--gbc-cream); }
+
+.hint {
+  font-size: 5px;
+  color: var(--gbc-mid);
+  margin-bottom: 12px;
+  line-height: 1.8;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.actions button {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 5px 10px;
+  background: var(--gbc-screen);
+  border: 2px solid var(--gbc-mid);
+  color: var(--gbc-dark);
+  cursor: pointer;
+}
+.actions button:hover { background: var(--gbc-light); }
+
+.clearBtn {
+  margin-right: auto;
+  background: none !important;
+  border-color: var(--gbc-mid) !important;
+  color: var(--gbc-mid) !important;
+}
+.clearBtn:hover { color: var(--gbc-cream) !important; border-color: var(--gbc-cream) !important; background: none !important; }
