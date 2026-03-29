@@ -6,6 +6,7 @@
   <title>MCPokédex GBC</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <style>
     /* ── CSS Variables ─────────────────────────────────────── */
     :root {
@@ -693,6 +694,86 @@
     #answer-area::-webkit-scrollbar { width: 4px; }
     #answer-area::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
+    /* ── Markdown rendered content ────────────────────────── */
+    .md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
+    .md-content p { margin-bottom: 6px; }
+    .md-content h1, .md-content h2, .md-content h3 {
+      font-family: var(--font-pixel);
+      color: var(--gbc-dark);
+      border-bottom: 2px solid var(--gbc-border);
+      padding-bottom: 3px;
+      margin: 8px 0 5px;
+    }
+    .md-content h1 { font-size: 8px; }
+    .md-content h2 { font-size: 7px; }
+    .md-content h3 { font-size: 6px; }
+    .md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 2px; }
+    .md-content em    { font-style: normal; color: var(--gbc-mid); }
+    .md-content ul, .md-content ol {
+      margin: 4px 0 6px 14px;
+      line-height: 2.2;
+    }
+    .md-content li { margin-bottom: 1px; }
+    .md-content li::marker { color: var(--gbc-mid); }
+    .md-content hr {
+      border: none;
+      border-top: 2px dashed var(--gbc-border);
+      margin: 8px 0;
+    }
+    .md-content code {
+      font-family: monospace;
+      font-size: 6px;
+      background: var(--gbc-bg);
+      border: 1px solid var(--gbc-border);
+      padding: 1px 4px;
+    }
+    .md-content pre {
+      background: var(--gbc-bg);
+      border: 2px solid var(--gbc-border);
+      padding: 6px 8px;
+      overflow-x: auto;
+      margin: 6px 0;
+    }
+    .md-content pre code { border: none; padding: 0; background: none; }
+    /* Stats table */
+    .md-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0;
+      font-size: 6px;
+    }
+    .md-content th {
+      background: var(--gbc-dark);
+      color: var(--gbc-cream);
+      padding: 4px 8px;
+      text-align: left;
+      font-family: var(--font-pixel);
+      font-size: 5px;
+      border: 1px solid var(--gbc-border);
+    }
+    .md-content td {
+      border: 1px solid var(--gbc-border);
+      padding: 4px 8px;
+      background: var(--gbc-bg);
+    }
+    .md-content tr:nth-child(odd) td  { background: var(--gbc-cream); }
+    .md-content tr:nth-child(even) td { background: var(--gbc-bg); }
+    /* Stat bar inside tables via inline style if present */
+    .md-stat-bar {
+      display: inline-block;
+      height: 6px;
+      background: var(--gbc-red);
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+    .md-content blockquote {
+      border-left: 3px solid var(--gbc-border);
+      margin: 4px 0;
+      padding: 2px 8px;
+      color: var(--gbc-mid);
+      background: var(--gbc-bg);
+    }
+
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 640px) {
       #content, #advanced-panel { flex-direction: column; }
@@ -900,6 +981,9 @@
 <script>
 (() => {
 'use strict';
+
+// ── Marked configuration ──────────────────────────────────────
+marked.setOptions({ gfm: true, breaks: true });
 
 // ── DOM refs ──────────────────────────────────────────────────
 const modeToggle      = document.getElementById('mode-toggle');
@@ -1279,9 +1363,10 @@ async function runQuery(query) {
           }
           case 'text':
             fullText += evt.delta || '';
-            answerArea.textContent = fullText;
+            answerArea.innerHTML = marked.parse(fullText);
             if (!answerArea.classList.contains('visible')) {
               answerArea.classList.add('visible');
+              answerArea.classList.add('md-content');
               // Let answer take the full right panel (hide active tab content)
               document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             }
@@ -1294,7 +1379,7 @@ async function runQuery(query) {
             if (fullText) {
               const ansCard = document.createElement('div');
               ansCard.className = 'trace-summary';
-              ansCard.innerHTML = `<div class="trace-summary-title">▶ Respuesta del agente</div><div style="color:var(--gbc-dark);margin-top:4px;line-height:2;">${fullText.replace(/\n/g,'<br>')}</div>`;
+              ansCard.innerHTML = `<div class="trace-summary-title">▶ Respuesta del agente</div><div class="md-content" style="margin-top:4px;">${marked.parse(fullText)}</div>`;
               traceList.appendChild(ansCard);
               traceList.scrollTop = traceList.scrollHeight;
             }
