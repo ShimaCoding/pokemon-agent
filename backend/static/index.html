@@ -887,6 +887,79 @@
       #left-panel, #adv-left { width: 100%; border-right: none; border-bottom: 3px solid var(--gbc-border); }
       #advanced-panel.active { flex-direction: column; }
     }
+
+    /* ── Settings button (titlebar) ────────────────────────── */
+    #settings-btn {
+      font-family: var(--font-pixel);
+      font-size: 8px;
+      background: none;
+      border: 1px solid var(--gbc-mid);
+      color: var(--gbc-screen);
+      padding: 3px 6px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    #settings-btn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
+    #settings-btn.has-key { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+
+    /* ── Settings modal ─────────────────────────────────────── */
+    #settings-modal { display: none; position: fixed; inset: 0; z-index: 200; }
+    #settings-modal.open { display: block; }
+    #settings-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.7); }
+    #settings-box {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--gbc-dark);
+      border: 3px solid var(--gbc-border);
+      padding: 16px;
+      min-width: 260px;
+      font-family: var(--font-pixel);
+      color: var(--gbc-cream);
+    }
+    .settings-title {
+      font-size: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--gbc-border);
+      padding-bottom: 6px;
+    }
+    .settings-label {
+      font-size: 6px;
+      color: var(--gbc-screen);
+      margin-bottom: 4px;
+      display: block;
+    }
+    #api-key-input {
+      font-family: var(--font-pixel);
+      font-size: 7px;
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--gbc-screen);
+      border: 2px solid var(--gbc-mid);
+      color: var(--gbc-dark);
+      outline: none;
+      margin-bottom: 10px;
+    }
+    #api-key-input:focus { border-color: var(--gbc-cream); }
+    .settings-hint { font-size: 5px; color: var(--gbc-mid); margin-bottom: 12px; line-height: 1.8; }
+    .settings-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-actions button {
+      font-family: var(--font-pixel);
+      font-size: 6px;
+      padding: 5px 10px;
+      background: var(--gbc-screen);
+      border: 2px solid var(--gbc-mid);
+      color: var(--gbc-dark);
+      cursor: pointer;
+    }
+    .settings-actions button:hover { background: var(--gbc-light); }
+    #settings-clear {
+      margin-right: auto;
+      background: none;
+      border-color: var(--gbc-mid);
+      color: var(--gbc-mid);
+    }
+    #settings-clear:hover { color: var(--gbc-cream); border-color: var(--gbc-cream); background: none; }
   </style>
 </head>
 <body>
@@ -899,12 +972,31 @@
       <span class="main-title">MCPokédex GBC</span>
       <span id="subtitle">Press Start 2P</span>
     </div>
-    <div class="mcp-badges">
-      <span class="mcp-badge tool">TOOL</span>
-      <span class="mcp-badge resource">RESOURCE</span>
-      <span class="mcp-badge prompt">PROMPT</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="mcp-badges">
+        <span class="mcp-badge tool">TOOL</span>
+        <span class="mcp-badge resource">RESOURCE</span>
+        <span class="mcp-badge prompt">PROMPT</span>
+      </div>
+      <button id="settings-btn" title="Configurar API Key">&#9881;</button>
     </div>
   </header>
+
+  <!-- ── SETTINGS MODAL ────────────────────────────────────── -->
+  <div id="settings-modal">
+    <div id="settings-overlay"></div>
+    <div id="settings-box">
+      <div class="settings-title">AJUSTES</div>
+      <label class="settings-label" for="api-key-input">API KEY</label>
+      <input id="api-key-input" type="password" placeholder="dejar vacío si no se requiere" autocomplete="off" />
+      <div class="settings-hint">Se guarda en localStorage. Enviar como cabecera X-API-Key.</div>
+      <div class="settings-actions">
+        <button id="settings-clear">BORRAR</button>
+        <button id="settings-cancel">CANCELAR</button>
+        <button id="settings-save">GUARDAR</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── MODE BAR ───────────────────────────────────────────── -->
   <div id="modebar">
@@ -1117,6 +1209,63 @@ const answerArea      = document.getElementById('answer-area');
 const traceList       = document.getElementById('trace-list');
 const traceStats      = document.getElementById('trace-stats');
 const traceEmptyMsg   = document.getElementById('trace-empty-msg');
+
+// ── API Key ───────────────────────────────────────────────────
+const _KEY_STORAGE    = 'pokemon_agent_api_key';
+const settingsBtn     = document.getElementById('settings-btn');
+const settingsModal   = document.getElementById('settings-modal');
+const apiKeyInput     = document.getElementById('api-key-input');
+
+function getApiKey() { return localStorage.getItem(_KEY_STORAGE) || ''; }
+
+function getApiHeaders() {
+  const k = getApiKey();
+  return k ? { 'X-API-Key': k } : {};
+}
+
+function _refreshSettingsBtn() {
+  settingsBtn.classList.toggle('has-key', !!getApiKey());
+}
+
+settingsBtn.addEventListener('click', () => {
+  apiKeyInput.value = getApiKey();
+  settingsModal.classList.add('open');
+  apiKeyInput.focus();
+});
+document.getElementById('settings-overlay').addEventListener('click', () => settingsModal.classList.remove('open'));
+document.getElementById('settings-cancel').addEventListener('click', () => settingsModal.classList.remove('open'));
+document.getElementById('settings-clear').addEventListener('click', () => {
+  localStorage.removeItem(_KEY_STORAGE);
+  apiKeyInput.value = '';
+  _refreshSettingsBtn();
+  settingsModal.classList.remove('open');
+});
+document.getElementById('settings-save').addEventListener('click', () => {
+  const val = apiKeyInput.value.trim();
+  if (val) localStorage.setItem(_KEY_STORAGE, val);
+  else localStorage.removeItem(_KEY_STORAGE);
+  _refreshSettingsBtn();
+  settingsModal.classList.remove('open');
+});
+apiKeyInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('settings-save').click();
+  if (e.key === 'Escape') settingsModal.classList.remove('open');
+});
+
+_refreshSettingsBtn();
+
+// Check /config to warn if API key is required but not set
+(async () => {
+  try {
+    const cfg = await fetch('/config').then(r => r.json());
+    if (cfg.require_api_key && !getApiKey()) {
+      settingsBtn.title = 'API Key requerida — click para configurar';
+      settingsBtn.classList.add('has-key');  // highlight even without key
+      settingsModal.classList.add('open');
+      apiKeyInput.focus();
+    }
+  } catch { /* ignore */ }
+})();
 
 // Tab buttons
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1448,7 +1597,7 @@ async function runQuery(query) {
   try {
     const res = await fetch('/api/agent/run', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getApiHeaders() },
       body: JSON.stringify({ query, provider: providerSelect.value || null }),
     });
 
@@ -1721,7 +1870,7 @@ let SLASH_PROMPTS = [..._FALLBACK_PROMPTS];
 
 async function loadMcpPrompts() {
   try {
-    const resp = await fetch('/api/prompts');
+    const resp = await fetch('/api/prompts', { headers: getApiHeaders() });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (Array.isArray(data) && data.length > 0) {
