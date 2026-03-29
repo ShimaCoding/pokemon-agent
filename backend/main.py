@@ -67,12 +67,15 @@ limiter = Limiter(key_func=_get_real_ip)
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-async def verify_api_key(api_key: str = Security(_api_key_header)) -> None:
-    """Dependency: reject requests when API_KEY is set but header is missing/wrong."""
+def _is_valid_api_key(api_key: str | None) -> bool:
+    """Return True if the provided key matches the configured API_KEY."""
     expected = os.environ.get("API_KEY", "").strip()
-    if not expected:
-        return  # Auth disabled — no API_KEY configured
-    if api_key != expected:
+    return bool(expected and api_key == expected)
+
+
+async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
+    """Dependency: require a valid API key (used for admin endpoints)."""
+    if not _is_valid_api_key(api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
@@ -140,8 +143,8 @@ class RunRequest(BaseModel):
 
 @app.get("/config")
 async def config():
-    """Public endpoint: tells the frontend whether an API key is required."""
-    return {"require_api_key": bool(os.environ.get("API_KEY", "").strip())}
+    """Public endpoint: frontend config flags."""
+    return {"require_api_key": False}
 
 
 @app.get("/health")
@@ -167,7 +170,7 @@ async def providers():
     return result
 
 
-@app.get("/api/prompts", dependencies=[Depends(verify_api_key)])
+@app.get("/api/prompts")
 async def get_prompts():
     """Fetch the list of prompts from the MCP server."""
     import asyncio
@@ -200,7 +203,7 @@ async def get_prompts():
         return []
 
 
-@app.get("/api/tools", dependencies=[Depends(verify_api_key)])
+@app.get("/api/tools")
 async def get_tools():
     """Fetch the list of tools from the MCP server."""
     import asyncio
@@ -226,7 +229,7 @@ async def get_tools():
         return []
 
 
-@app.get("/api/resources", dependencies=[Depends(verify_api_key)])
+@app.get("/api/resources")
 async def get_resources():
     """Fetch the list of resources from the MCP server."""
     import asyncio
@@ -253,8 +256,8 @@ async def get_resources():
         return []
 
 
-@app.post("/api/agent/run", dependencies=[Depends(verify_api_key)])
-@limiter.limit("10/minute")
+@app.post("/api/agent/run")
+@limiter.limit("5/minute", exempt_when=lambda request: _is_valid_api_key(request.headers.get("X-API-Key")))
 async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),
@@ -601,13 +604,9 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 # ---------------------------------------------------------------------------
 
 
-async def _verify_admin(request: Request) -> None:
-    """Reject admin API calls when ADMIN_PASSWORD is set but header is wrong."""
-    password = os.environ.get("ADMIN_PASSWORD", "").strip()
-    if not password:
-        return  # No password configured — open access
-    provided = request.headers.get("X-Admin-Password", "")
-    if provided != password:
+async def _verify_admin(api_key: str = Security(_api_key_header)) -> None:
+    """Reject admin API calls when API_KEY is set but header is missing/wrong."""
+    if not _is_valid_api_key(api_key):
         raise HTTPException(status_code=401, detail="Admin access denied")
 
 

@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin — Pokemon Agent</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <!-- Golden Game Boy favicon for admin -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' shape-rendering='crispEdges'%3E%3Crect x='10' y='2' width='44' height='58' rx='7' fill='%23B8860B'/%3E%3Crect x='10' y='2' width='18' height='58' rx='7' fill='%23FFD700' opacity='0.25'/%3E%3Crect x='13' y='6' width='38' height='24' rx='3' fill='%231A1A30'/%3E%3Ccircle cx='26' cy='18' r='9' fill='%231A6FAA'/%3E%3Ccircle cx='26' cy='18' r='9' fill='%232288CC' opacity='0.8'/%3E%3Cellipse cx='22.5' cy='14' rx='3.5' ry='2.5' fill='white' opacity='0.55'/%3E%3Cpolygon points='39,9 43,13 39,17 35,13' fill='%23FFD700'/%3E%3Cpolygon points='45,9 49,13 45,17 41,13' fill='%23FFD700'/%3E%3Cpolygon points='42,16 46,20 42,24 38,20' fill='%23FFD700'/%3E%3Crect x='16' y='35' width='14' height='5' rx='1.5' fill='%231A1A1A'/%3E%3Crect x='20' y='31' width='5' height='13' rx='1.5' fill='%231A1A1A'/%3E%3Cellipse cx='42' cy='38' rx='4' ry='2.8' fill='%23FFD700'/%3E%3Cellipse cx='51' cy='38' rx='4' ry='2.8' fill='%23FFD700'/%3E%3Crect x='23' y='47' width='6' height='2.5' rx='1' fill='%23B8860B'/%3E%3Crect x='33' y='47' width='6' height='2.5' rx='1' fill='%23B8860B'/%3E%3Ccircle cx='40' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='44' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='48' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='52' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='40' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='44' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='48' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='52' cy='57' r='1.2' fill='%23B8860B'/%3E%3C/svg%3E" />
   <style>
     /* ── Reset ── */
     *, *::before, *::after { box-sizing: border-box; }
@@ -267,7 +268,7 @@
 <script>
   let currentPage = 1;
   let totalPages = 1;
-  let adminPassword = sessionStorage.getItem('adminPassword') || '';
+  let apiKey = sessionStorage.getItem('adminApiKey') || '';
   let searchTimeout = null;
   let autoRefreshTimer = null;
   let autoRefreshOn = false;
@@ -275,7 +276,7 @@
   // --- Auth ---
   function headers() {
     const h = { 'Content-Type': 'application/json' };
-    if (adminPassword) h['X-Admin-Password'] = adminPassword;
+    if (apiKey) h['X-API-Key'] = apiKey;
     return h;
   }
 
@@ -290,13 +291,13 @@
 
   async function submitPassword() {
     const pw = document.getElementById('pwInput').value;
-    adminPassword = pw;
+    apiKey = pw;
     const res = await fetch('/admin/api/stats', { headers: headers() });
     if (res.status === 401) {
       document.getElementById('authError').classList.remove('hidden');
-      adminPassword = '';
+      apiKey = '';
     } else {
-      sessionStorage.setItem('adminPassword', pw);
+      sessionStorage.setItem('adminApiKey', pw);
       document.getElementById('authOverlay').classList.add('hidden');
       load();
     }
