@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useRef, useState } from 'react'
 import type { McpPrompt, McpResource, McpTool } from '../../types'
 import styles from './McpBadgeDropdown.module.css'
@@ -56,6 +57,18 @@ function renderItem(kind: BadgeKind, item: McpTool | McpResource | McpPrompt, id
 export default function McpBadgeDropdown({ kind, items, loading }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const [dropPos, setDropPos] = useState<{ top: number; right: number } | null>(null)
+
+  // Compute fixed position when opening
+  useEffect(() => {
+    if (open && ref.current) {
+      const rect = ref.current.getBoundingClientRect()
+      setDropPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+  }, [open])
 
   // Close on outside click
   useEffect(() => {
@@ -71,6 +84,24 @@ export default function McpBadgeDropdown({ kind, items, loading }: Props) {
 
   const count = items.length
 
+  const dropdown = open && dropPos ? (
+    <div
+      className={styles.dropdown}
+      style={{ position: 'fixed', top: dropPos.top, right: dropPos.right }}
+    >
+      <div className={`${styles.header} ${styles[kind]}`}>
+        {loading ? '...' : getHeaderLabel(kind, count)}
+      </div>
+      {loading ? (
+        <div className={styles.loading}>CARGANDO...</div>
+      ) : count === 0 ? (
+        <div className={styles.empty}>Sin datos</div>
+      ) : (
+        items.map((item, idx) => renderItem(kind, item, idx))
+      )}
+    </div>
+  ) : null
+
   return (
     <div className={styles.wrapper} ref={ref}>
       <button
@@ -83,21 +114,7 @@ export default function McpBadgeDropdown({ kind, items, loading }: Props) {
           <span className={styles.count}>({count})</span>
         )}
       </button>
-
-      {open && (
-        <div className={styles.dropdown}>
-          <div className={`${styles.header} ${styles[kind]}`}>
-            {loading ? '...' : getHeaderLabel(kind, count)}
-          </div>
-          {loading ? (
-            <div className={styles.loading}>CARGANDO...</div>
-          ) : count === 0 ? (
-            <div className={styles.empty}>Sin datos</div>
-          ) : (
-            items.map((item, idx) => renderItem(kind, item, idx))
-          )}
-        </div>
-      )}
+      {dropdown && createPortal(dropdown, document.body)}
     </div>
   )
 }

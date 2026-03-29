@@ -4,7 +4,7 @@
 }
 
 .badge {
-  font-size: 6px;
+  font-size: 10px;
   padding: 3px 6px;
   border: 2px solid;
   cursor: pointer;
@@ -25,17 +25,14 @@
 .badge.active.prompt   { background: var(--mcp-prompt);   color: #fff; }
 
 .count {
-  font-size: 5px;
+  font-size: 9px;
   margin-left: 3px;
   opacity: 0.8;
 }
 
 .dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 220px;
-  max-width: 320px;
+  min-width: 260px;
+  max-width: 360px;
   max-height: 280px;
   overflow-y: auto;
   background: #1a1a1a;
@@ -45,7 +42,7 @@
 }
 
 .header {
-  font-size: 6px;
+  font-size: 10px;
   font-family: var(--font-pixel);
   padding: 5px 8px;
   border-bottom: 1px solid var(--gbc-border);
@@ -63,14 +60,14 @@
 .item:last-child { border-bottom: none; }
 
 .itemName {
-  font-size: 6px;
+  font-size: 10px;
   font-family: var(--font-pixel);
   color: var(--gbc-cream);
   word-break: break-all;
 }
 
 .itemDesc {
-  font-size: 5px;
+  font-size: 9px;
   font-family: var(--font-pixel);
   color: var(--gbc-mid);
   margin-top: 2px;
@@ -78,7 +75,7 @@
 }
 
 .empty {
-  font-size: 6px;
+  font-size: 10px;
   font-family: var(--font-pixel);
   color: var(--gbc-mid);
   padding: 8px;
@@ -86,22 +83,18 @@
 }
 
 .loading {
-  font-size: 6px;
+  font-size: 10px;
   font-family: var(--font-pixel);
   color: var(--gbc-mid);
   padding: 8px;
   text-align: center;
 }
 
-/* ── Mobile: pin to viewport so dropdown never bleeds off-screen ── */
+/* ── Mobile: full-width constrained dropdown ── */
 @media (max-width: 640px) {
   .dropdown {
-    position: fixed;
-    top: 40px;
-    left: 8px;
-    right: 8px;
     min-width: unset;
-    max-width: unset;
+    max-width: calc(100vw - 16px);
     max-height: 60vh;
   }
 }
