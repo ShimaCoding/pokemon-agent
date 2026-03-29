@@ -414,7 +414,7 @@
                   onclick='showDetail(${JSON.stringify(JSON.stringify(row))})'>
         <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">${ts}</td>
         <td class="px-4 py-2.5"><span class="truncate-query block text-gray-200" title="${escHtml(row.query)}">${escHtml(row.query)}</span></td>
-        <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${row.provider || '—'}</td>
+        <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${providerCell(row.provider)}</td>
         <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">${escHtml(models)}</td>
         <td class="px-4 py-2.5 text-right text-blue-400 whitespace-nowrap">${row.total_tokens ? row.total_tokens.toLocaleString() : '—'}</td>
         <td class="px-4 py-2.5 text-right text-yellow-400 whitespace-nowrap">${row.elapsed_ms ? (row.elapsed_ms / 1000).toFixed(1) + 's' : '—'}</td>
@@ -422,6 +422,21 @@
         <td class="px-4 py-2.5 ${statusCls} whitespace-nowrap font-medium">${statusLabel}</td>
       </tr>`;
     }).join('');
+  }
+
+  function providerCell(provider) {
+    const urls = {
+      groq: 'https://console.groq.com/dashboard/usage',
+      gemini: 'https://aistudio.google.com/usage?timeRange=last-1-day',
+      openrouter: 'https://openrouter.ai/logs',
+    };
+    if (!provider) return '—';
+    const key = provider.toLowerCase();
+    const url = Object.keys(urls).find(k => key.includes(k));
+    if (!url) return escHtml(provider);
+    return `<a href="${urls[url]}" target="_blank" rel="noopener noreferrer"
+      class="text-gray-400 hover:text-blue-400 underline underline-offset-2 transition"
+      onclick="event.stopPropagation()">${escHtml(provider)}</a>`;
   }
 
   function shortModel(m) {
