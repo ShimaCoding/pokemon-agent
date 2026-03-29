@@ -17,7 +17,8 @@ if _litellm_version in ("1.82.7", "1.82.8"):
         "any keys that may have been exposed."
     )
 
-PROVIDERS: dict[str, dict] = {
+# Temporarily disabled — move entries back into PROVIDERS to re-enable.
+_DISABLED_PROVIDERS: dict[str, dict] = {
     "groq": {
         "model_id": "groq/llama-3.3-70b-versatile",
         "env_var": "GROQ_API_KEY",
@@ -36,6 +37,9 @@ PROVIDERS: dict[str, dict] = {
         "label": "OpenAI (gpt-4o-mini)",
         "order": 3,
     },
+}
+
+PROVIDERS: dict[str, dict] = {
     "openrouter": {
         "model_ids": [
             "openrouter/stepfun/step-3.5-flash:free",
