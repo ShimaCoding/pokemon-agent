@@ -879,6 +879,12 @@
         border-right: none;
         border-bottom: none;
       }
+      #normal-panel {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
       #content {
         flex: 1;
         overflow-y: auto;
@@ -916,6 +922,27 @@
       }
       #status-badge {
         display: none;
+      }
+
+      /* Pre-query: ocultar todo excepto búsqueda + barra de tabs + chat */
+      #app.pre-query #sprite-area,
+      #app.pre-query #stats-area,
+      #app.pre-query #trace-header,
+      #app.pre-query #trace-list {
+        display: none;
+      }
+      #app.pre-query .tab-content {
+        display: none !important;
+      }
+      #app.pre-query #left-panel {
+        border-bottom: none;
+      }
+      #app.pre-query #normal-panel {
+        flex: 0 0 auto;
+      }
+      #app.pre-query #content {
+        overflow-y: visible;
+        flex: 0 0 auto;
       }
     }
 
@@ -1245,6 +1272,9 @@ const tabDexter       = document.getElementById('tab-dexter');
 const traceList       = document.getElementById('trace-list');
 const traceStats      = document.getElementById('trace-stats');
 const traceEmptyMsg   = document.getElementById('trace-empty-msg');
+const appEl           = document.getElementById('app');
+
+function isMobile() { return window.innerWidth <= 640; }
 
 // ── API Key ───────────────────────────────────────────────────
 const _KEY_STORAGE    = 'pokemon_agent_api_key';
@@ -1622,6 +1652,7 @@ async function runQuery(query) {
   if (inFlight) return;
   inFlight = true;
   hideSlashMenu();
+  appEl.classList.remove('pre-query');
 
   // Reset trace
   traceList.innerHTML = '';
@@ -2069,6 +2100,7 @@ searchInput.addEventListener('keydown', e => {
 });
 
 // ── Init ──────────────────────────────────────────────────────
+if (isMobile()) appEl.classList.add('pre-query');
 loadProviders();
 loadMcpPrompts();
 queryInput.focus();
