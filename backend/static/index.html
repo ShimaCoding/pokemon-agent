@@ -689,7 +689,7 @@
       background: var(--gbc-cream);
       display: none;
     }
-    #answer-area.visible { display: block; }
+    #answer-area.visible { display: block; flex: 1; }
     #answer-area::-webkit-scrollbar { width: 4px; }
     #answer-area::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
@@ -1203,10 +1203,8 @@ async function runQuery(query) {
 
   // Reset trace
   traceList.innerHTML = '';
-  const emptyEl = document.createElement('div');
-  emptyEl.className = 'trace-empty';
-  emptyEl.textContent = 'Esperando herramientas…';
-  traceList.appendChild(emptyEl);
+  traceEmptyMsg.textContent = 'Esperando herramientas…';
+  traceList.appendChild(traceEmptyMsg);
 
   traceStats.textContent = 'procesando…';
 
@@ -1281,14 +1279,25 @@ async function runQuery(query) {
           }
           case 'text':
             fullText += evt.delta || '';
-            // Show answer in normal mode
             answerArea.textContent = fullText;
-            answerArea.classList.add('visible');
+            if (!answerArea.classList.contains('visible')) {
+              answerArea.classList.add('visible');
+              // Let answer take the full right panel (hide active tab content)
+              document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            }
             break;
           case 'done':
             elapsedMs = evt.elapsed_ms || 0;
             traceStats.textContent = `${toolIndex} llamadas · ${elapsedMs}ms`;
             addTraceSummary(toolIndex, elapsedMs);
+            // Show agent text response as final card in the trace list
+            if (fullText) {
+              const ansCard = document.createElement('div');
+              ansCard.className = 'trace-summary';
+              ansCard.innerHTML = `<div class="trace-summary-title">▶ Respuesta del agente</div><div style="color:var(--gbc-dark);margin-top:4px;line-height:2;">${fullText.replace(/\n/g,'<br>')}</div>`;
+              traceList.appendChild(ansCard);
+              traceList.scrollTop = traceList.scrollHeight;
+            }
             statusBadge.textContent = 'listo';
             break;
           case 'error':
