@@ -1114,6 +1114,11 @@ async function loadProviders() {
       o.textContent = p.label;
       providerSelect.appendChild(o);
     }
+
+    const openrouterOption = avail.find(p => String(p.name).toLowerCase() === 'openrouter');
+    if (openrouterOption) {
+      providerSelect.value = openrouterOption.name;
+    }
   } catch { providerSelect.innerHTML = '<option value="">error</option>'; }
 }
 
