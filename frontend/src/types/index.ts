@@ -124,4 +124,4 @@ export interface SlashPrompt {
 
 // ── UI ──────────────────────────────────────────────────────────
 
-export type TabKey = 'info' | 'stats' | 'moves' | 'evos' | 'dexter'
+export type TabKey = 'info' | 'stats' | 'moves' | 'evos' | 'dexter' | 'consola'

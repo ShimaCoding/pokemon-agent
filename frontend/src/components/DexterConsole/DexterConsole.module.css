@@ -7,6 +7,14 @@
   font-size: 6px;
 }
 
+.traceHeader.collapsible {
+  cursor: pointer;
+  user-select: none;
+}
+.traceHeader.collapsible:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
 .traceTitle {
   display: flex;
   align-items: center;
@@ -18,7 +26,23 @@
   font-size: 8px;
 }
 
+.traceRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .traceStats { color: var(--gbc-mid); font-size: 6px; }
+
+.chevron {
+  font-size: 6px;
+  color: var(--gbc-mid);
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.chevronCollapsed {
+  transform: rotate(180deg);
+}
 
 .traceList {
   flex: 1;

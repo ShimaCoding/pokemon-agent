@@ -1,0 +1,103 @@
+/* ── Viewer wrapper ───────────────────────────────────────────────── */
+.viewer {
+  margin-top: 3px;
+  border: 1px solid var(--gbc-light);
+  overflow: hidden;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  background: var(--gbc-light);
+  border-bottom: 1px solid var(--gbc-border);
+}
+
+.modeBtn {
+  font-family: var(--font-pixel);
+  font-size: 4px;
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  cursor: pointer;
+  color: var(--gbc-mid);
+  text-transform: lowercase;
+  letter-spacing: 0;
+  line-height: 1.8;
+}
+.modeBtn:hover    { color: var(--gbc-dark); }
+.modeBtn.active   { color: var(--gbc-dark); text-decoration: underline; }
+
+.divider {
+  font-size: 4px;
+  color: var(--gbc-mid);
+  user-select: none;
+}
+
+/* ── Scrollable content area ──────────────────────────────────────── */
+.content {
+  overflow-y: auto;
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Pretty view ──────────────────────────────────────────────────── */
+.prettyWrap {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  line-height: 2;
+  color: var(--gbc-dark);
+}
+
+.entryLine {
+  display: block;
+}
+
+.indent {
+  padding-left: 10px;
+  border-left: 1px solid var(--gbc-light);
+  margin-left: 1px;
+}
+
+/* ── Token colours ────────────────────────────────────────────────── */
+.key     { color: var(--mcp-tool); }
+.jStr    { color: var(--mcp-resource); }
+.jNum    { color: var(--mcp-prompt); }
+.jBool   { color: #b07820; }
+.jNull   { color: var(--gbc-mid); font-style: italic; }
+.bracket { color: var(--gbc-dark); }
+.colon   { color: var(--gbc-mid); }
+.punct   { color: var(--gbc-mid); }
+
+/* ── Collapse/expand button ───────────────────────────────────────── */
+.collapseBtn {
+  font-family: var(--font-pixel);
+  font-size: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 3px;
+  color: var(--gbc-mid);
+  vertical-align: baseline;
+  line-height: 1;
+}
+.collapseBtn:hover { color: var(--gbc-dark); }
+
+.ellipsis {
+  color: var(--gbc-mid);
+  font-style: italic;
+  font-size: 4px;
+}
+
+/* ── Raw view ─────────────────────────────────────────────────────── */
+.rawPre {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--gbc-dark);
+  line-height: 1.8;
+  margin: 0;
+}

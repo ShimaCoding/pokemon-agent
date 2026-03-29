@@ -14,10 +14,6 @@ interface AppState {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
 
-  // Mode
-  isAdvancedMode: boolean
-  toggleMode: () => void
-
   // Provider list & selection
   providers: Provider[]
   setProviders: (providers: Provider[]) => void
@@ -70,10 +66,6 @@ const useStore = create<AppState>()(
       // Settings modal
       settingsOpen: false,
       setSettingsOpen: (open) => set({ settingsOpen: open }),
-
-      // Mode
-      isAdvancedMode: false,
-      toggleMode: () => set((s) => ({ isAdvancedMode: !s.isAdvancedMode })),
 
       // Providers
       providers: [],

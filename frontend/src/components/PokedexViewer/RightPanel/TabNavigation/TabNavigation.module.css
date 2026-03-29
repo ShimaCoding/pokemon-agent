@@ -28,3 +28,13 @@
   color: var(--gbc-dark);
   border-bottom-color: var(--gbc-dark);
 }
+
+/* CONSOLA tab only visible on mobile */
+.mobileOnly {
+  display: none;
+}
+@media (max-width: 640px) {
+  .mobileOnly {
+    display: block;
+  }
+}

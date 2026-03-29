@@ -6,11 +6,16 @@ import type { DoneEvent, ToolCallEvent } from '../../types'
 import { LOADING_PHRASES } from '../../hooks/useAgentStream'
 import styles from './DexterConsole.module.css'
 
-export default function DexterConsole() {
+interface Props {
+  collapsible?: boolean
+}
+
+export default function DexterConsole({ collapsible = false }: Props) {
   const traceLogs   = useStore((s) => s.traceLogs)
   const inFlight    = useStore((s) => s.inFlight)
   const bottomRef   = useRef<HTMLDivElement>(null)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
+  const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
     if (!inFlight) return
@@ -45,43 +50,56 @@ export default function DexterConsole() {
 
   return (
     <>
-      <div id="trace-header" className={styles.traceHeader}>
+      <div
+        id="trace-header"
+        className={`${styles.traceHeader} ${collapsible ? styles.collapsible : ''}`}
+        onClick={collapsible ? () => setCollapsed((c) => !c) : undefined}
+        role={collapsible ? 'button' : undefined}
+        aria-expanded={collapsible ? !collapsed : undefined}
+      >
         <div className={styles.traceTitle}>Consola de Dexter (Logs)</div>
-        <div className={styles.traceStats} id="trace-stats">{statsText}</div>
+        <div className={styles.traceRight}>
+          <div className={styles.traceStats} id="trace-stats">{statsText}</div>
+          {collapsible && (
+            <span className={`${styles.chevron} ${collapsed ? styles.chevronCollapsed : ''}`}>▲</span>
+          )}
+        </div>
       </div>
-      <div id="trace-list" className={styles.traceList}>
-        {renderableLogs.length === 0 && !inFlight && (
-          <div className={styles.empty} id="trace-empty-msg">
-            ejecuta una consulta<br />para ver la traza MCP
-          </div>
-        )}
-        {inFlight && renderableLogs.length === 0 && (
-          <div className={styles.empty}>Esperando herramientas…</div>
-        )}
+      {!collapsed && (
+        <div id="trace-list" className={styles.traceList}>
+          {renderableLogs.length === 0 && !inFlight && (
+            <div className={styles.empty} id="trace-empty-msg">
+              ejecuta una consulta<br />para ver la traza MCP
+            </div>
+          )}
+          {inFlight && renderableLogs.length === 0 && (
+            <div className={styles.empty}>Esperando herramientas…</div>
+          )}
 
-        {renderableLogs.map((e, i) => {
-          // Pair tool_result with its matching tool_call
-          if (e.type === 'tool_call') {
-            const result = traceLogs.find(
-              (r) => r.type === 'tool_result' && (r as { index: number }).index === (e as ToolCallEvent).index
-            )
-            return (
-              <div key={i}>
-                <TraceCard event={e} />
-                {result && <TraceCard event={result} />}
-              </div>
-            )
-          }
-          if (e.type === 'tool_result') return null // already rendered above
-          return <TraceCard key={i} event={e} />
-        })}
+          {renderableLogs.map((e, i) => {
+            // Pair tool_result with its matching tool_call
+            if (e.type === 'tool_call') {
+              const result = traceLogs.find(
+                (r) => r.type === 'tool_result' && (r as { index: number }).index === (e as ToolCallEvent).index
+              )
+              return (
+                <div key={i}>
+                  <TraceCard event={e} />
+                  {result && <TraceCard event={result} />}
+                </div>
+              )
+            }
+            if (e.type === 'tool_result') return null // already rendered above
+            return <TraceCard key={i} event={e} />
+          })}
 
-        {doneEvent && (
-          <TraceSummary event={doneEvent} toolCallCount={toolCallCount} />
-        )}
+          {doneEvent && (
+            <TraceSummary event={doneEvent} toolCallCount={toolCallCount} />
+          )}
 
-        <div ref={bottomRef} />
-      </div>
+          <div ref={bottomRef} />
+        </div>
+      )}
     </>
   )
 }

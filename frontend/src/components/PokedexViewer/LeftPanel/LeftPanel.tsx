@@ -13,7 +13,7 @@ export default function LeftPanel() {
       <SearchBar />
       <SpriteDisplay sprite={pokemonData?.sprite} name={pokemonData?.name} />
       <MiniStats stats={pokemonData?.stats} />
-      <DexterConsole />
+      <DexterConsole collapsible />
     </div>
   )
 }

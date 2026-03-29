@@ -7,20 +7,13 @@ import type {
   TraceEvent,
 } from '../../types'
 import { guessToolType } from '../../hooks/useAgentStream'
+import { JsonViewer, tryParseJson } from './JsonViewer'
 import styles from './TraceCard.module.css'
 
 interface Props {
   event: TraceEvent
   /** For tool_result: reference to the matching tool_call card index */
   toolCallIndex?: number
-}
-
-function escHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 // ── LLM Call ──────────────────────────────────────────────────────
@@ -95,7 +88,6 @@ function ModelAttemptCard({ e }: { e: ModelAttemptEvent }) {
 
 function ToolCallCard({ e }: { e: ToolCallEvent }) {
   const typeKey = guessToolType(e.tool)
-  const argsJson = JSON.stringify(e.args ?? {}, null, 2)
 
   return (
     <div className={`${styles.card} ${styles[typeKey]}`}>
@@ -104,7 +96,7 @@ function ToolCallCard({ e }: { e: ToolCallEvent }) {
         <span className={styles.name}>{e.tool}</span>
         <span className={styles.timing}>+{e.timestamp_ms ?? 0}ms</span>
       </div>
-      <pre className={styles.traceJson}>{escHtml(argsJson)}</pre>
+      <JsonViewer data={e.args ?? {}} maxHeight="120px" />
     </div>
   )
 }
@@ -114,8 +106,7 @@ function ToolCallCard({ e }: { e: ToolCallEvent }) {
 function ToolResultCard({ e }: { e: ToolResultEvent }) {
   const [open, setOpen] = useState(false)
   const full    = String(e.result ?? '')
-  const preview = full.slice(0, 300)
-  const hasMore = full.length > 300
+  const parsed  = tryParseJson(full)
 
   return (
     <div className={`${styles.card} ${styles.result}`}>
@@ -123,22 +114,26 @@ function ToolResultCard({ e }: { e: ToolResultEvent }) {
         <span className={`${styles.typeBadge} ${styles.result}`}>RESULT</span>
         <span className={styles.name}>Tool Result #{e.index}</span>
       </div>
-      <div className={styles.meta} style={{ marginTop: 3, borderTop: '1px dashed var(--gbc-border)', paddingTop: 3 }}>
-        <span>Resultado:</span> {preview}{hasMore ? '…' : ''}
-        {hasMore && (
-          <>
-            {' '}
-            <button className={styles.toggleBtn} onClick={() => setOpen((v) => !v)}>
-              {open ? '[ocultar]' : '[ver todo]'}
-            </button>
-            {open && (
-              <div className={styles.expandable}>
-                <pre className={styles.resultFull}>{full}</pre>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      {parsed !== null ? (
+        <JsonViewer data={parsed} maxHeight="160px" />
+      ) : (
+        <div className={styles.meta} style={{ marginTop: 3, borderTop: '1px dashed var(--gbc-border)', paddingTop: 3 }}>
+          <span>Resultado:</span> {full.slice(0, 300)}{full.length > 300 ? '…' : ''}
+          {full.length > 300 && (
+            <>
+              {' '}
+              <button className={styles.toggleBtn} onClick={() => setOpen((v) => !v)}>
+                {open ? '[ocultar]' : '[ver todo]'}
+              </button>
+              {open && (
+                <div className={styles.expandable}>
+                  <pre className={styles.resultFull}>{full}</pre>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
