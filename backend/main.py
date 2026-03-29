@@ -357,7 +357,8 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 
     try:
         with mcp_client:
-            tools = mcp_client.list_tools_sync()
+            from backend.tools import get_pokedex_entry as _get_pokedex_entry
+            tools = mcp_client.list_tools_sync() + [_get_pokedex_entry]
 
             # --- Check if query is a prompt call ---
             # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"
