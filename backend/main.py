@@ -21,6 +21,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -59,6 +60,10 @@ def _get_real_ip(request: Request) -> str:
 
 
 limiter = Limiter(key_func=_get_real_ip)
+
+# ContextVar so exempt_when (called with zero args by slowapi) can access the
+# current request's API key, which is set by the middleware below.
+_req_api_key: ContextVar[str] = ContextVar("req_api_key", default="")
 
 # ---------------------------------------------------------------------------
 # API key authentication
@@ -124,6 +129,16 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-API-Key"],
 )
+
+
+@app.middleware("http")
+async def _capture_api_key(request: Request, call_next):
+    """Store the request's X-API-Key in a ContextVar for use by exempt_when."""
+    token = _req_api_key.set(request.headers.get("X-API-Key", ""))
+    try:
+        return await call_next(request)
+    finally:
+        _req_api_key.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +272,7 @@ async def get_resources():
 
 
 @app.post("/api/agent/run")
-@limiter.limit("5/minute", exempt_when=lambda request: _is_valid_api_key(request.headers.get("X-API-Key")))
+@limiter.limit("5/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
 async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),
