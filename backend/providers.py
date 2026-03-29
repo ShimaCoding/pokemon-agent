@@ -39,7 +39,6 @@ PROVIDERS: dict[str, dict] = {
     "openrouter": {
         "model_ids": [
             "openrouter/stepfun/step-3.5-flash:free",
-            "openrouter/qwen/qwen3-coder:free",
             "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             "openrouter/z-ai/glm-4.5-air:free",
             "openrouter/arcee-ai/trinity-mini:free",
