@@ -1027,7 +1027,7 @@
   <div id="modebar">
     <span class="mode-title" id="mode-label">Modo Normal</span>
     <div class="toggle-wrap">
-      <span class="toggle-label">Ver magia MCP</span>
+      <span class="toggle-label">Consola de Dexter (Logs)</span>
       <div class="toggle-switch" id="mode-toggle" role="button" tabindex="0" aria-label="Cambiar modo"></div>
       <span class="toggle-label" id="toggle-state">OFF</span>
     </div>
@@ -1077,7 +1077,7 @@
           </div>
         </div>
 
-        <button id="mcp-magic-btn">Ver magia MCP</button>
+        <button id="mcp-magic-btn">Consola de Dexter (Logs)</button>
       </div>
 
       <!-- RIGHT: tabs -->
@@ -1176,7 +1176,7 @@
     <!-- RIGHT: trace en vivo -->
     <div id="adv-right">
       <div id="trace-header">
-        <div class="trace-title">Trace MCP en vivo</div>
+        <div class="trace-title">Terminal de Dexter: Traza en vivo</div>
         <div id="trace-stats">esperando consulta…</div>
       </div>
       <div id="trace-list">
@@ -1310,7 +1310,7 @@ function setMode(adv) {
   advancedMode = adv;
   modeToggle.classList.toggle('on', adv);
   toggleState.textContent = adv ? 'ON' : 'OFF';
-  modeLabel.textContent   = adv ? 'Modo Avanzado MCP' : 'Modo Normal';
+  modeLabel.textContent   = adv ? 'Modo Desarrollador (Logs)' : 'Modo Normal';
   normalPanel.style.display   = adv ? 'none'  : 'block';
   advancedPanel.classList.toggle('active', adv);
 }
