@@ -3,7 +3,7 @@
   font-family: var(--font-pixel);
   font-size: 9px;
   background: var(--gbc-bg);
-  color: var(--gbc-cream);
+  color: #000;
   border: 2px solid var(--gbc-border);
   padding: 6px 8px;
   min-width: 0;

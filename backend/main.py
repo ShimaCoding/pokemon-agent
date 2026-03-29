@@ -24,9 +24,9 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import PROVIDERS, build_litellm_router, get_available_providers
 
 load_dotenv()
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     except RuntimeError as exc:
         logger.error("Startup error: %s", exc)
         raise
+    init_db()
     yield
 
 
@@ -349,6 +351,20 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 
     start_time = time.time()
 
+    # --- Accumulated data for query log ---
+    _log: dict = {
+        "provider": None,
+        "models_tried": [],
+        "elapsed_ms": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "tool_calls_count": 0,
+        "tool_names": [],
+        "status": "error",
+        "error_message": None,
+    }
+
     def elapsed_ms() -> int:
         return int((time.time() - start_time) * 1000)
 
@@ -363,6 +379,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
         return
 
     logger.info("[PROVIDER] Provider seleccionado: %s", provider_label)
+    _log["provider"] = provider_label
 
     # Per-request queues populated by agent.py's monkey-patched litellm calls.
     _me_queue: list = []  # model_attempt events
@@ -518,6 +535,16 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                         _usage.get("totalTokens", 0),
                         ", ".join(_models_tried) or "—",
                     )
+                    _log.update(
+                        models_tried=_models_tried,
+                        elapsed_ms=_elapsed,
+                        input_tokens=_usage.get("inputTokens", 0),
+                        output_tokens=_usage.get("outputTokens", 0),
+                        total_tokens=_usage.get("totalTokens", 0),
+                        tool_calls_count=tool_index,
+                        tool_names=[tool_names[i] for i in sorted(tool_names)],
+                        status="done",
+                    )
                     yield _sse(
                         {
                             "type": "done",
@@ -535,6 +562,14 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
         available = get_available_providers()
         fallback_available = len(available) > 1 or (
             provider is not None and len(available) >= 1
+        )
+        _log.update(
+            models_tried=list(dict.fromkeys(_all_model_attempts)),
+            elapsed_ms=elapsed_ms(),
+            tool_calls_count=tool_index,
+            tool_names=[tool_names[i] for i in sorted(tool_names)],
+            status="error",
+            error_message=str(exc),
         )
         yield _sse(
             {
@@ -558,6 +593,42 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     finally:
         _cv_model_events.reset(_me_token)
         _cv_llm_prompts.reset(_lp_token)
+        log_query(query=query, **_log)
+
+
+# ---------------------------------------------------------------------------
+# Admin panel
+# ---------------------------------------------------------------------------
+
+
+async def _verify_admin(request: Request) -> None:
+    """Reject admin API calls when ADMIN_PASSWORD is set but header is wrong."""
+    password = os.environ.get("ADMIN_PASSWORD", "").strip()
+    if not password:
+        return  # No password configured — open access
+    provided = request.headers.get("X-Admin-Password", "")
+    if provided != password:
+        raise HTTPException(status_code=401, detail="Admin access denied")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_panel():
+    path = os.path.join(os.path.dirname(__file__), "static", "admin.html")
+    return FileResponse(path, media_type="text/html")
+
+
+@app.get("/admin/api/stats", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+async def admin_stats():
+    return get_stats()
+
+
+@app.get("/admin/api/queries", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+async def admin_queries(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    search: str = Query(""),
+):
+    return get_queries(page=page, limit=limit, search=search)
 
 
 # ---------------------------------------------------------------------------
