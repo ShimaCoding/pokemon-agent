@@ -1,10 +1,28 @@
-FROM python:3.11-slim
+# ── builder ───────────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-# Prevent .pyc files, force stdout/stderr flush, disable pip noise
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    UV_NO_CACHE=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# Bring in uv — no pip needed
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Install dependencies into an isolated virtual environment
+COPY requirements.txt .
+RUN uv venv .venv && \
+    uv pip install --python .venv/bin/python -r requirements.txt
+
+# ── runtime ───────────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
 
@@ -12,12 +30,8 @@ WORKDIR /app
 RUN addgroup --system --gid 1001 appgroup && \
     adduser  --system --uid 1001 --gid 1001 --no-create-home appuser
 
-# Install Python dependencies first — layer is cached until requirements.txt changes
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
-
-# Copy application code with correct ownership
+# Copy only the venv and app code from builder
+COPY --from=builder --chown=appuser:appgroup /app/.venv ./.venv
 COPY --chown=appuser:appgroup backend/ ./backend/
 
 # Drop root privileges
