@@ -835,6 +835,52 @@
       background: var(--gbc-bg);
     }
 
+    /* ── Slash menu ────────────────────────────────────────── */
+    #bottom-bar { position: relative; }
+
+    #slash-menu {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      right: 0;
+      background: var(--gbc-dark);
+      border: 2px solid var(--gbc-border);
+      border-bottom: none;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 100;
+      font-family: var(--font-pixel);
+    }
+    #slash-menu.hidden { display: none; }
+
+    .slash-group-header {
+      font-size: 5px;
+      color: var(--mcp-prompt);
+      padding: 5px 8px 3px;
+      border-bottom: 1px solid var(--gbc-border);
+      letter-spacing: 1px;
+    }
+    .slash-item {
+      display: flex;
+      flex-direction: column;
+      padding: 5px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #2e2e2e;
+      gap: 2px;
+    }
+    .slash-item:hover,
+    .slash-item.selected { background: var(--gbc-mid); }
+    .slash-item-name {
+      font-size: 6px;
+      color: var(--gbc-cream);
+    }
+    .slash-item-desc {
+      font-size: 5px;
+      color: var(--gbc-screen);
+    }
+    #slash-menu::-webkit-scrollbar { width: 4px; }
+    #slash-menu::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+
     /* ── Responsive ────────────────────────────────────────── */
     @media (max-width: 640px) {
       #content, #advanced-panel { flex-direction: column; }
@@ -1025,6 +1071,7 @@
 
   <!-- ── BOTTOM BAR ─────────────────────────────────────────── -->
   <div id="bottom-bar">
+    <div id="slash-menu" class="hidden"></div>
     <select id="provider-select">
       <option value="">cargando…</option>
     </select>
@@ -1056,6 +1103,7 @@ const mcpMagicBtn     = document.getElementById('mcp-magic-btn');
 
 const queryInput      = document.getElementById('query-input');
 const sendBtn         = document.getElementById('send-btn');
+const slashMenu       = document.getElementById('slash-menu');
 const providerSelect  = document.getElementById('provider-select');
 const statusBadge     = document.getElementById('status-badge');
 const thinkingEl      = document.getElementById('thinking');
@@ -1370,6 +1418,7 @@ let inFlight = false;
 async function runQuery(query) {
   if (inFlight) return;
   inFlight = true;
+  hideSlashMenu();
 
   // Reset trace
   traceList.innerHTML = '';
@@ -1613,12 +1662,137 @@ async function quickSearch(name) {
   searchBtn.disabled = false;
 }
 
+// ── Slash menu ────────────────────────────────────────────────
+const SLASH_PROMPTS = [
+  { group: 'MCP',      name: '/pokedex-entry',   desc: 'Entrada estilo Pokédex clásica',           template: 'Usa el prompt pokedex-entry para ' },
+  { group: 'MCP',      name: '/battle-strategy', desc: 'Estrategia de combate por tipos',          template: 'Aplica battle-strategy contra ' },
+  { group: 'MCP',      name: '/stat-comparison', desc: 'Comparar stats de dos Pokémon',            template: 'Ejecuta stat-comparison entre ' },
+  { group: 'Ejemplos', name: 'Listado inicial',  desc: 'Primeros Pokémon',                         template: 'Muéstrame los primeros 5 Pokémon' },
+  { group: 'Ejemplos', name: 'Info de Pokémon',  desc: 'Datos técnicos y stats',                   template: 'Dame información de Mewtwo' },
+  { group: 'Ejemplos', name: 'Habilidades',      desc: 'Habilidades de un Pokémon',                template: 'Cuáles son las habilidades de Gengar?' },
+  { group: 'Ejemplos', name: 'Análisis de stats',desc: 'Potencial de combate',                     template: 'Analiza las estadísticas de Shuckle' },
+  { group: 'Ejemplos', name: 'Velocidad vs stats',desc: 'Comparar velocidad con otros stats',      template: 'Qué tan rápido es Jolteon comparado con sus otros stats?' },
+  { group: 'Ejemplos', name: 'Ventaja de tipo',  desc: 'Fortalezas elementales',                   template: 'Contra qué tipos es fuerte el tipo Agua?' },
+  { group: 'Ejemplos', name: 'Inmunidad de tipo',desc: 'Tipos inmunes a un elemento',              template: 'Qué tipo no recibe daño de ataques tipo Fantasma?' },
+  { group: 'Ejemplos', name: 'Comparativa 1v1',  desc: 'Analizar dos Pokémon a la vez',            template: '¿Quién tiene mejor ataque: Arcanine o Gyarados? Analiza a ambos.' },
+  { group: 'Ejemplos', name: 'Equipo anti-tipo', desc: 'Contrarrestar debilidad de equipo',        template: 'Tengo un equipo débil al tipo Hielo. ¿Qué tipo debería buscar para contrarrestarlo y qué Pokémon me recomiendas?' },
+  { group: 'Ejemplos', name: 'Reporte completo', desc: 'Info + stats + tipos juntos',              template: 'Hazme un reporte completo de Lucario incluyendo su efectividad de tipos.' },
+];
+
+let slashSelectedIdx = -1;
+let slashVisible     = false;
+let slashFiltered    = [];
+
+function showSlashMenu(filter) {
+  const f = filter.toLowerCase();
+  slashFiltered = f
+    ? SLASH_PROMPTS.filter(p =>
+        p.name.toLowerCase().includes(f) ||
+        p.desc.toLowerCase().includes(f) ||
+        p.template.toLowerCase().includes(f))
+    : SLASH_PROMPTS;
+
+  if (!slashFiltered.length) { hideSlashMenu(); return; }
+
+  slashSelectedIdx = 0;
+  renderSlashMenu();
+  slashMenu.classList.remove('hidden');
+  slashVisible = true;
+}
+
+function hideSlashMenu() {
+  slashMenu.classList.add('hidden');
+  slashVisible = false;
+  slashSelectedIdx = -1;
+  slashFiltered = [];
+}
+
+function renderSlashMenu() {
+  slashMenu.innerHTML = '';
+  let currentGroup = null;
+  let flatIdx = 0;
+  slashFiltered.forEach(p => {
+    if (p.group !== currentGroup) {
+      currentGroup = p.group;
+      const hdr = document.createElement('div');
+      hdr.className = 'slash-group-header';
+      hdr.textContent = '── ' + p.group + ' ──';
+      slashMenu.appendChild(hdr);
+    }
+    const item = document.createElement('div');
+    item.className = 'slash-item' + (flatIdx === slashSelectedIdx ? ' selected' : '');
+    item.dataset.idx = flatIdx;
+    item.innerHTML =
+      '<span class="slash-item-name">' + escHtml(p.name) + '</span>' +
+      '<span class="slash-item-desc">' + escHtml(p.desc) + '</span>';
+    slashMenu.appendChild(item);
+    flatIdx++;
+  });
+}
+
+function selectSlashItem(idx) {
+  if (idx < 0 || idx >= slashFiltered.length) return;
+  queryInput.value = slashFiltered[idx].template;
+  hideSlashMenu();
+  queryInput.focus();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+slashMenu.addEventListener('click', e => {
+  const item = e.target.closest('.slash-item');
+  if (item) selectSlashItem(+item.dataset.idx);
+});
+
+document.addEventListener('click', e => {
+  if (slashVisible && !slashMenu.contains(e.target) && e.target !== queryInput) {
+    hideSlashMenu();
+  }
+});
+
 // ── Event listeners ───────────────────────────────────────────
 sendBtn.addEventListener('click', () => {
   const q = queryInput.value.trim();
   if (q) { queryInput.value = ''; runQuery(q); }
 });
+queryInput.addEventListener('input', () => {
+  const val = queryInput.value;
+  if (val.startsWith('/')) {
+    showSlashMenu(val.slice(1));
+  } else {
+    hideSlashMenu();
+  }
+});
 queryInput.addEventListener('keydown', e => {
+  if (slashVisible) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      slashSelectedIdx = Math.min(slashSelectedIdx + 1, slashFiltered.length - 1);
+      renderSlashMenu();
+      slashMenu.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      slashSelectedIdx = Math.max(slashSelectedIdx - 1, 0);
+      renderSlashMenu();
+      slashMenu.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      selectSlashItem(slashSelectedIdx);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      queryInput.value = '';
+      hideSlashMenu();
+      return;
+    }
+  }
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
 });
 searchBtn.addEventListener('click',   () => quickSearch(searchInput.value));
