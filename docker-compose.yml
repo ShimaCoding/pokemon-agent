@@ -1,7 +1,46 @@
 services:
   pokemon-agent:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8002:8000"
     env_file: .env
     restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Prevent a runaway container from starving the host
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+    # Rotating JSON logs — avoids unbounded disk growth
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - pokemon-net
+
+networks:
+  pokemon-net:
+    driver: bridge
