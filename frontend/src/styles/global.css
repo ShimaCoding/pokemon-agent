@@ -1,3 +1,11 @@
+/* ── Custom Fonts ─────────────────────────────────────────────── */
+@font-face {
+  font-family: 'PokemonFont';
+  src: url('/fonts/PKMN RBYGSC.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 /* ── CSS Variables ─────────────────────────────────────────────── */
 :root {
   --gbc-bg:        #d4d4d4;
@@ -14,7 +22,7 @@
   --mcp-resource:  #5a9e5a;
   --mcp-prompt:    #c0547a;
 
-  --font-pixel: 'Press Start 2P', monospace;
+  --font-pixel: 'PokemonFont', monospace;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────── */
