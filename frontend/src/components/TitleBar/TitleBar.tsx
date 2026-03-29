@@ -8,8 +8,25 @@ export default function TitleBar() {
   return (
     <header className={styles.titlebar} id="titlebar">
       <div className={styles.titleLeft}>
-        <span className={styles.mainTitle}>MCPokédex GBC</span>
-        <span className={styles.subtitle}>Press Start 2P</span>
+        <span className={styles.mainTitle}>MCPokédex</span>
+        <div className={styles.githubLinks}>
+          <a
+            className={styles.githubLink}
+            href="https://github.com/ShimaCoding/mcp-pokemon-server"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            ★ mcp-pokemon-server
+          </a>
+          <a
+            className={styles.githubLink}
+            href="https://github.com/ShimaCoding/pokemon-agent"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            ★ pokemon-agent
+          </a>
+        </div>
       </div>
       <div className={styles.titleRight}>
         <div className={styles.mcpBadges}>

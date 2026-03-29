@@ -21,9 +21,20 @@
   color: var(--gbc-screen);
 }
 
-.subtitle {
+.githubLinks {
+  display: flex;
+  gap: 8px;
+}
+
+.githubLink {
   font-size: 6px;
   color: var(--gbc-mid);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.githubLink:hover {
+  color: var(--gbc-screen);
 }
 
 .titleRight {
