@@ -57,7 +57,7 @@ function renderItem(kind: BadgeKind, item: McpTool | McpResource | McpPrompt, id
 export default function McpBadgeDropdown({ kind, items, loading }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const [dropPos, setDropPos] = useState<{ top: number; right: number } | null>(null)
+  const [dropPos, setDropPos] = useState<{ top: number; left: number } | null>(null)
 
   // Compute fixed position when opening
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function McpBadgeDropdown({ kind, items, loading }: Props) {
       const rect = ref.current.getBoundingClientRect()
       setDropPos({
         top: rect.bottom + 4,
-        right: window.innerWidth - rect.right,
+        left: rect.left,
       })
     }
   }, [open])
@@ -87,7 +87,7 @@ export default function McpBadgeDropdown({ kind, items, loading }: Props) {
   const dropdown = open && dropPos ? (
     <div
       className={styles.dropdown}
-      style={{ position: 'fixed', top: dropPos.top, right: dropPos.right }}
+      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left }}
     >
       <div className={`${styles.header} ${styles[kind]}`}>
         {loading ? '...' : getHeaderLabel(kind, count)}
