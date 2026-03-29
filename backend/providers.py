@@ -37,13 +37,19 @@ PROVIDERS: dict[str, dict] = {
         "order": 3,
     },
     "openrouter": {
-        # Two frontier models with native tool-calling support via OpenRouter.
         "model_ids": [
-            "openrouter/anthropic/claude-3.5-sonnet",
-            "openrouter/google/gemini-2.5-flash",
+            "openrouter/stepfun/step-3.5-flash:free",
+            "openrouter/qwen/qwen3-coder:free",
+            "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+            "openrouter/z-ai/glm-4.5-air:free",
+            "openrouter/arcee-ai/trinity-mini:free",
+            "openrouter/minimax/minimax-m2.5:free",
+            "openrouter/openai/gpt-oss-120b:free",
+            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+            "openrouter/openai/gpt-oss-20b:free",
         ],
         "env_var": "OPENROUTER_API_KEY",
-        "label": "OpenRouter (Claude 3.5 Sonnet + Gemini 2.5 Flash)",
+        "label": "OpenRouter (free tier)",
         "order": 4,
     },
 }
