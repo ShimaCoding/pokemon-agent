@@ -1601,6 +1601,11 @@ async function runQuery(query) {
       body: JSON.stringify({ query, provider: providerSelect.value || null }),
     });
 
+    if (!res.ok && res.status !== 200) {
+      const err = await res.json().catch(() => ({ detail: `Error ${res.status}` }));
+      throw new Error(err.detail || `Error ${res.status}`);
+    }
+
     const reader   = res.body.getReader();
     const decoder  = new TextDecoder();
     let   buffer   = '';

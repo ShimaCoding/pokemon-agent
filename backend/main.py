@@ -84,7 +84,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Pokemon MCP Agent", lifespan=lifespan)
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Demasiadas consultas. Espera un momento antes de volver a intentarlo."},
+        headers={"Retry-After": "60"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 
 # CORS: read from ALLOWED_ORIGINS (comma-separated). Defaults to "*" for local dev.
 _raw_origins = os.environ.get("ALLOWED_ORIGINS", "*")
@@ -176,7 +187,7 @@ async def get_prompts():
 
 
 @app.post("/api/agent/run", dependencies=[Depends(verify_api_key)])
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),
