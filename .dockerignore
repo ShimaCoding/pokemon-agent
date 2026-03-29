@@ -23,6 +23,13 @@ htmlcov/
 venv/
 env/
 
+# Frontend — node_modules are reinstalled inside the container
+frontend/node_modules/
+frontend/.vite/
+
+# Pre-built static assets — rebuilt inside the container by the frontend-builder stage
+backend/static/
+
 # Docker
 Dockerfile*
 docker-compose*.yml
