@@ -4,9 +4,134 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin — Pokemon Agent</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
-    body { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
+    button { cursor: pointer; background: transparent; font: inherit; }
+    input  { font: inherit; }
+    table  { border-collapse: collapse; }
+
+    /* ── Tailwind-compatible utilities (only what this page uses) ── */
+    .hidden   { display: none !important; }
+    .flex     { display: flex; }
+    .grid     { display: grid; }
+    .block    { display: block; }
+
+    .fixed    { position: fixed; }
+    .inset-0  { inset: 0; }
+    .z-40     { z-index: 40; }
+    .z-50     { z-index: 50; }
+
+    .items-center    { align-items: center; }
+    .justify-center  { justify-content: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-3           { gap: 0.75rem; }
+    .flex-col        { flex-direction: column; }
+
+    .grid-cols-2  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .col-span-2   { grid-column: span 2; }
+    @media (min-width: 768px)  { .md\:grid-cols-3  { grid-template-columns: repeat(3, minmax(0, 1fr)); } .md\:col-span-1 { grid-column: span 1; } }
+    @media (min-width: 1024px) { .lg\:grid-cols-6  { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+    .w-full  { width: 100%; }
+    .w-80    { width: 20rem; }
+    .w-64    { width: 16rem; }
+    .max-w-7xl  { max-width: 80rem; }
+    .max-w-2xl  { max-width: 42rem; }
+    .max-w-xs   { max-width: 20rem; }
+    .max-h-\[80vh\] { max-height: 80vh; }
+    .min-h-screen   { min-height: 100vh; }
+
+    .overflow-hidden  { overflow: hidden; }
+    .overflow-y-auto  { overflow-y: auto; }
+    .text-ellipsis    { text-overflow: ellipsis; }
+
+    .mx-auto  { margin-left: auto; margin-right: auto; }
+    .mb-1  { margin-bottom: 0.25rem; }
+    .mb-2  { margin-bottom: 0.5rem; }
+    .mb-3  { margin-bottom: 0.75rem; }
+    .mb-4  { margin-bottom: 1rem; }
+    .mb-5  { margin-bottom: 1.25rem; }
+    .mb-6  { margin-bottom: 1.5rem; }
+    .mt-4  { margin-top: 1rem; }
+
+    .p-4   { padding: 1rem; }
+    .p-6   { padding: 1.5rem; }
+    .p-8   { padding: 2rem; }
+    .px-3  { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .px-4  { padding-left: 1rem;    padding-right: 1rem; }
+    .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+    .py-2    { padding-top: 0.5rem;   padding-bottom: 0.5rem; }
+    .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+    .py-3    { padding-top: 0.75rem;  padding-bottom: 0.75rem; }
+    .py-6    { padding-top: 1.5rem;   padding-bottom: 1.5rem; }
+    .py-8    { padding-top: 2rem;     padding-bottom: 2rem; }
+
+    .text-xs  { font-size: 0.75rem;  line-height: 1rem; }
+    .text-sm  { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-lg  { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-2xl { font-size: 1.5rem;   line-height: 2rem; }
+    .font-medium { font-weight: 500; }
+    .font-bold   { font-weight: 700; }
+    .leading-tight { line-height: 1.25; }
+    .leading-none  { line-height: 1; }
+    .text-left   { text-align: left; }
+    .text-right  { text-align: right; }
+    .text-center { text-align: center; }
+    .whitespace-nowrap  { white-space: nowrap; }
+    .whitespace-pre-wrap { white-space: pre-wrap; }
+    .break-words { overflow-wrap: break-word; word-break: break-word; }
+    .truncate    { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .text-white   { color: #fff; }
+    .text-gray-200 { color: #e5e7eb; }
+    .text-gray-300 { color: #d1d5db; }
+    .text-gray-400 { color: #9ca3af; }
+    .text-gray-500 { color: #6b7280; }
+    .text-gray-600 { color: #4b5563; }
+    .text-green-400  { color: #4ade80; }
+    .text-blue-400   { color: #60a5fa; }
+    .text-yellow-400 { color: #facc15; }
+    .text-red-400    { color: #f87171; }
+    .text-red-500    { color: #ef4444; }
+
+    .bg-gray-950 { background-color: #030712; }
+    .bg-gray-900 { background-color: #111827; }
+    .bg-gray-800 { background-color: #1f2937; }
+    .bg-blue-600 { background-color: #2563eb; }
+    .bg-black\/70   { background-color: rgb(0 0 0 / 0.7); }
+    .bg-gray-800\/30 { background-color: rgb(31 41 55 / 0.3); }
+
+    .border   { border-width: 1px; border-style: solid; }
+    .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+    .border-gray-600 { border-color: #4b5563; }
+    .border-gray-700 { border-color: #374151; }
+    .border-gray-800 { border-color: #1f2937; }
+    .border-gray-800\/50 { border-color: rgb(31 41 55 / 0.5); }
+    .border-blue-500  { border-color: #3b82f6; }
+    .border-green-600 { border-color: #16a34a; }
+
+    .rounded-lg { border-radius: 0.5rem; }
+    .rounded-xl { border-radius: 0.75rem; }
+
+    .transition { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease; }
+    .cursor-pointer { cursor: pointer; }
+
+    .space-y-0\.5 > * + * { margin-top: 0.125rem; }
+
+    .hover\:bg-blue-500:hover      { background-color: #3b82f6; }
+    .hover\:border-gray-500:hover  { border-color: #6b7280; }
+    .hover\:text-white:hover       { color: #fff; }
+    .hover\:bg-gray-800\/30:hover  { background-color: rgb(31 41 55 / 0.3); }
+    .focus\:outline-none:focus     { outline: none; }
+    .focus\:border-blue-500:focus  { border-color: #3b82f6; }
+    .disabled\:opacity-30:disabled { opacity: 0.3; }
+
+    ::placeholder { color: #6b7280; }
+
+    /* ── Custom ── */
     .truncate-query { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .status-done  { color: #4ade80; }
     .status-error { color: #f87171; }
