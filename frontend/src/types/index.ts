@@ -89,6 +89,12 @@ export interface ErrorEvent {
   message?: string
 }
 
+export interface SystemLogEvent {
+  type: 'system_log'
+  message: string
+  level: 'info' | 'warn' | 'success'
+}
+
 export type TraceEvent =
   | LlmCallEvent
   | ModelAttemptEvent
@@ -97,6 +103,7 @@ export type TraceEvent =
   | TextEvent
   | DoneEvent
   | ErrorEvent
+  | SystemLogEvent
 
 // ── Providers & Prompts ─────────────────────────────────────────
 

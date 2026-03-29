@@ -93,6 +93,12 @@ export function useAgentStream() {
 
       const pokemonFromQuery = extractPokemonName(query)
 
+      appendTraceLog({
+        type: 'system_log',
+        message: `▶ Query: "${query.slice(0, 60)}${query.length > 60 ? '…' : ''}"`,
+        level: 'info',
+      })
+
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (apiKey) headers['X-API-Key'] = apiKey
@@ -115,6 +121,7 @@ export function useAgentStream() {
         const decoder = new TextDecoder()
         let   buffer  = ''
         let   fullText = ''
+        let   toolCallsSinceLastLlm = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -131,15 +138,50 @@ export function useAgentStream() {
             catch { continue }
 
             switch (evt['type']) {
-              case 'llm_call':
+              case 'start':
+                appendTraceLog({
+                  type: 'system_log',
+                  message: `⚡ Provider: ${evt['provider'] as string}`,
+                  level: 'info',
+                })
+                break
+              case 'llm_call': {
+                if (toolCallsSinceLastLlm) {
+                  appendTraceLog({
+                    type: 'system_log',
+                    message: '📝 Procesando resultados → formulando respuesta…',
+                    level: 'info',
+                  })
+                  toolCallsSinceLastLlm = false
+                }
                 appendTraceLog(evt as unknown as LlmCallEvent)
                 break
-              case 'model_attempt':
-                appendTraceLog(evt as unknown as ModelAttemptEvent)
+              }
+              case 'model_attempt': {
+                const mae = evt as unknown as ModelAttemptEvent
+                appendTraceLog(mae)
+                if (mae.status !== 'success') {
+                  const shortName = mae.model.split('/').pop() ?? mae.model
+                  appendTraceLog({
+                    type: 'system_log',
+                    message: `⚠ ${shortName} no disponible → probando fallback…`,
+                    level: 'warn',
+                  })
+                }
                 break
-              case 'tool_call':
+              }
+              case 'tool_call': {
+                if (!toolCallsSinceLastLlm) {
+                  appendTraceLog({
+                    type: 'system_log',
+                    message: '🔧 El agente consulta herramientas MCP…',
+                    level: 'info',
+                  })
+                }
+                toolCallsSinceLastLlm = true
                 appendTraceLog(evt as unknown as ToolCallEvent)
                 break
+              }
               case 'tool_result':
                 appendTraceLog(evt as unknown as ToolResultEvent)
                 break

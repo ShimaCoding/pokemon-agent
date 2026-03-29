@@ -352,11 +352,17 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     def elapsed_ms() -> int:
         return int((time.time() - start_time) * 1000)
 
+    logger.info("[REQUEST] ─── Nueva consulta recibida ───────────────────────")
+    logger.info("[REQUEST] Query: %.120s%s", query, "…" if len(query) > 120 else "")
+
     try:
         model, mcp_client, provider_label = build_agent(provider)
     except RuntimeError as exc:
+        logger.error("[PROVIDER] Sin providers disponibles: %s", exc)
         yield _sse({"type": "error", "message": str(exc), "fallback_available": False})
         return
+
+    logger.info("[PROVIDER] Provider seleccionado: %s", provider_label)
 
     # Per-request queues populated by agent.py's monkey-patched litellm calls.
     _me_queue: list = []  # model_attempt events
@@ -386,6 +392,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
             if result_text is None:
                 continue
             emitted_results.add(idx)
+            logger.info("[TOOL] Resultado de %s: %.120s%s", tool_names.get(idx, "unknown"), result_text, "…" if len(result_text) > 120 else "")
             yield _sse(
                 {
                     "type": "tool_result",
@@ -410,7 +417,9 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
 
     try:
         with mcp_client:
+            logger.info("[MCP] Conectando al servidor MCP y listando tools…")
             tools = mcp_client.list_tools_sync()
+            logger.info("[MCP] %d tools disponibles", len(tools))
 
             # --- Check if query is a prompt call ---
             # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"
@@ -463,6 +472,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                     t_name, t_args = call
                     tool_use_id_to_index[uid] = tool_index
                     tool_names[tool_index] = t_name
+                    logger.info("[TOOL] Llamando tool #%d: %s | args: %s", tool_index, t_name, str(t_args)[:120])
                     yield _sse(
                         {
                             "type": "tool_call",
@@ -499,12 +509,21 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                     except Exception:
                         pass
 
+                    _elapsed = elapsed_ms()
+                    _models_tried = list(dict.fromkeys(_all_model_attempts))
+                    logger.info(
+                        "[DONE] Completado en %dms | tools usadas: %d | tokens: %d | modelos: %s",
+                        _elapsed,
+                        tool_index,
+                        _usage.get("totalTokens", 0),
+                        ", ".join(_models_tried) or "—",
+                    )
                     yield _sse(
                         {
                             "type": "done",
                             "total_tool_calls": tool_index,
-                            "elapsed_ms": elapsed_ms(),
-                            "models_tried": list(dict.fromkeys(_all_model_attempts)),
+                            "elapsed_ms": _elapsed,
+                            "models_tried": _models_tried,
                             "input_tokens": _usage.get("inputTokens", 0),
                             "output_tokens": _usage.get("outputTokens", 0),
                             "total_tokens": _usage.get("totalTokens", 0),

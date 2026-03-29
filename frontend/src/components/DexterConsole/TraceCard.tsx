@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type {
   LlmCallEvent,
   ModelAttemptEvent,
+  SystemLogEvent,
   ToolCallEvent,
   ToolResultEvent,
   TraceEvent,
@@ -147,6 +148,16 @@ function ToolResultCard({ e }: { e: ToolResultEvent }) {
   )
 }
 
+// ── System Log ────────────────────────────────────────────────────
+
+function SystemLogCard({ e }: { e: SystemLogEvent }) {
+  return (
+    <div className={`${styles.systemLog} ${styles[e.level]}`}>
+      {e.message}
+    </div>
+  )
+}
+
 // ── Main export ───────────────────────────────────────────────────
 
 export default function TraceCard({ event }: Props) {
@@ -155,6 +166,7 @@ export default function TraceCard({ event }: Props) {
     case 'model_attempt': return <ModelAttemptCard e={event as ModelAttemptEvent} />
     case 'tool_call':     return <ToolCallCard      e={event as ToolCallEvent}     />
     case 'tool_result':   return <ToolResultCard   e={event as ToolResultEvent}   />
+    case 'system_log':    return <SystemLogCard    e={event as SystemLogEvent}    />
     default:              return null
   }
 }

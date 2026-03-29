@@ -17,10 +17,13 @@ TODO: Replace monkey-patching with native Router support if strands adds it in a
 """
 
 import contextvars
+import logging
 import os
 from typing import Any, Optional
 
 import litellm as _litellm
+
+logger = logging.getLogger(__name__)
 
 # Capture the real litellm functions once at import time, before any patching.
 _orig_completion = _litellm.completion
@@ -100,12 +103,15 @@ def build_agent(provider_name: Optional[str] = None):
             # Inside Router: this is a specific model dispatch — track the attempt.
             model_id = kwargs.get("model", "unknown")
             events = _model_events.get()
+            logger.info("[LLM] Intentando modelo: %s", model_id)
             try:
                 resp = _orig_completion(*args, **kwargs)
+                logger.info("[LLM] ✓ Éxito con modelo: %s", model_id)
                 if events is not None:
                     events.append({"type": "model_attempt", "model": model_id, "status": "success"})
                 return resp
             except Exception as exc:
+                logger.warning("[LLM] ✗ Falló modelo: %s → %s", model_id, str(exc)[:120])
                 if events is not None:
                     events.append({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
                 raise
@@ -113,6 +119,7 @@ def build_agent(provider_name: Optional[str] = None):
         prompts = _llm_prompts.get()
         if prompts is not None:
             _llm_call_counter[0] += 1
+            logger.info("[LLM] Llamada #%d al LLM → enrutando por Router", _llm_call_counter[0])
             prompts.append({
                 "type": "llm_call",
                 "call_index": _llm_call_counter[0],
@@ -129,12 +136,15 @@ def build_agent(provider_name: Optional[str] = None):
             # Inside Router: specific model dispatch — track the attempt.
             model_id = kwargs.get("model", "unknown")
             events = _model_events.get()
+            logger.info("[LLM] Intentando modelo: %s", model_id)
             try:
                 resp = await _orig_acompletion(*args, **kwargs)
+                logger.info("[LLM] ✓ Éxito con modelo: %s", model_id)
                 if events is not None:
                     events.append({"type": "model_attempt", "model": model_id, "status": "success"})
                 return resp
             except Exception as exc:
+                logger.warning("[LLM] ✗ Falló modelo: %s → %s", model_id, str(exc)[:120])
                 if events is not None:
                     events.append({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
                 raise
@@ -142,6 +152,7 @@ def build_agent(provider_name: Optional[str] = None):
         prompts = _llm_prompts.get()
         if prompts is not None:
             _llm_call_counter[0] += 1
+            logger.info("[LLM] Llamada #%d al LLM → enrutando por Router", _llm_call_counter[0])
             prompts.append({
                 "type": "llm_call",
                 "call_index": _llm_call_counter[0],
