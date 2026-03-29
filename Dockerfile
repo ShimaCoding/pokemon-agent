@@ -50,6 +50,9 @@ COPY --chown=appuser:appgroup backend/ ./backend/
 # Overwrite backend/static with the freshly compiled React app
 COPY --from=frontend-builder --chown=appuser:appgroup /app/backend/static ./backend/static/
 
+# Pre-create data dir so the volume mount is writable by appuser
+RUN mkdir -p /app/data && chown appuser:appgroup /app/data
+
 # Drop root privileges
 USER appuser
 
