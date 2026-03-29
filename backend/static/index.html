@@ -592,6 +592,67 @@
     }
     .trace-meta span { color: var(--gbc-dark); }
 
+    /* LLM call and model attempt cards */
+    .trace-card.llm        { border-color: #7c6fa0; background: #ebe7f2; }
+    .trace-card.model-ok   { border-color: var(--mcp-resource); background: #e4f0e4; }
+    .trace-card.model-fail { border-color: #b84a4a; background: #f2e4e4; }
+    .trace-type-badge.llm        { border-color: #7c6fa0; color: #7c6fa0; }
+    .trace-type-badge.model-ok   { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+    .trace-type-badge.model-fail { border-color: #b84a4a; color: #b84a4a; }
+
+    /* Pretty-printed JSON args */
+    .trace-json {
+      font-size: 5px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 2px 0 0;
+      color: var(--gbc-dark);
+      font-family: inherit;
+      line-height: 1.6;
+    }
+    /* Expandable sections (prompts, full results) */
+    .trace-expandable { display: none; margin-top: 3px; }
+    .trace-expandable.open { display: block; }
+    .trace-toggle-btn {
+      cursor: pointer;
+      font-size: 5px;
+      color: var(--mcp-tool);
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0 2px;
+      font-family: inherit;
+    }
+    .trace-result-full {
+      font-size: 5px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 80px;
+      overflow-y: auto;
+      color: var(--gbc-dark);
+      line-height: 1.6;
+      margin-top: 2px;
+    }
+    .trace-msg-role {
+      font-size: 5px;
+      color: var(--gbc-mid);
+      text-transform: uppercase;
+      margin-top: 4px;
+      font-weight: bold;
+    }
+    .trace-msg-content {
+      font-size: 5px;
+      color: var(--gbc-dark);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 60px;
+      overflow-y: auto;
+      line-height: 1.6;
+      border-left: 2px solid var(--gbc-light);
+      padding-left: 4px;
+      margin: 1px 0 3px;
+    }
+
     /* Summary card */
     .trace-summary {
       border: 2px solid var(--gbc-border);
@@ -1268,12 +1329,32 @@ function addTraceCard(type, name, details, timingMs) {
   return card;
 }
 
-function addTraceSummary(totalCalls, elapsedMs) {
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function toggleTrace(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isOpen = el.classList.toggle('open');
+  const btn = document.querySelector(`[data-toggle="${id}"]`);
+  if (btn) btn.textContent = isOpen ? '[ocultar]' : '[ver todo]';
+}
+
+function addTraceSummary(totalCalls, elapsedMs, modelsTriedArr) {
   const card = document.createElement('div');
   card.className = 'trace-summary';
+  const rotationHtml = modelsTriedArr && modelsTriedArr.length
+    ? `<div class="trace-summary-vals">Modelos: ${modelsTriedArr.map(m => escHtml(m.split('/').pop())).join(' → ')}</div>`
+    : '';
   card.innerHTML = `
     <div class="trace-summary-title">Resumen de esta consulta</div>
     <div class="trace-summary-vals">Llamadas: ${totalCalls} · Tiempo: ${elapsedMs}ms</div>
+    ${rotationHtml}
   `;
   traceList.appendChild(card);
 }
@@ -1335,12 +1416,63 @@ async function runQuery(query) {
         try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
 
         switch (evt.type) {
+          case 'llm_call': {
+            if (traceEmptyMsg && traceEmptyMsg.parentNode === traceList) {
+              traceList.removeChild(traceEmptyMsg);
+            }
+            const expandId = `lc-${evt.call_index}-msgs`;
+            const messages = evt.messages || [];
+            const userMsg = messages.filter(m => m.role === 'user').pop();
+            const userPreview = userMsg
+              ? (typeof userMsg.content === 'string' ? userMsg.content : JSON.stringify(userMsg.content)).slice(0, 100)
+              : '';
+            const msgsHtml = messages.map(m => {
+              const raw = typeof m.content === 'string' ? m.content : JSON.stringify(m.content, null, 2);
+              return `<div class="trace-msg-role">[${m.role}]</div><pre class="trace-msg-content">${escHtml(raw)}</pre>`;
+            }).join('');
+            const lcCard = document.createElement('div');
+            lcCard.className = 'trace-card llm';
+            lcCard.innerHTML = `
+              <div class="trace-card-header">
+                <span class="trace-type-badge llm">PROMPT</span>
+                <span class="trace-name">LLM Call #${evt.call_index}</span>
+                <span class="trace-timing">+${evt.timestamp_ms || 0}ms</span>
+                <button class="trace-toggle-btn" data-toggle="${expandId}" onclick="toggleTrace('${expandId}')" style="margin-left:4px">[ver msgs]</button>
+              </div>
+              ${userPreview ? `<div class="trace-meta" style="font-style:italic">&ldquo;${escHtml(userPreview)}${userPreview.length >= 100 ? '…' : ''}&rdquo;</div>` : ''}
+              <div id="${expandId}" class="trace-expandable">${msgsHtml}</div>
+            `;
+            traceList.appendChild(lcCard);
+            traceList.scrollTop = traceList.scrollHeight;
+            break;
+          }
+          case 'model_attempt': {
+            if (traceEmptyMsg && traceEmptyMsg.parentNode === traceList) {
+              traceList.removeChild(traceEmptyMsg);
+            }
+            const typeKey = evt.status === 'success' ? 'model-ok' : 'model-fail';
+            const icon = evt.status === 'success' ? '✓' : '✗';
+            const maCard = document.createElement('div');
+            maCard.className = `trace-card ${typeKey}`;
+            maCard.innerHTML = `
+              <div class="trace-card-header">
+                <span class="trace-type-badge ${typeKey}">LLM</span>
+                <span class="trace-name">${escHtml(evt.model || 'unknown')}</span>
+                <span class="trace-timing">${icon} +${evt.timestamp_ms || 0}ms</span>
+              </div>
+              ${evt.error ? `<div class="trace-meta" style="color:#b84a4a">${escHtml(evt.error)}</div>` : ''}
+            `;
+            traceList.appendChild(maCard);
+            traceList.scrollTop = traceList.scrollHeight;
+            break;
+          }
           case 'tool_call': {
             const typeKey = guessToolType(evt.tool);
+            const argsJson = JSON.stringify(evt.args || {}, null, 2);
             const card = addTraceCard(
               typeKey,
               evt.tool,
-              `<span>Args:</span> ${JSON.stringify(evt.args || {})}`,
+              `<pre class="trace-json">${escHtml(argsJson)}</pre>`,
               evt.timestamp_ms || 0
             );
             toolCards[evt.index] = card;
@@ -1350,13 +1482,20 @@ async function runQuery(query) {
           case 'tool_result': {
             const card = toolCards[evt.index];
             if (card) {
+              const full = String(evt.result || '');
+              const preview = full.slice(0, 300);
+              const hasMore = full.length > 300;
+              const expandId = `tr-${evt.index}-full`;
               const resultEl = document.createElement('div');
               resultEl.className = 'trace-meta';
               resultEl.style.marginTop = '3px';
               resultEl.style.borderTop = '1px dashed var(--gbc-border)';
               resultEl.style.paddingTop = '3px';
-              const preview = String(evt.result || '').slice(0, 80);
-              resultEl.innerHTML = `<span>Resultado:</span> ${preview}${preview.length === 80 ? '…' : ''}`;
+              resultEl.innerHTML = `<span>Resultado:</span> ${escHtml(preview)}${hasMore ? '…' : ''}${
+                hasMore
+                  ? `<br><button class="trace-toggle-btn" data-toggle="${expandId}" onclick="toggleTrace('${expandId}')">[ver todo]</button><div id="${expandId}" class="trace-expandable"><pre class="trace-result-full">${escHtml(full)}</pre></div>`
+                  : ''
+              }`;
               card.appendChild(resultEl);
             }
             break;
@@ -1371,10 +1510,14 @@ async function runQuery(query) {
               document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             }
             break;
-          case 'done':
+          case 'done': {
             elapsedMs = evt.elapsed_ms || 0;
-            traceStats.textContent = `${toolIndex} llamadas · ${elapsedMs}ms`;
-            addTraceSummary(toolIndex, elapsedMs);
+            const tried = evt.models_tried || [];
+            const rotationLabel = tried.length
+              ? ' · ' + tried.map(m => m.split('/').pop()).join('→')
+              : '';
+            traceStats.textContent = `${toolIndex} llamadas · ${elapsedMs}ms${rotationLabel}`;
+            addTraceSummary(toolIndex, elapsedMs, tried);
             // Show agent text response as final card in the trace list
             if (fullText) {
               const ansCard = document.createElement('div');
@@ -1385,6 +1528,7 @@ async function runQuery(query) {
             }
             statusBadge.textContent = 'listo';
             break;
+          }
           case 'error':
             statusBadge.textContent = 'error';
             statusBadge.className = 'error';

@@ -163,13 +163,17 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     Async generator that yields SSE events for one agent run.
 
     Event sequence:
-      {"type": "start",       "provider": str}
-      {"type": "tool_call",   "index": int, "tool": str, "args": dict, "timestamp_ms": int}
-      {"type": "tool_result", "index": int, "tool": str, "result": str, "timestamp_ms": int}
-      {"type": "text",        "delta": str}
-      {"type": "done",        "total_tool_calls": int, "elapsed_ms": int}
-      {"type": "error",       "message": str, "fallback_available": bool}  # on exception
+      {"type": "start",         "provider": str}
+      {"type": "llm_call",      "call_index": int, "messages": list, "timestamp_ms": int}
+      {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
+      {"type": "tool_call",     "index": int, "tool": str, "args": dict, "timestamp_ms": int}
+      {"type": "tool_result",   "index": int, "tool": str, "result": str, "timestamp_ms": int}
+      {"type": "text",          "delta": str}
+      {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str]}
+      {"type": "error",         "message": str, "fallback_available": bool}  # on exception
     """
+    from backend.agent import _llm_prompts as _cv_llm_prompts
+    from backend.agent import _model_events as _cv_model_events
     from backend.agent import build_agent, create_agent
 
     start_time = time.time()
@@ -182,6 +186,13 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     except RuntimeError as exc:
         yield _sse({"type": "error", "message": str(exc), "fallback_available": False})
         return
+
+    # Per-request queues populated by agent.py's monkey-patched litellm calls.
+    _me_queue: list = []  # model_attempt events
+    _lp_queue: list = []  # llm_call events
+    _all_model_attempts: list[str] = []  # accumulates all model IDs tried (for done event)
+    _me_token = _cv_model_events.set(_me_queue)
+    _lp_token = _cv_llm_prompts.set(_lp_queue)
 
     yield _sse({"type": "start", "provider": provider_label})
 
@@ -216,12 +227,28 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                 }
             )
 
+    async def _drain_llm_events():
+        """Yield SSE frames for llm_call and model_attempt events collected by the monkey-patch."""
+        while _lp_queue:
+            evt = _lp_queue.pop(0)
+            evt["timestamp_ms"] = elapsed_ms()
+            yield _sse(evt)
+        while _me_queue:
+            evt = _me_queue.pop(0)
+            evt["timestamp_ms"] = elapsed_ms()
+            _all_model_attempts.append(evt["model"])
+            yield _sse(evt)
+
     try:
         with mcp_client:
             tools = mcp_client.list_tools_sync()
             agent = create_agent(model, tools, hooks=[result_hook])
 
             async for event in agent.stream_async(query):
+                # --- Drain LLM prompt + model attempt events ---
+                async for frame in _drain_llm_events():
+                    yield frame
+
                 # --- Drain any tool results that arrived since the last event ---
                 async for frame in _drain_results():
                     yield frame
@@ -257,6 +284,8 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                 # --- Completion event ---
                 if event.get("result") is not None:
                     # Final drain before done
+                    async for frame in _drain_llm_events():
+                        yield frame
                     async for frame in _drain_results():
                         yield frame
                     yield _sse(
@@ -264,6 +293,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                             "type": "done",
                             "total_tool_calls": tool_index,
                             "elapsed_ms": elapsed_ms(),
+                            "models_tried": list(dict.fromkeys(_all_model_attempts)),
                         }
                     )
 
@@ -286,8 +316,12 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                 "type": "done",
                 "total_tool_calls": tool_index,
                 "elapsed_ms": elapsed_ms(),
+                "models_tried": list(dict.fromkeys(_all_model_attempts)),
             }
         )
+    finally:
+        _cv_model_events.reset(_me_token)
+        _cv_llm_prompts.reset(_lp_token)
 
 
 # ---------------------------------------------------------------------------

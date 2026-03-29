@@ -17,7 +17,7 @@ TODO: Replace monkey-patching with native Router support if strands adds it in a
 """
 
 import contextvars
-from typing import Optional
+from typing import Any, Optional
 
 import litellm as _litellm
 
@@ -28,6 +28,15 @@ _orig_acompletion = _litellm.acompletion
 # True while a Router call is in progress; prevents re-entrant patched calls.
 _in_router_call: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_in_router_call", default=False
+)
+
+# Per-request queues set by the SSE generator before each agent run.
+# agent.py populates them; main.py drains and emits them as SSE events.
+_model_events: contextvars.ContextVar[list[dict[str, Any]] | None] = contextvars.ContextVar(
+    "_model_events", default=None
+)
+_llm_prompts: contextvars.ContextVar[list[dict[str, Any]] | None] = contextvars.ContextVar(
+    "_llm_prompts", default=None
 )
 
 # MCP SDK v1 and v2 use different function names for the streamable HTTP transport.
@@ -70,12 +79,45 @@ def build_agent(provider_name: Optional[str] = None):
     """
     router, provider_label = build_litellm_router(provider_name)
 
+    # Per-build counter so each LLM call in a request gets a sequential index.
+    _llm_call_counter: list[int] = [0]
+
+    def _truncate_messages(messages: list) -> list:
+        """Return messages with string content capped at 800 chars for SSE payload."""
+        result = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str) and len(content) > 800:
+                msg = dict(msg, content=content[:800] + "…[truncated]")
+            result.append(msg)
+        return result
+
     # Wrap Router calls with a re-entrancy guard so the Router's own internal
     # litellm.completion / litellm.acompletion calls reach the real functions
     # instead of looping back into the Router.
     def _routed_completion(*args, **kwargs):
         if _in_router_call.get():
-            return _orig_completion(*args, **kwargs)
+            # Inside Router: this is a specific model dispatch — track the attempt.
+            model_id = kwargs.get("model", "unknown")
+            events = _model_events.get()
+            try:
+                resp = _orig_completion(*args, **kwargs)
+                if events is not None:
+                    events.append({"type": "model_attempt", "model": model_id, "status": "success"})
+                return resp
+            except Exception as exc:
+                if events is not None:
+                    events.append({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
+                raise
+        # Top-level call from Strands: capture the prompt then route through Router.
+        prompts = _llm_prompts.get()
+        if prompts is not None:
+            _llm_call_counter[0] += 1
+            prompts.append({
+                "type": "llm_call",
+                "call_index": _llm_call_counter[0],
+                "messages": _truncate_messages(list(kwargs.get("messages", []))),
+            })
         token = _in_router_call.set(True)
         try:
             return router.completion(*args, **kwargs)
@@ -84,7 +126,27 @@ def build_agent(provider_name: Optional[str] = None):
 
     async def _routed_acompletion(*args, **kwargs):
         if _in_router_call.get():
-            return await _orig_acompletion(*args, **kwargs)
+            # Inside Router: specific model dispatch — track the attempt.
+            model_id = kwargs.get("model", "unknown")
+            events = _model_events.get()
+            try:
+                resp = await _orig_acompletion(*args, **kwargs)
+                if events is not None:
+                    events.append({"type": "model_attempt", "model": model_id, "status": "success"})
+                return resp
+            except Exception as exc:
+                if events is not None:
+                    events.append({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
+                raise
+        # Top-level call from Strands: capture the prompt then route through Router.
+        prompts = _llm_prompts.get()
+        if prompts is not None:
+            _llm_call_counter[0] += 1
+            prompts.append({
+                "type": "llm_call",
+                "call_index": _llm_call_counter[0],
+                "messages": _truncate_messages(list(kwargs.get("messages", []))),
+            })
         token = _in_router_call.set(True)
         try:
             return await router.acompletion(*args, **kwargs)
