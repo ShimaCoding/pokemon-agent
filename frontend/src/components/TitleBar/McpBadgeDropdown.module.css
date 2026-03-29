@@ -92,3 +92,16 @@
   padding: 8px;
   text-align: center;
 }
+
+/* ── Mobile: pin to viewport so dropdown never bleeds off-screen ── */
+@media (max-width: 640px) {
+  .dropdown {
+    position: fixed;
+    top: 40px;
+    left: 8px;
+    right: 8px;
+    min-width: unset;
+    max-width: unset;
+    max-height: 60vh;
+  }
+}

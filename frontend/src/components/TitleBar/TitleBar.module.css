@@ -60,3 +60,10 @@
 }
 .settingsBtn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
 .settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+
+/* ── Mobile ───────────────────────────────── */
+@media (max-width: 640px) {
+  .githubLinks {
+    display: none;
+  }
+}
