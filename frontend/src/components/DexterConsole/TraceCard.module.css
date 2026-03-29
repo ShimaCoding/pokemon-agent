@@ -117,3 +117,78 @@
 .systemLog.info    { border-color: var(--gbc-light); color: var(--gbc-mid); }
 .systemLog.warn    { border-color: #c97a2a;          color: #a06020; }
 .systemLog.success { border-color: var(--mcp-resource); color: #3a7a3a; }
+
+/* ── EduPanel ──────────────────────────────────────────────────── */
+
+.eduContainer {
+  border-top: 1px dashed var(--gbc-border);
+  margin-top: 5px;
+  padding-top: 4px;
+}
+
+.eduToggleBtn {
+  cursor: pointer;
+  font-size: 5px;
+  font-family: inherit;
+  background: var(--gbc-dark);
+  color: var(--gbc-bg);
+  border: 1px solid var(--gbc-border);
+  padding: 1px 6px;
+  line-height: 1.8;
+  letter-spacing: 0.02em;
+}
+.eduToggleBtn:hover {
+  background: var(--mcp-prompt);
+  border-color: var(--mcp-prompt);
+}
+
+.eduContent {
+  margin-top: 4px;
+  padding: 4px 6px;
+  border-left: 2px solid var(--mcp-prompt);
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 5px;
+  line-height: 1.8;
+}
+
+.eduContent h3 {
+  font-size: 5px;
+  text-transform: uppercase;
+  color: var(--mcp-prompt);
+  letter-spacing: 0.05em;
+  margin: 2px 0 3px;
+  font-weight: bold;
+}
+
+.eduContent p {
+  font-size: 5px;
+  color: var(--gbc-dark);
+  line-height: 1.8;
+  margin: 2px 0;
+}
+
+.eduContent pre {
+  background: #1a1a2e;
+  color: #a9dc76;
+  border: 1px solid var(--gbc-border);
+  padding: 4px 6px;
+  overflow-x: auto;
+  font-size: 5px;
+  line-height: 1.6;
+  margin: 3px 0;
+  white-space: pre;
+}
+
+.eduContent code {
+  font-size: 5px;
+  font-family: inherit;
+}
+
+/* inline code (not inside pre) */
+.eduContent p code,
+.eduContent li code {
+  background: rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--gbc-light);
+  padding: 0 2px;
+  color: var(--mcp-tool);
+}

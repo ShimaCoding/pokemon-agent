@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import type {
   LlmCallEvent,
   ModelAttemptEvent,
@@ -10,6 +11,123 @@ import type {
 import { guessToolType } from '../../hooks/useAgentStream'
 import { JsonViewer, tryParseJson } from './JsonViewer'
 import styles from './TraceCard.module.css'
+
+// ── Educational content ───────────────────────────────────────────
+
+const DOCS = {
+  agent: `
+### ¿Cómo funciona el Agente?
+
+El agente **Dexter** está construido con el SDK de **Strands Agents**. El backend crea un \`LiteLLMModel\` (con fallback automático entre proveedores via Router) y un \`MCPClient\` que se conecta al servidor MCP remoto para obtener las herramientas disponibles.
+
+\`\`\`python
+# backend/agent.py
+from strands import Agent
+from strands.models.litellm import LiteLLMModel
+from strands.tools.mcp import MCPClient
+
+SYSTEM_PROMPT = """
+Eres Dexter, una Pokédex de alta tecnología programada
+por el Profesor Oak. Tu objetivo es proporcionar información
+precisa y científica sobre los Pokémon...
+"""
+
+def build_agent(provider_name=None):
+    model = LiteLLMModel(model_id="agent-model")
+    mcp_client = MCPClient(lambda: _http_transport(MCP_SERVER_URL))
+
+    with mcp_client:
+        tools = mcp_client.list_tools_sync()
+        agent = Agent(
+            model=model,
+            system_prompt=SYSTEM_PROMPT,
+            tools=tools,
+        )
+        return agent
+\`\`\`
+
+Antes de construir el modelo, el backend **parchea globalmente** \`litellm.completion\` con el Router para que todos los llamados pasen por el mecanismo de fallback (Groq → Gemini → OpenAI) sin modificar el SDK de Strands.
+`,
+
+  tool_pokemon: `
+### ¿Cómo funciona esta herramienta?
+
+\`get_pokedex_entry\` es una herramienta **local de Strands**, decorada con \`@tool\`. Cuando el agente la necesita, la ejecuta directamente en el backend (sin pasar por MCP), llamando a la **PokeAPI** para obtener tipos, estadísticas, hábitat y el flavor text en español.
+
+\`\`\`python
+# backend/tools.py
+from strands import tool
+import httpx
+
+@tool
+def get_pokedex_entry(pokemon: str) -> dict:
+    """Fetch a complete Pokédex entry for a Pokémon from PokeAPI.
+
+    Args:
+        pokemon: The Pokémon name (e.g. "pikachu") or Dex number.
+    Returns:
+        A dict with types, stats, abilities, flavor text, etc.
+    """
+    with httpx.Client(timeout=10.0) as client:
+        r = client.get(f"https://pokeapi.co/api/v2/pokemon/{pokemon}")
+        r.raise_for_status()
+        return r.json()
+\`\`\`
+
+El decorador \`@tool\` genera automáticamente el **JSON Schema** del argumento a partir del type hint y el docstring, para que el LLM sepa exactamente cómo invocar la función.
+`,
+
+  tool_generic: `
+### ¿Cómo funciona esta herramienta MCP?
+
+Las herramientas remotas se exponen a través del **servidor MCP** (Model Context Protocol). El servidor las registra con el decorador \`@mcp.tool()\` y las publica vía HTTP. El agente las descubre dinámicamente en cada request.
+
+\`\`\`python
+# En el servidor MCP (mcpokedex.com/mcp)
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Pokemon MCP Server")
+
+@mcp.tool()
+def search_pokemon(query: str) -> dict:
+    """Search for a Pokémon by name or type.
+
+    Args:
+        query: Name or type to search for.
+    Returns:
+        List of matching Pokémon with basic info.
+    """
+    # ... lógica de búsqueda
+    return results
+\`\`\`
+
+El cliente MCP en el backend usa \`MCPClient.list_tools_sync()\` para obtener el **catálogo completo** de herramientas al inicio de cada petición, y las pasa al agente Strands como tools disponibles.
+`,
+}
+
+function getToolDoc(tool: string): string {
+  const name = tool.toLowerCase()
+  if (name.includes('pokedex') || name.includes('pokemon')) return DOCS.tool_pokemon
+  return DOCS.tool_generic
+}
+
+// ── EduPanel ──────────────────────────────────────────────────────
+
+function EduPanel({ markdown }: { markdown: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={styles.eduContainer}>
+      <button className={styles.eduToggleBtn} onClick={() => setOpen((v) => !v)}>
+        {open ? '[cerrar]' : '💡 ¿Cómo funciona esto?'}
+      </button>
+      {open && (
+        <div className={styles.eduContent}>
+          <ReactMarkdown>{markdown}</ReactMarkdown>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   event: TraceEvent
@@ -49,6 +167,7 @@ function LlmCallCard({ e }: { e: LlmCallEvent }) {
           &ldquo;{preview}{preview.length >= 100 ? '…' : ''}&rdquo;
         </div>
       )}
+      <EduPanel markdown={DOCS.agent} />
       {open && (
         <div className={styles.expandable}>
           {messages.map((m, i) => {
@@ -107,6 +226,7 @@ function ToolCallCard({ e }: { e: ToolCallEvent }) {
         <span className={styles.timing}>+{e.timestamp_ms ?? 0}ms</span>
       </div>
       <JsonViewer data={e.args ?? {}} maxHeight="120px" />
+      <EduPanel markdown={getToolDoc(e.tool)} />
     </div>
   )
 }
