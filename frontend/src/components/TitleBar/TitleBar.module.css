@@ -16,6 +16,19 @@
   gap: 2px;
 }
 
+.titleMain {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.titleLogo {
+  height: 18px;
+  width: 18px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
 .mainTitle {
   font-size: 9px;
   color: var(--gbc-screen);

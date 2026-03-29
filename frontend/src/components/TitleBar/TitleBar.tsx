@@ -15,7 +15,10 @@ export default function TitleBar() {
   return (
     <header className={styles.titlebar} id="titlebar">
       <div className={styles.titleLeft}>
-        <span className={styles.mainTitle}>MCPokédex</span>
+        <div className={styles.titleMain}>
+          <img src="/favicon.svg" alt="" className={styles.titleLogo} />
+          <span className={styles.mainTitle}>MCPokédex</span>
+        </div>
         <div className={styles.githubLinks}>
           <a
             className={styles.githubLink}
