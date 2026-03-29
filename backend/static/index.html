@@ -740,20 +740,26 @@
     #thinking.visible { display: block; }
     @keyframes blink { 50% { opacity: 0; } }
 
-    /* ── Chat answer overlay (normal mode) ─────────────────── */
-    #answer-area {
-      flex: 1;
+    /* ── DEXTER tab (análisis del agente) ──────────────────── */
+    #tab-dexter {
       overflow-y: auto;
-      padding: 8px 10px;
       font-size: 6px;
       line-height: 2;
       color: var(--gbc-dark);
-      background: var(--gbc-cream);
-      display: none;
     }
-    #answer-area.visible { display: block; flex: 1; }
-    #answer-area::-webkit-scrollbar { width: 4px; }
-    #answer-area::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+    #tab-dexter::-webkit-scrollbar { width: 4px; }
+    #tab-dexter::-webkit-scrollbar-thumb { background: var(--gbc-border); }
+
+    /* ── Consola de Dexter (logs panel) ─────────────────────── */
+    #dexter-console {
+      display: none;
+      flex-direction: column;
+      height: 190px;
+      border-top: 3px solid var(--gbc-border);
+      background: var(--gbc-cream);
+    }
+    #dexter-console.open { display: flex; }
+    #mcp-magic-btn.console-open::before { content: '▼'; }
 
     /* ── Markdown rendered content ────────────────────────── */
     .md-content { font-size: 6px; line-height: 2; color: var(--gbc-dark); }
@@ -1114,6 +1120,7 @@
           <button class="tab-btn" data-tab="stats">STATS</button>
           <button class="tab-btn" data-tab="moves">MOVES</button>
           <button class="tab-btn" data-tab="evos">EVOS</button>
+          <button class="tab-btn" data-tab="dexter">DEXTER</button>
         </div>
 
         <!-- INFO -->
@@ -1155,8 +1162,10 @@
           </div>
         </div>
 
-        <!-- Answer overlay for free queries -->
-        <div id="answer-area"></div>
+        <!-- DEXTER: análisis del agente (pestaña persistente) -->
+        <div class="tab-content md-content" id="tab-dexter">
+          <div class="trace-empty">ejecuta una consulta<br>para ver el análisis<br>de Dexter</div>
+        </div>
       </div>
 
     </div><!-- #content -->
@@ -1199,18 +1208,25 @@
       </div>
     </div>
 
-    <!-- RIGHT: trace en vivo -->
+    <!-- RIGHT: trace (movido a consola de dexter) -->
     <div id="adv-right">
-      <div id="trace-header">
-        <div class="trace-title">Terminal de Dexter: Traza en vivo</div>
-        <div id="trace-stats">esperando consulta…</div>
-      </div>
-      <div id="trace-list">
-        <div class="trace-empty" id="trace-empty-msg">ejecuta una consulta<br>en el panel inferior<br>para ver la traza MCP</div>
+      <div style="padding:20px; font-size:6px; color:var(--gbc-mid); text-align:center; line-height:2;">
+        los logs están en la<br>▼ Consola de Dexter<br>(panel inferior)
       </div>
     </div>
 
   </div><!-- #advanced-panel -->
+
+  <!-- ── CONSOLA DE DEXTER (logs colapsables) ──────────────── -->
+  <div id="dexter-console">
+    <div id="trace-header">
+      <div class="trace-title">Consola de Dexter: Traza en vivo</div>
+      <div id="trace-stats">esperando consulta…</div>
+    </div>
+    <div id="trace-list">
+      <div class="trace-empty" id="trace-empty-msg">ejecuta una consulta<br>para ver la traza MCP</div>
+    </div>
+  </div>
 
   <!-- ── BOTTOM BAR ─────────────────────────────────────────── -->
   <div id="bottom-bar">
@@ -1256,7 +1272,8 @@ const searchBtn       = document.getElementById('search-btn');
 const pokemonSprite   = document.getElementById('pokemon-sprite');
 const spritePlaceholder = document.getElementById('sprite-placeholder');
 
-const answerArea      = document.getElementById('answer-area');
+const tabDexter       = document.getElementById('tab-dexter');
+const dexterConsole   = document.getElementById('dexter-console');
 const traceList       = document.getElementById('trace-list');
 const traceStats      = document.getElementById('trace-stats');
 const traceEmptyMsg   = document.getElementById('trace-empty-msg');
@@ -1325,7 +1342,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    answerArea.classList.remove('visible');
   });
 });
 
@@ -1343,7 +1359,10 @@ function setMode(adv) {
 
 modeToggle.addEventListener('click', () => setMode(!advancedMode));
 modeToggle.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') setMode(!advancedMode); });
-mcpMagicBtn.addEventListener('click',  () => setMode(true));
+mcpMagicBtn.addEventListener('click', () => {
+  const open = dexterConsole.classList.toggle('open');
+  mcpMagicBtn.classList.toggle('console-open', open);
+});
 
 // ── Providers ─────────────────────────────────────────────────
 async function loadProviders() {
@@ -1655,8 +1674,10 @@ async function runQuery(query) {
   statusBadge.textContent = 'analizando';
   statusBadge.className   = 'status-badge';
 
-  answerArea.innerHTML = '';
-  answerArea.classList.remove('visible');
+  // Mostrar frase de espera en la pestaña DEXTER y activarla
+  tabDexter.innerHTML = `<div style="opacity:0.6;font-style:italic;">${escHtml(funnyPhrase)}</div>`;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'dexter'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-dexter'));
 
   let toolIndex = 0;
   let elapsedMs = 0;
@@ -1781,13 +1802,7 @@ async function runQuery(query) {
           }
           case 'text':
             fullText += evt.delta || '';
-            answerArea.innerHTML = marked.parse(fullText);
-            if (!answerArea.classList.contains('visible')) {
-              answerArea.classList.add('visible');
-              answerArea.classList.add('md-content');
-              // Let answer take the full right panel (hide active tab content)
-              document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            }
+            tabDexter.innerHTML = marked.parse(fullText);
             break;
           case 'done': {
             elapsedMs = evt.elapsed_ms || 0;
@@ -1832,9 +1847,9 @@ async function runQuery(query) {
     const displayMsg = isRateLimit
       ? '⚡ ¡Pi-ka-pi! ¡Pika pika chu! *(Demasiadas consultas... El Maestro Pokémon dice: espera un momento antes de volver a intentarlo.)*'
       : `❌ *${escHtml(msg) || 'Error desconocido'}*`;
-    answerArea.innerHTML = marked.parse(displayMsg);
-    answerArea.classList.add('visible', 'md-content');
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tabDexter.innerHTML = marked.parse(displayMsg);
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === 'dexter'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-dexter'));
   } finally {
     inFlight = false;
     queryInput.disabled = false;
@@ -1894,11 +1909,7 @@ async function quickSearch(name) {
     populatePokemon(data);
   }
 
-  // 2. Ocultar pestañas estáticas y mostrar el área de respuesta del agente
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-  // 3. ¡Invocar a Dexter! Lanzamos la consulta al agente por debajo
+  // 2. Invocar a Dexter (runQuery activa la pestaña DEXTER automáticamente)
   const dexterPrompt = `Analiza al Pokémon ${cleanName}.`;
   await runQuery(dexterPrompt);
 
