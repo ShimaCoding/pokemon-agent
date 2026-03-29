@@ -1018,13 +1018,13 @@
       <div id="left-panel">
         <div id="search-row">
           <span id="search-icon">🔍</span>
-          <input id="search-input" type="text" placeholder="buscar pokémon..." maxlength="30" />
+          <input id="search-input" type="text" placeholder="buscar pokémon por nombre o número..." maxlength="30" />
           <button id="search-btn">▶</button>
         </div>
 
         <div id="sprite-area">
           <div id="sprite-frame">
-            <div id="sprite-placeholder">ingresa un<br>pokémon para<br>comenzar</div>
+            <div id="sprite-placeholder">esperando<br>análisis<br>del pokémon</div>
             <img id="pokemon-sprite" src="" alt="" style="display:none;" />
           </div>
         </div>
@@ -1809,28 +1809,30 @@ function detectPokemonInText(text) {
   return known.find(n => lower.includes(n)) || null;
 }
 
-// ── Quick search (just hits PokeAPI directly) ─────────────────
+// ── Quick search (Conectado al Agente Dexter) ─────────────────
 async function quickSearch(name) {
-  if (!name.trim()) return;
+  const cleanName = name.trim();
+  if (!cleanName) return;
+
   searchBtn.disabled = true;
-  statusBadge.textContent = 'buscando…';
-  const data = await fetchPokemonStructured(name.trim());
+  statusBadge.textContent = 'escaneando...';
+
+  // 1. Cargar datos visuales (sprite y barras) en el panel izquierdo para una respuesta rápida
+  const data = await fetchPokemonStructured(cleanName);
   if (data) {
     populatePokemon(data);
-    statusBadge.textContent = 'listo';
-    // Clear any previous answer
-    answerArea.classList.remove('visible');
-    // Show INFO tab
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector('[data-tab="info"]').classList.add('active');
-    document.getElementById('tab-info').classList.add('active');
-  } else {
-    statusBadge.textContent = 'no encontrado';
-    statusBadge.className   = 'error';
-    setTimeout(() => { statusBadge.className = ''; statusBadge.textContent = 'listo'; }, 2000);
   }
+
+  // 2. Ocultar pestañas estáticas y mostrar el área de respuesta del agente
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+  // 3. ¡Invocar a Dexter! Lanzamos la consulta al agente por debajo
+  const dexterPrompt = `Analiza al Pokémon ${cleanName}.`;
+  await runQuery(dexterPrompt);
+
   searchBtn.disabled = false;
+  searchInput.value = ''; // Limpiar buscador
 }
 
 // ── Slash menu ────────────────────────────────────────────────
