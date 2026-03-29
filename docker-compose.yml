@@ -38,8 +38,14 @@ services:
         max-size: "10m"
         max-file: "3"
 
+    volumes:
+      - pokemon-data:/app/data
+
     networks:
       - pokemon-net
+
+volumes:
+  pokemon-data:
 
 networks:
   pokemon-net:
