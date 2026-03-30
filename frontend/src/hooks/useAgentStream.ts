@@ -115,7 +115,15 @@ export function useAgentStream() {
           }),
         })
 
-        if (!res.ok && res.status !== 200) {
+        if (!res.ok) {
+          if (res.status === 429) {
+            const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+            appendText(
+              `⚡ ¡Demasiadas consultas! El Maestro Pokémon pide calma... Vuelve a intentarlo en **${retryAfter} segundos**.`
+            )
+            appendTraceLog({ type: 'error', message: `Rate limit alcanzado. Reintenta en ${retryAfter}s` })
+            return
+          }
           const errBody = await res.json().catch(() => ({ detail: `Error ${res.status}` })) as { detail?: string }
           throw new Error(errBody.detail ?? `Error ${res.status}`)
         }
@@ -217,14 +225,7 @@ export function useAgentStream() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error desconocido'
-        const isRateLimit =
-          msg.toLowerCase().includes('demasiadas') ||
-          msg.includes('429') ||
-          msg.toLowerCase().includes('too many')
-        const displayDelta = isRateLimit
-          ? '⚡ ¡Pi-ka-pi! ¡Pika pika chu! *(Demasiadas consultas... El Maestro Pokémon dice: espera un momento antes de volver a intentarlo.)*'
-          : `❌ *${msg}*`
-        appendText(displayDelta)
+        appendText(`❌ *${msg}*`)
         appendTraceLog({ type: 'error', message: msg })
       } finally {
         inFlightRef.current = false
