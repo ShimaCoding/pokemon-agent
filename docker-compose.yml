@@ -39,7 +39,7 @@ services:
         max-file: "3"
 
     volumes:
-      - ./data:/app/data
+      - pokemon_data:/app/data
 
     networks:
       - pokemon-net
@@ -47,3 +47,6 @@ services:
 networks:
   pokemon-net:
     driver: bridge
+
+volumes:
+  pokemon_data:
