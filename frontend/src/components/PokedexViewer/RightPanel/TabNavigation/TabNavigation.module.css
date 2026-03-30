@@ -2,20 +2,20 @@
   display: flex;
   align-items: center;
   border-bottom: 2px solid var(--gbc-border);
-  padding: 0 6px;
+  padding: 0 10px;
   gap: 0;
 }
 
 .tabArrow {
-  font-size: 7px;
-  padding: 6px 4px;
+  font-size: 12px;
+  padding: 10px 6px;
   color: var(--gbc-dark);
 }
 
 .tabBtn {
   font-family: var(--font-pixel);
-  font-size: 7px;
-  padding: 7px 8px;
+  font-size: 12px;
+  padding: 12px 14px;
   border: none;
   background: none;
   color: var(--gbc-mid);

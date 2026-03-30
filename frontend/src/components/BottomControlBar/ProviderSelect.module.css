@@ -1,13 +1,13 @@
 .providerSelect {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 13px;
   background: var(--gbc-bg);
   color: #000;
   border: 2px solid var(--gbc-border);
-  padding: 4px 6px;
+  padding: 6px 10px;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 120px;
+  max-width: 180px;
 }
 
 .providerSelect:focus {

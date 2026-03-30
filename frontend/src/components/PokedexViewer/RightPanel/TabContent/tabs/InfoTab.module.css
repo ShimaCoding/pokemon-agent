@@ -1,36 +1,36 @@
 .tabContent {
-  padding: 10px;
+  padding: 16px;
   flex: 1;
   overflow-y: auto;
 }
 
 .pokemonName {
-  font-size: 9px;
-  margin-bottom: 8px;
+  font-size: 16px;
+  margin-bottom: 12px;
   color: var(--gbc-dark);
 }
 
 .dexEntry {
-  font-size: 6px;
+  font-size: 12px;
   line-height: 2;
   color: var(--gbc-dark);
   border: 2px solid var(--gbc-border);
-  padding: 8px;
+  padding: 12px;
   background: var(--gbc-bg);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .infoGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 6px;
 }
 
 .infoItem {
-  font-size: 6px;
+  font-size: 12px;
   line-height: 2;
   border: 1px solid var(--gbc-border);
-  padding: 4px 6px;
+  padding: 6px 10px;
   background: var(--gbc-bg);
 }
 
@@ -40,13 +40,13 @@
 .typeChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .typeChip {
-  font-size: 6px;
-  padding: 3px 7px;
+  font-size: 12px;
+  padding: 4px 12px;
   border: 2px solid var(--gbc-border);
   background: var(--gbc-bg);
   color: var(--gbc-dark);

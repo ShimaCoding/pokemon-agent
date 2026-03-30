@@ -1,5 +1,5 @@
 .tabContent {
-  padding: 10px;
+  padding: 16px;
   flex: 1;
   overflow-y: auto;
 }
@@ -7,22 +7,22 @@
 .movesGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 5px;
+  gap: 8px;
 }
 
 .moveItem {
-  font-size: 6px;
-  padding: 5px 7px;
+  font-size: 12px;
+  padding: 8px 12px;
   border: 2px solid var(--gbc-border);
   background: var(--gbc-bg);
   line-height: 1.8;
 }
 
-.moveName { color: var(--gbc-dark); font-size: 6px; }
-.moveMeta { color: var(--gbc-mid); font-size: 5px; margin-top: 2px; }
+.moveName { color: var(--gbc-dark); font-size: 12px; }
+.moveMeta { color: var(--gbc-mid); font-size: 10px; margin-top: 3px; }
 
 .empty {
   color: var(--gbc-mid);
-  font-size: 6px;
+  font-size: 12px;
   grid-column: 1 / -1;
 }

@@ -28,10 +28,6 @@
 /* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html {
-  zoom: 2;
-}
-
 body {
   font-family: var(--font-pixel);
   background: #2a2a2a;
@@ -53,72 +49,72 @@ body {
 }
 
 /* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
-.md-content { font-size: 14px; line-height: 2; color: var(--gbc-dark); }
-.md-content p { margin-bottom: 6px; }
+.md-content { font-size: 13px; line-height: 2; color: var(--gbc-dark); }
+.md-content p { margin-bottom: 10px; }
 .md-content h1, .md-content h2, .md-content h3 {
   font-family: var(--font-pixel);
   color: var(--gbc-dark);
   border-bottom: 2px solid var(--gbc-border);
-  padding-bottom: 3px;
-  margin: 8px 0 5px;
+  padding-bottom: 4px;
+  margin: 14px 0 8px;
 }
-.md-content h1 { font-size: 16px; }
-.md-content h2 { font-size: 14px; }
-.md-content h3 { font-size: 12px; }
-.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 2px; }
+.md-content h1 { font-size: 18px; }
+.md-content h2 { font-size: 16px; }
+.md-content h3 { font-size: 14px; }
+.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 3px; }
 .md-content em    { font-style: normal; color: var(--gbc-mid); }
 .md-content ul, .md-content ol {
-  margin: 4px 0 6px 14px;
+  margin: 6px 0 10px 20px;
   line-height: 2.2;
 }
-.md-content li { margin-bottom: 1px; }
+.md-content li { margin-bottom: 2px; }
 .md-content li::marker { color: var(--gbc-mid); }
 .md-content hr {
   border: none;
   border-top: 2px dashed var(--gbc-border);
-  margin: 8px 0;
+  margin: 14px 0;
 }
 .md-content code {
   font-family: monospace;
-  font-size: 14px;
+  font-size: 13px;
   background: var(--gbc-bg);
   border: 1px solid var(--gbc-border);
-  padding: 1px 4px;
+  padding: 1px 6px;
 }
 .md-content pre {
   background: var(--gbc-bg);
   border: 2px solid var(--gbc-border);
-  padding: 6px 8px;
+  padding: 10px 14px;
   overflow-x: auto;
-  margin: 6px 0;
+  margin: 10px 0;
 }
 .md-content pre code { border: none; padding: 0; background: none; }
 .md-content table {
   width: 100%;
   border-collapse: collapse;
-  margin: 6px 0;
-  font-size: 14px;
+  margin: 10px 0;
+  font-size: 13px;
 }
 .md-content th {
   background: var(--gbc-dark);
   color: var(--gbc-cream);
-  padding: 4px 8px;
+  padding: 6px 12px;
   text-align: left;
   font-family: var(--font-pixel);
-  font-size: 10px;
+  font-size: 12px;
   border: 1px solid var(--gbc-border);
 }
 .md-content td {
   border: 1px solid var(--gbc-border);
-  padding: 4px 8px;
+  padding: 6px 12px;
   background: var(--gbc-bg);
 }
 .md-content tr:nth-child(odd) td  { background: var(--gbc-cream); }
 .md-content tr:nth-child(even) td { background: var(--gbc-bg); }
 .md-content blockquote {
   border-left: 3px solid var(--gbc-border);
-  margin: 4px 0;
-  padding: 2px 8px;
+  margin: 6px 0;
+  padding: 4px 14px;
   color: var(--gbc-mid);
   background: var(--gbc-bg);
 }

@@ -1,5 +1,5 @@
 .statsArea {
-  padding: 8px 10px 10px;
+  padding: 12px 16px 14px;
   flex: 0 0 auto;
 }
 
@@ -7,49 +7,49 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 2px dashed var(--gbc-border);
 }
 
 .typeBadges {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .typeBadge {
-  font-size: 6px;
-  padding: 2px 6px;
+  font-size: 11px;
+  padding: 3px 10px;
   border: 2px solid var(--gbc-border);
   background: var(--gbc-bg);
   color: var(--gbc-dark);
 }
 
 .numberBadge {
-  font-size: 6px;
+  font-size: 11px;
   color: var(--gbc-mid);
-  margin-left: 6px;
+  margin-left: 8px;
   white-space: nowrap;
 }
 
 .statRow {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 5px;
-  font-size: 6px;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 11px;
 }
 
 .statLabel {
-  width: 30px;
+  width: 36px;
   text-align: right;
   color: var(--gbc-dark);
 }
 
 .barTrack {
   flex: 1;
-  height: 8px;
+  height: 12px;
   border: 1px solid var(--gbc-border);
   background: var(--gbc-bg);
   display: flex;
@@ -66,7 +66,7 @@
 .barCell.empty  { background: transparent; }
 
 .statValue {
-  width: 22px;
+  width: 28px;
   text-align: right;
   color: var(--gbc-dark);
 }

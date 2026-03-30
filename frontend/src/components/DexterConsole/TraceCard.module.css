@@ -1,7 +1,7 @@
 .card {
   border: 2px solid;
-  padding: 6px 8px;
-  font-size: 6px;
+  padding: 10px 14px;
+  font-size: 11px;
   line-height: 1.8;
   animation: slideIn 0.15s ease-out;
 }
@@ -18,13 +18,13 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 3px;
+  gap: 8px;
+  margin-bottom: 5px;
 }
 
 .typeBadge {
-  font-size: 5px;
-  padding: 1px 4px;
+  font-size: 10px;
+  padding: 2px 7px;
   border: 1px solid;
   text-transform: uppercase;
 }
@@ -36,81 +36,81 @@
 .typeBadge.modelOk  { border-color: var(--mcp-resource); color: var(--mcp-resource); }
 .typeBadge.modelFail{ border-color: #b84a4a; color: #b84a4a; }
 
-.name    { color: var(--gbc-dark); font-size: 6px; }
-.timing  { color: var(--gbc-mid);  font-size: 5px; margin-left: auto; }
+.name    { color: var(--gbc-dark); font-size: 11px; }
+.timing  { color: var(--gbc-mid);  font-size: 10px; margin-left: auto; }
 
 .meta {
-  font-size: 5px;
+  font-size: 10px;
   color: var(--gbc-mid);
   line-height: 1.8;
 }
 .meta span { color: var(--gbc-dark); }
 
 .traceJson {
-  font-size: 5px;
+  font-size: 10px;
   white-space: pre-wrap;
   word-break: break-all;
-  margin: 2px 0 0;
+  margin: 3px 0 0;
   color: var(--gbc-dark);
   font-family: inherit;
   line-height: 1.6;
 }
 
 .expandable {
-  margin-top: 3px;
+  margin-top: 5px;
 }
 
 .msgRole {
-  font-size: 5px;
+  font-size: 10px;
   color: var(--gbc-mid);
   text-transform: uppercase;
-  margin-top: 4px;
+  margin-top: 6px;
   font-weight: bold;
 }
 
 .msgContent {
-  font-size: 5px;
+  font-size: 10px;
   color: var(--gbc-dark);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 60px;
+  max-height: 100px;
   overflow-y: auto;
   line-height: 1.6;
   border-left: 2px solid var(--gbc-light);
-  padding-left: 4px;
-  margin: 1px 0 3px;
+  padding-left: 6px;
+  margin: 2px 0 5px;
   font-family: inherit;
 }
 
 .resultFull {
-  font-size: 5px;
+  font-size: 10px;
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 80px;
+  max-height: 140px;
   overflow-y: auto;
   color: var(--gbc-dark);
   line-height: 1.6;
-  margin-top: 2px;
+  margin-top: 3px;
   font-family: inherit;
 }
 
 .toggleBtn {
   cursor: pointer;
-  font-size: 5px;
+  font-size: 10px;
   color: var(--mcp-tool);
   text-decoration: underline;
   background: none;
   border: none;
-  padding: 0 2px;
+  padding: 0 3px;
   font-family: inherit;
 }
 
 /* System log rows — slim status lines between cards */
 .systemLog {
-  padding: 2px 6px;
-  font-size: 5px;
+  padding: 4px 10px;
+  font-size: 10px;
   border-left: 2px solid;
-  margin: 1px 0;
+  margin: 2px 0;
   line-height: 1.6;
   animation: slideIn 0.15s ease-out;
 }
@@ -122,18 +122,18 @@
 
 .eduContainer {
   border-top: 1px dashed var(--gbc-border);
-  margin-top: 5px;
-  padding-top: 4px;
+  margin-top: 8px;
+  padding-top: 6px;
 }
 
 .eduToggleBtn {
   cursor: pointer;
-  font-size: 5px;
+  font-size: 10px;
   font-family: inherit;
   background: var(--gbc-dark);
   color: var(--gbc-bg);
   border: 1px solid var(--gbc-border);
-  padding: 1px 6px;
+  padding: 2px 10px;
   line-height: 1.8;
   letter-spacing: 0.02em;
 }
@@ -143,44 +143,44 @@
 }
 
 .eduContent {
-  margin-top: 4px;
-  padding: 4px 6px;
+  margin-top: 6px;
+  padding: 6px 10px;
   border-left: 2px solid var(--mcp-prompt);
   background: rgba(255, 255, 255, 0.22);
-  font-size: 5px;
+  font-size: 10px;
   line-height: 1.8;
 }
 
 .eduContent h3 {
-  font-size: 5px;
+  font-size: 10px;
   text-transform: uppercase;
   color: var(--mcp-prompt);
   letter-spacing: 0.05em;
-  margin: 2px 0 3px;
+  margin: 3px 0 5px;
   font-weight: bold;
 }
 
 .eduContent p {
-  font-size: 5px;
+  font-size: 10px;
   color: var(--gbc-dark);
   line-height: 1.8;
-  margin: 2px 0;
+  margin: 3px 0;
 }
 
 .eduContent pre {
   background: #1a1a2e;
   color: #a9dc76;
   border: 1px solid var(--gbc-border);
-  padding: 4px 6px;
+  padding: 6px 10px;
   overflow-x: auto;
-  font-size: 5px;
+  font-size: 10px;
   line-height: 1.6;
-  margin: 3px 0;
+  margin: 5px 0;
   white-space: pre;
 }
 
 .eduContent code {
-  font-size: 5px;
+  font-size: 10px;
   font-family: inherit;
 }
 
@@ -189,6 +189,6 @@
 .eduContent li code {
   background: rgba(0, 0, 0, 0.08);
   border: 1px solid var(--gbc-light);
-  padding: 0 2px;
+  padding: 0 3px;
   color: var(--mcp-tool);
 }

@@ -2,8 +2,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px;
+  gap: 10px;
+  padding: 12px;
   background: var(--gbc-dark);
   border-top: 2px solid var(--gbc-border);
   flex-wrap: nowrap;
@@ -12,7 +12,7 @@
 .thinking {
   display: block;
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 13px;
   color: var(--gbc-gold);
   animation: blink 1s step-start infinite;
   white-space: nowrap;
@@ -21,10 +21,10 @@
 
 .statusBadge {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 12px;
   color: var(--gbc-mid);
   border: 1px solid var(--gbc-border);
-  padding: 2px 5px;
+  padding: 3px 8px;
   white-space: nowrap;
   flex-shrink: 0;
 }
