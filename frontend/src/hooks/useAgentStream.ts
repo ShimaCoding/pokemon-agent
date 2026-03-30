@@ -74,16 +74,17 @@ export function guessToolType(toolName: string): string {
 export function useAgentStream() {
   const inFlightRef = useRef(false)
 
-  const apiKey          = useStore((s) => s.apiKey)
-  const selectedProvider = useStore((s) => s.selectedProvider)
-  const setInFlight     = useStore((s) => s.setInFlight)
-  const resetSession    = useStore((s) => s.resetSession)
-  const appendText      = useStore((s) => s.appendText)
-  const appendTraceLog  = useStore((s) => s.appendTraceLog)
-  const setPokemonData  = useStore((s) => s.setPokemonData)
-  const setPreQuery     = useStore((s) => s.setPreQuery)
-  const setActiveTab    = useStore((s) => s.setActiveTab)
-  const devMode         = useStore((s) => s.devMode)
+  const apiKey              = useStore((s) => s.apiKey)
+  const selectedProvider    = useStore((s) => s.selectedProvider)
+  const setInFlight         = useStore((s) => s.setInFlight)
+  const resetSession        = useStore((s) => s.resetSession)
+  const appendText          = useStore((s) => s.appendText)
+  const appendTraceLog      = useStore((s) => s.appendTraceLog)
+  const setPokemonData      = useStore((s) => s.setPokemonData)
+  const setPreQuery         = useStore((s) => s.setPreQuery)
+  const setActiveTab        = useStore((s) => s.setActiveTab)
+  const devMode             = useStore((s) => s.devMode)
+  const setRateLimitSeconds = useStore((s) => s.setRateLimitSeconds)
 
   const runQuery = useCallback(
     async (query: string) => {
@@ -118,10 +119,23 @@ export function useAgentStream() {
         if (!res.ok) {
           if (res.status === 429) {
             const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
-            appendText(
-              `⚡ ¡Demasiadas consultas! El Maestro Pokémon pide calma... Vuelve a intentarlo en **${retryAfter} segundos**.`
-            )
-            appendTraceLog({ type: 'error', message: `Rate limit alcanzado. Reintenta en ${retryAfter}s` })
+            appendTraceLog({
+              type: 'system_log',
+              message: `⚡ Demasiadas consultas. Espera ${retryAfter}s antes de reintentar.`,
+              level: 'warn',
+            })
+            // Start countdown — disables the submit button for retryAfter seconds
+            let remaining = retryAfter
+            setRateLimitSeconds(remaining)
+            const tid = window.setInterval(() => {
+              remaining--
+              if (remaining <= 0) {
+                window.clearInterval(tid)
+                setRateLimitSeconds(0)
+              } else {
+                setRateLimitSeconds(remaining)
+              }
+            }, 1000)
             return
           }
           const errBody = await res.json().catch(() => ({ detail: `Error ${res.status}` })) as { detail?: string }
@@ -243,6 +257,7 @@ export function useAgentStream() {
       setPreQuery,
       devMode,
       setActiveTab,
+      setRateLimitSeconds,
     ]
   )
 

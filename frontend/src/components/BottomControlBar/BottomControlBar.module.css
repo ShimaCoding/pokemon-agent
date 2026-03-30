@@ -34,6 +34,26 @@
   border-color: var(--gbc-gold);
 }
 
+.statusBadge.limited {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.rateLimitBanner {
+  position: absolute;
+  top: -36px;
+  left: 0;
+  right: 0;
+  background: #3a1a1a;
+  border-top: 2px solid #ff6b6b;
+  color: #ff6b6b;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 12px;
+  z-index: 10;
+}
+
 @media (max-width: 640px) {
   .bottomBar {
     flex-wrap: wrap;

@@ -6,13 +6,14 @@ interface Props {
 }
 
 export default function SendButton({ onClick }: Props) {
-  const inFlight = useStore((s) => s.inFlight)
+  const inFlight         = useStore((s) => s.inFlight)
+  const rateLimitSeconds = useStore((s) => s.rateLimitSeconds)
 
   return (
     <button
       className={styles.sendButton}
       onClick={onClick}
-      disabled={inFlight}
+      disabled={inFlight || rateLimitSeconds > 0}
       title="Enviar consulta"
     >
       ENVIAR

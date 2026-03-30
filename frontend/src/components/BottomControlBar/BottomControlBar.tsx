@@ -8,9 +8,10 @@ import SendButton from './SendButton'
 import styles from './BottomControlBar.module.css'
 
 export default function BottomControlBar() {
-  const inFlight       = useStore((s) => s.inFlight)
-  const queryDraft     = useStore((s) => s.queryDraft)
-  const clearQueryDraft = useStore((s) => s.clearQueryDraft)
+  const inFlight          = useStore((s) => s.inFlight)
+  const rateLimitSeconds  = useStore((s) => s.rateLimitSeconds)
+  const queryDraft        = useStore((s) => s.queryDraft)
+  const clearQueryDraft   = useStore((s) => s.clearQueryDraft)
 
   const [inputValue, setInputValue] = useState('')
   const [slashOpen, setSlashOpen] = useState(false)
@@ -30,11 +31,11 @@ export default function BottomControlBar() {
 
   const handleSubmit = useCallback(async () => {
     const query = inputValue.trim()
-    if (!query || inFlight) return
+    if (!query || inFlight || rateLimitSeconds > 0) return
     setInputValue('')
     setSlashOpen(false)
     await runQuery(query)
-  }, [inputValue, inFlight, runQuery])
+  }, [inputValue, inFlight, rateLimitSeconds, runQuery])
 
   const handleSlashSelect = useCallback((template: string) => {
     setInputValue(template)
@@ -54,6 +55,11 @@ export default function BottomControlBar() {
 
   return (
     <div className={styles.bottomBar} id="bottom-bar">
+      {rateLimitSeconds > 0 && (
+        <div className={styles.rateLimitBanner} id="rate-limit-banner">
+          ⚡ espera {rateLimitSeconds}s
+        </div>
+      )}
       {slashOpen && (
         <SlashMenu
           filter={slashFilter}
@@ -77,10 +83,10 @@ export default function BottomControlBar() {
         </span>
       )}
       <span
-        className={`${styles.statusBadge} ${inFlight ? styles.busy : ''}`}
+        className={`${styles.statusBadge} ${inFlight ? styles.busy : rateLimitSeconds > 0 ? styles.limited : ''}`}
         id="status-badge"
       >
-        {inFlight ? 'procesando' : 'listo'}
+        {inFlight ? 'procesando' : rateLimitSeconds > 0 ? `espera ${rateLimitSeconds}s` : 'listo'}
       </span>
       <SendButton onClick={handleSubmit} />
     </div>

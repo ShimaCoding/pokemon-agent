@@ -65,6 +65,10 @@ interface AppState {
   inFlight: boolean
   setInFlight: (v: boolean) => void
 
+  // Rate-limit countdown (seconds remaining, 0 = no limit)
+  rateLimitSeconds: number
+  setRateLimitSeconds: (n: number) => void
+
   // Session reset (between queries)
   resetSession: () => void
 
@@ -140,6 +144,10 @@ const useStore = create<AppState>()(
       // In-flight
       inFlight: false,
       setInFlight: (v) => set({ inFlight: v }),
+
+      // Rate-limit countdown
+      rateLimitSeconds: 0,
+      setRateLimitSeconds: (n) => set({ rateLimitSeconds: n }),
 
       // Session reset (tab navigation handled by useAgentStream based on devMode)
       resetSession: () =>
