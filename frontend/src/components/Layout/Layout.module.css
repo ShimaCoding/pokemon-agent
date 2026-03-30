@@ -1,6 +1,5 @@
 .app {
   width: 100%;
-  max-width: 1000px;
   background: var(--gbc-cream);
   border: 3px solid var(--gbc-border);
   image-rendering: pixelated;
