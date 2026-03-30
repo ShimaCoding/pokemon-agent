@@ -3,7 +3,7 @@ import useStore from '../../store/useStore'
 import styles from './IntroModal.module.css'
 
 const EXAMPLES = [
-  'Pídeme la entrada de pikachu',
+  'Dame la entrada de pokedex de pikachu',
   'Usa el prompt battle/matchup-analysis con pokemon1=pikachu pokemon2=charizard scenario=learning environment=neutral',
   'Dime los stats de Mewtwo',
   '/narrator eevee',
