@@ -38,6 +38,13 @@ export default function TitleBar() {
           >
             pokemon-agent
           </a>
+          <button
+            className={`${styles.settingsBtn} ${apiKey ? styles.hasKey : ''}`}
+            title={apiKey ? 'API Key configurada' : 'Configurar API Key'}
+            onClick={() => setSettingsOpen(true)}
+          >
+            &#9881;
+          </button>
         </div>
       </div>
       <div className={styles.bottomRow}>
@@ -46,13 +53,6 @@ export default function TitleBar() {
           <McpBadgeDropdown kind="resource" items={mcpResources} />
           <McpBadgeDropdown kind="prompt"   items={mcpPrompts}   />
         </div>
-        <button
-          className={`${styles.settingsBtn} ${apiKey ? styles.hasKey : ''}`}
-          title={apiKey ? 'API Key configurada' : 'Configurar API Key'}
-          onClick={() => setSettingsOpen(true)}
-        >
-          &#9881;
-        </button>
       </div>
     </header>
   )

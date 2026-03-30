@@ -19,6 +19,7 @@
 .bottomRow {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
@@ -103,6 +104,7 @@
     flex-wrap: wrap;
     white-space: normal;
     width: 100%;
+    align-items: center;
   }
 
   .githubLink {
@@ -112,7 +114,10 @@
   }
 
   .githubSep {
-    width: 100%;
     display: none;
+  }
+
+  .settingsBtn {
+    margin-left: auto;
   }
 }
