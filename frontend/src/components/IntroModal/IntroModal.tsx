@@ -3,9 +3,9 @@ import useStore from '../../store/useStore'
 import styles from './IntroModal.module.css'
 
 const EXAMPLES = [
-  '¿Cómo es Charizard?',
+  'Pídeme la entrada de pikachu',
+  'Usa el prompt battle/matchup-analysis con pokemon1=pikachu pokemon2=charizard scenario=learning environment=neutral',
   'Dime los stats de Mewtwo',
-  'Busca al Pokémon número 25',
   '/narrator eevee',
   '¿Cuál es el Pokémon más poderoso?',
 ]
