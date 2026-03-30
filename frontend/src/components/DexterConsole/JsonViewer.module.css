@@ -17,7 +17,7 @@
 
 .modeBtn {
   font-family: var(--font-pixel);
-  font-size: 4px;
+  font-size: 8px;
   background: none;
   border: none;
   padding: 1px 3px;
@@ -31,7 +31,7 @@
 .modeBtn.active   { color: var(--gbc-dark); text-decoration: underline; }
 
 .divider {
-  font-size: 4px;
+  font-size: 8px;
   color: var(--gbc-mid);
   user-select: none;
 }
@@ -46,7 +46,7 @@
 /* ── Pretty view ──────────────────────────────────────────────────── */
 .prettyWrap {
   font-family: var(--font-pixel);
-  font-size: 5px;
+  font-size: 8px;
   line-height: 2;
   color: var(--gbc-dark);
 }
@@ -74,7 +74,7 @@
 /* ── Collapse/expand button ───────────────────────────────────────── */
 .collapseBtn {
   font-family: var(--font-pixel);
-  font-size: 4px;
+  font-size: 8px;
   background: none;
   border: none;
   cursor: pointer;
@@ -88,13 +88,13 @@
 .ellipsis {
   color: var(--gbc-mid);
   font-style: italic;
-  font-size: 4px;
+  font-size: 8px;
 }
 
 /* ── Raw view ─────────────────────────────────────────────────────── */
 .rawPre {
   font-family: var(--font-pixel);
-  font-size: 5px;
+  font-size: 8px;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--gbc-dark);
