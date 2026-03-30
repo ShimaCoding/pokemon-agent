@@ -84,6 +84,24 @@ export default function IntroModal() {
             </ol>
           </div>
 
+          {/* Mode toggle */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>MODOS DE VISTA</div>
+            <div className={styles.toolList}>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeLocal}`}>DEV</span>
+                <span className={styles.toolName}>Modo consola — muestra el trace de herramientas en tiempo real <strong>(por defecto)</strong></span>
+              </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeTool}`}>POKé</span>
+                <span className={styles.toolName}>Modo Pokédex — muestra la ficha visual del Pokémon y la respuesta de Dexter</span>
+              </div>
+            </div>
+            <div className={styles.toolsHint}>
+              Cambia el modo con el botón DEV / POKé en la barra superior
+            </div>
+          </div>
+
           {/* Tools */}
           <div className={styles.section}>
             <div className={styles.sectionTitle}>HERRAMIENTAS DISPONIBLES</div>

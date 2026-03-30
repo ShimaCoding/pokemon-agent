@@ -85,7 +85,7 @@ const useStore = create<AppState>()(
       clearApiKey: () => set({ apiKey: '' }),
 
       // Dev mode
-      devMode: false,
+      devMode: true,
       setDevMode: (v) => set({ devMode: v }),
 
       // Settings modal
