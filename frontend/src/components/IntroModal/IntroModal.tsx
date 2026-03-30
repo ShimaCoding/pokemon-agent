@@ -92,29 +92,28 @@ export default function IntroModal() {
               <div className={styles.toolItem}>
                 <span className={`${styles.badge} ${styles.badgeLocal}`}>LOCAL</span>
                 <span className={styles.toolName}>get_pokedex_entry</span>
-                <span className={styles.toolDesc}>Consulta tipos, stats, habilidades y más desde PokeAPI</span>
               </div>
               {mcpTools.map((t) => (
                 <div key={t.name} className={styles.toolItem}>
                   <span className={`${styles.badge} ${styles.badgeTool}`}>TOOL</span>
                   <span className={styles.toolName}>{t.name}</span>
-                  {t.description && <span className={styles.toolDesc}>{t.description}</span>}
                 </div>
               ))}
               {mcpResources.map((r) => (
                 <div key={r.uri} className={styles.toolItem}>
                   <span className={`${styles.badge} ${styles.badgeResource}`}>REC</span>
                   <span className={styles.toolName}>{r.name}</span>
-                  {r.description && <span className={styles.toolDesc}>{r.description}</span>}
                 </div>
               ))}
               {mcpPrompts.map((p) => (
                 <div key={p.name} className={styles.toolItem}>
                   <span className={`${styles.badge} ${styles.badgePrompt}`}>PROMPT</span>
                   <span className={styles.toolName}>/{p.name}</span>
-                  {p.desc && <span className={styles.toolDesc}>{p.desc}</span>}
                 </div>
               ))}
+            </div>
+            <div className={styles.toolsHint}>
+              Puedes ver los recursos reales del servidor en los badges de la barra superior
             </div>
           </div>
 

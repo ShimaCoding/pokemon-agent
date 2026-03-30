@@ -50,13 +50,13 @@
 }
 
 .title {
-  font-size: 9px;
+  font-size: 13px;
   color: var(--gbc-cream);
   margin-bottom: 4px;
 }
 
 .subtitle {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--gbc-mid);
 }
 
@@ -98,7 +98,7 @@
 }
 
 .sectionTitle {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--gbc-screen);
   margin-bottom: 10px;
   letter-spacing: 0.05em;
@@ -149,13 +149,13 @@
 }
 
 .stepLabel {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--gbc-cream);
   line-height: 1.6;
 }
 
 .stepHint {
-  font-size: 6px;
+  font-size: 10px;
   color: var(--gbc-mid);
   line-height: 1.6;
 }
@@ -175,8 +175,8 @@
 }
 
 .badge {
-  font-size: 5px;
-  padding: 2px 5px;
+  font-size: 9px;
+  padding: 2px 6px;
   border: 1px solid currentColor;
   flex-shrink: 0;
   letter-spacing: 0.05em;
@@ -188,15 +188,16 @@
 .badgePrompt  { color: var(--mcp-prompt); }
 
 .toolName {
-  font-size: 7px;
+  font-size: 11px;
   color: var(--gbc-cream);
   flex-shrink: 0;
 }
 
-.toolDesc {
-  font-size: 6px;
+.toolsHint {
+  font-size: 10px;
   color: var(--gbc-mid);
-  line-height: 1.5;
+  margin-top: 10px;
+  line-height: 1.6;
 }
 
 /* ── Examples ─────────────────────────────── */
@@ -208,7 +209,7 @@
 
 .exampleBtn {
   font-family: var(--font-pixel);
-  font-size: 7px;
+  font-size: 11px;
   background: none;
   border: 1px solid var(--gbc-border);
   color: var(--gbc-screen);
@@ -242,7 +243,7 @@
 
 .startBtn {
   font-family: var(--font-pixel);
-  font-size: 8px;
+  font-size: 12px;
   background: var(--mcp-tool);
   border: 2px solid var(--gbc-border);
   color: var(--gbc-cream);
