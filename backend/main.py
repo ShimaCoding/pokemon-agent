@@ -87,7 +87,9 @@ async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Validate at startup that at least one provider is configured.
-    # This will raise RuntimeError if all providers are missing.
+    # We log a warning but do NOT raise — crashing uvicorn here causes a 502
+    # because nginx can't reach the upstream at all, and the frontend never loads.
+    # Instead, /health will return 503 and API calls will return a clear error.
     try:
         _router, _primary_model, label = build_litellm_router()
         available = get_available_providers()
@@ -97,8 +99,13 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Primary provider (auto-fallback): %s", label)
     except RuntimeError as exc:
-        logger.error("Startup error: %s", exc)
-        raise
+        logger.error(
+            "⚠️  Startup warning — no LLM providers configured: %s  "
+            "Set at least one API key in .env (GROQ_API_KEY, GEMINI_API_KEY, "
+            "OPENAI_API_KEY, or OPENROUTER_API_KEY). "
+            "The app will start but all agent requests will fail until a key is added.",
+            exc,
+        )
     init_db()
     yield
 
@@ -164,7 +171,13 @@ async def config():
 
 @app.get("/health")
 async def health():
+    from fastapi.responses import JSONResponse
     available = get_available_providers()
+    if not available:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "providers": [], "error": "No LLM providers configured"},
+        )
     return {"status": "ok", "providers": [p["label"] for p in available]}
 
 
