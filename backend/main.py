@@ -16,6 +16,7 @@ Security:
     Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -459,9 +460,15 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
             yield _sse(evt)
 
     try:
-        with mcp_client:
+        # Run blocking MCP setup in a thread so the event loop stays free to
+        # flush SSE events. mcp_client.__enter__ (cold TCP connect) and
+        # list_tools_sync both block the calling thread; doing that on the event
+        # loop thread prevents the "start" SSE frame from reaching the browser
+        # on the first request, making it look hung.
+        await asyncio.to_thread(mcp_client.__enter__)
+        try:
             logger.info("[MCP] Conectando al servidor MCP y listando tools…")
-            tools = mcp_client.list_tools_sync()
+            tools = await asyncio.to_thread(mcp_client.list_tools_sync)
             logger.info("[MCP] %d tools disponibles", len(tools))
 
             # --- Check if query is a prompt call ---
@@ -582,6 +589,10 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                             "total_tokens": _usage.get("totalTokens", 0),
                         }
                     )
+        finally:
+            # Run blocking MCP cleanup in a thread so the event loop can flush
+            # the final SSE events before the connection tears down.
+            await asyncio.to_thread(lambda: mcp_client.__exit__(None, None, None))
 
     except Exception as exc:
         logger.exception("Agent run failed: %s", exc)
