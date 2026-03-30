@@ -82,6 +82,7 @@ export function useAgentStream() {
   const appendTraceLog  = useStore((s) => s.appendTraceLog)
   const setPokemonData  = useStore((s) => s.setPokemonData)
   const setPreQuery     = useStore((s) => s.setPreQuery)
+  const setActiveTab    = useStore((s) => s.setActiveTab)
 
   const runQuery = useCallback(
     async (query: string) => {
@@ -122,6 +123,7 @@ export function useAgentStream() {
         let   buffer  = ''
         let   fullText = ''
         let   toolCallsSinceLastLlm = false
+        let   textStarted = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -189,6 +191,10 @@ export function useAgentStream() {
                 const delta = (evt['delta'] as string) ?? ''
                 fullText += delta
                 appendText(delta)
+                if (!textStarted) {
+                  textStarted = true
+                  setActiveTab('dexter')
+                }
                 break
               }
               case 'done':

@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pokémon MCP Agent — a FastAPI web app that uses the Strands Agents SDK to answer Pokémon questions via a live MCP server (`mcpokedex.com/mcp`). LLM requests are routed through LiteLLM with automatic provider fallback (Groq → Gemini → OpenAI). The browser receives both tool traces and final answers in real time via SSE.
+Pokémon MCP Agent — a FastAPI web app that uses the Strands Agents SDK to answer Pokémon questions. The agent combines:
+- A **local Strands tool** (`get_pokedex_entry` in `backend/tools.py`) that fetches Pokédex entries directly from the PokeAPI (types, stats, abilities, flavor text in Spanish).
+- An **MCP server** (`mcpokedex.com/mcp`) for additional Pokémon data.
+
+LLM requests are routed through LiteLLM with automatic provider fallback (Groq → Gemini → OpenAI). The browser receives both tool traces and final answers in real time via SSE.
 
 ## Running the App
 
@@ -23,11 +27,13 @@ Requires at least one API key in `.env` (see `.env.example`):
 
 ## Architecture
 
-The backend has three modules:
+The backend has four modules:
 
 - **`backend/providers.py`** — `PROVIDERS` dict with model IDs and env vars per provider; `build_litellm_router()` builds a LiteLLM Router with fallback ordering; all models aliased to `"agent-model"` so the Strands agent doesn't need provider-aware logic.
 
-- **`backend/agent.py`** — `build_agent(provider_name)` creates a LiteLLMModel and MCPClient, then **monkey-patches `litellm.completion` and `litellm.acompletion` globally** to route through the Router. This is how fallback is achieved without modifying the Strands SDK. `create_agent()` wraps model + MCP tools in a Strands Agent.
+- **`backend/tools.py`** — `get_pokedex_entry(pokemon)` is a local Strands tool decorated with `@tool`. The agent calls it directly in the backend (no MCP involved); it fetches types, stats, abilities, habitat, and Spanish flavor text from the PokeAPI (`https://pokeapi.co/api/v2/pokemon/{pokemon}`).
+
+- **`backend/agent.py`** — `build_agent(provider_name)` creates a LiteLLMModel and MCPClient, then **monkey-patches `litellm.completion` and `litellm.acompletion` globally** to route through the Router. This is how fallback is achieved without modifying the Strands SDK. `create_agent()` wraps model + MCP tools + local tools in a Strands Agent.
 
 - **`backend/main.py`** — FastAPI app with lifespan validation. The `/api/agent/run` POST endpoint streams SSE events: `start`, `tool_call`, `tool_result`, `text`, `done`, `error`. Static files (index.html) are mounted at `/`.
 

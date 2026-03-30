@@ -52,26 +52,76 @@ Antes de construir el modelo, el backend **parchea globalmente** \`litellm.compl
   tool_pokemon: `
 ### ¿Cómo funciona esta herramienta?
 
-\`get_pokedex_entry\` es una herramienta **local de Strands**, decorada con \`@tool\`. Cuando el agente la necesita, la ejecuta directamente en el backend (sin pasar por MCP), llamando a la **PokeAPI** para obtener tipos, estadísticas, hábitat y el flavor text en español.
+\`get_pokedex_entry\` es una herramienta **local de Strands**, decorada con \`@tool\`. Cuando el agente la necesita, la ejecuta directamente en el backend (sin pasar por MCP), llamando a la **PokeAPI** en dos endpoints: \`/pokemon/{id}\` para datos base y \`/pokemon-species/{id}\` para flavor text y metadatos de especie.
 
 \`\`\`python
 # backend/tools.py
-from strands import tool
+import json
 import httpx
+from strands import tool
+
+_POKEAPI_BASE = "https://pokeapi.co/api/v2"
 
 @tool
 def get_pokedex_entry(pokemon: str) -> dict:
     """Fetch a complete Pokédex entry for a Pokémon from PokeAPI.
 
+    Retrieves types, base stats, abilities, height, weight, flavor text
+    descriptions from the games (in Spanish when available, otherwise
+    English), generation, habitat, legendary/mythical status, and capture
+    rate. Use this tool whenever the user asks about a specific Pokémon.
+
     Args:
-        pokemon: The Pokémon name (e.g. "pikachu") or Dex number.
+        pokemon: The Pokémon name (lowercase, e.g. "pikachu") or National
+                 Pokédex number as a string (e.g. "25").
+
     Returns:
-        A dict with types, stats, abilities, flavor text, etc.
+        A dict with full Pokédex entry data, or an error status on failure.
     """
+    name_or_id = pokemon.strip().lower()
     with httpx.Client(timeout=10.0) as client:
-        r = client.get(f"https://pokeapi.co/api/v2/pokemon/{pokemon}")
-        r.raise_for_status()
-        return r.json()
+        r_poke = client.get(f"{_POKEAPI_BASE}/pokemon/{name_or_id}")
+        if r_poke.status_code == 404:
+            return {"status": "error", "content": [{"text": f"No se encontró '{pokemon}'."}]}
+        r_poke.raise_for_status()
+        poke = r_poke.json()
+
+        species_url = poke.get("species", {}).get("url", f"{_POKEAPI_BASE}/pokemon-species/{name_or_id}")
+        species = client.get(species_url).json()
+
+    types = [t["type"]["name"] for t in sorted(poke["types"], key=lambda x: x["slot"])]
+    base_stats = {s["stat"]["name"]: s["base_stat"] for s in poke["stats"]}
+    abilities = [{"name": a["ability"]["name"], "is_hidden": a["is_hidden"]}
+                 for a in sorted(poke["abilities"], key=lambda x: x["slot"])]
+
+    # Flavor texts: prefer Spanish, fallback to English; deduplicate; cap at 3
+    def _collect_texts(lang):
+        seen, result = set(), []
+        for entry in species.get("flavor_text_entries", []):
+            if entry["language"]["name"] == lang:
+                text = entry["flavor_text"].replace("\\f", " ").replace("\\n", " ").strip()
+                if text and text not in seen:
+                    seen.add(text); result.append(text)
+                    if len(result) == 3: break
+        return result
+
+    flavor_texts = _collect_texts("es") or _collect_texts("en")
+    generation = species.get("generation", {}).get("name", "").replace("generation-", "").upper()
+    habitat_obj = species.get("habitat")
+
+    return {
+        "status": "success",
+        "content": [{"text": json.dumps({
+            "id": poke["id"], "name": poke["name"],
+            "height_dm": poke["height"], "weight_hg": poke["weight"],
+            "types": types, "base_stats": base_stats, "abilities": abilities,
+            "flavor_text": flavor_texts, "generation": generation,
+            "habitat": habitat_obj["name"] if habitat_obj else "unknown",
+            "is_legendary": species.get("is_legendary", False),
+            "is_mythical": species.get("is_mythical", False),
+            "capture_rate": species.get("capture_rate"),
+        }, ensure_ascii=False)}],
+    }
 \`\`\`
 
 El decorador \`@tool\` genera automáticamente el **JSON Schema** del argumento a partir del type hint y el docstring, para que el LLM sepa exactamente cómo invocar la función.
