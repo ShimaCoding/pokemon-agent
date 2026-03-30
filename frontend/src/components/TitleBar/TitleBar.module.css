@@ -93,3 +93,26 @@
 .settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }
 
 /* ── Mobile ───────────────────────────────── */
+@media (max-width: 640px) {
+  .topRow {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .githubLinks {
+    flex-wrap: wrap;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .githubLink {
+    font-size: 11px;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .githubSep {
+    width: 100%;
+    display: none;
+  }
+}
