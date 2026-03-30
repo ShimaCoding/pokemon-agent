@@ -1,7 +1,36 @@
 .statsArea {
-  padding: 8px 10px;
-  border-bottom: 2px dashed var(--gbc-border);
+  padding: 8px 10px 10px;
   flex: 0 0 auto;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px dashed var(--gbc-border);
+}
+
+.typeBadges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.typeBadge {
+  font-size: 6px;
+  padding: 2px 6px;
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-bg);
+  color: var(--gbc-dark);
+}
+
+.numberBadge {
+  font-size: 6px;
+  color: var(--gbc-mid);
+  margin-left: 6px;
+  white-space: nowrap;
 }
 
 .statRow {
@@ -13,7 +42,7 @@
 }
 
 .statLabel {
-  width: 28px;
+  width: 30px;
   text-align: right;
   color: var(--gbc-dark);
 }

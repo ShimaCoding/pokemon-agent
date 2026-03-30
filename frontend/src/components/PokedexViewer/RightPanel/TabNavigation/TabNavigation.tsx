@@ -2,13 +2,13 @@ import useStore from '../../../../store/useStore'
 import type { TabKey } from '../../../../types'
 import styles from './TabNavigation.module.css'
 
-const TABS: Array<{ key: TabKey; label: string; mobileOnly?: boolean }> = [
+const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'info',    label: 'INFO'    },
   { key: 'stats',   label: 'STATS'   },
   { key: 'moves',   label: 'MOVES'   },
   { key: 'evos',    label: 'EVOS'    },
   { key: 'dexter',  label: 'DEXTER'  },
-  { key: 'consola', label: 'CONSOLA', mobileOnly: true },
+  { key: 'consola', label: 'CONSOLA' },
 ]
 
 export default function TabNavigation() {
@@ -17,14 +17,13 @@ export default function TabNavigation() {
 
   return (
     <div id="tab-bar" className={styles.tabBar}>
-      {TABS.flatMap(({ key, label, mobileOnly }) => [
+      {TABS.flatMap(({ key, label }) => [
         activeTab === key ? <span key={`arrow-${key}`} className={styles.tabArrow}>▶</span> : null,
         <button
           key={key}
           className={[
             styles.tabBtn,
             activeTab === key ? styles.active : '',
-            mobileOnly ? styles.mobileOnly : '',
           ].filter(Boolean).join(' ')}
           data-tab={key}
           onClick={() => setActiveTab(key)}
