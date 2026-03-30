@@ -135,7 +135,7 @@
     ::placeholder { color: #6b7280; }
 
     /* ── Custom ── */
-    .truncate-query { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .truncate-query { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .status-done  { color: #4ade80; }
     .status-error { color: #f87171; }
   </style>
@@ -228,7 +228,7 @@
       <p class="text-xs text-gray-500 mb-1">Errores</p>
       <p class="text-2xl font-bold text-red-400" id="statErrors">—</p>
     </div>
-    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800 col-span-2 md:col-span-1">
       <p class="text-xs text-gray-500 mb-2">Tools más usadas</p>
       <div id="statTools" class="text-xs text-gray-300 space-y-0.5">—</div>
     </div>
@@ -243,26 +243,24 @@
   </div>
 
   <!-- Table -->
-  <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-    <div class="overflow-x-auto">
-    <table class="w-full text-xs" style="min-width:680px;">
+  <div class="bg-gray-900 rounded-xl border border-gray-800" style="overflow-x:auto;">
+    <table class="text-xs" style="min-width:680px;width:100%;border-collapse:collapse;">
       <thead>
         <tr class="border-b border-gray-800 text-gray-500 text-left">
-          <th class="px-4 py-3 font-medium">Timestamp</th>
+          <th class="px-4 py-3 font-medium whitespace-nowrap">Timestamp</th>
           <th class="px-4 py-3 font-medium">Consulta</th>
-          <th class="px-4 py-3 font-medium">Provider</th>
-          <th class="px-4 py-3 font-medium">Modelos</th>
-          <th class="px-4 py-3 font-medium text-right">Tokens</th>
-          <th class="px-4 py-3 font-medium text-right">ms</th>
-          <th class="px-4 py-3 font-medium">Tools</th>
-          <th class="px-4 py-3 font-medium">Estado</th>
+          <th class="px-4 py-3 font-medium whitespace-nowrap">Provider</th>
+          <th class="px-4 py-3 font-medium whitespace-nowrap">Modelos</th>
+          <th class="px-4 py-3 font-medium text-right whitespace-nowrap">Tokens</th>
+          <th class="px-4 py-3 font-medium text-right whitespace-nowrap">ms</th>
+          <th class="px-4 py-3 font-medium whitespace-nowrap">Tools</th>
+          <th class="px-4 py-3 font-medium whitespace-nowrap">Estado</th>
         </tr>
       </thead>
       <tbody id="queryTable">
         <tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">Cargando…</td></tr>
       </tbody>
     </table>
-    </div>
   </div>
 
   <!-- Pagination -->
