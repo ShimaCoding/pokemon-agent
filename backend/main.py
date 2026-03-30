@@ -11,7 +11,7 @@ Routes:
 Security:
   - API key auth: set API_KEY env var; clients must send X-API-Key header.
     If API_KEY is unset, auth is disabled (suitable for local dev).
-  - Rate limiting: /api/agent/run is capped at 5 req/min per IP via slowapi.
+  - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
   - CORS: controlled by ALLOWED_ORIGINS env var (comma-separated).
     Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
@@ -272,7 +272,7 @@ async def get_resources():
 
 
 @app.post("/api/agent/run")
-@limiter.limit("5/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
+@limiter.limit("3/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
 async def run_agent(request: Request, body: RunRequest):
     return StreamingResponse(
         _sse_generator(body.query, body.provider),
