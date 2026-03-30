@@ -1,6 +1,7 @@
 import styles from './Layout.module.css'
 import TitleBar from '../TitleBar/TitleBar'
 import SettingsModal from '../SettingsModal/SettingsModal'
+import IntroModal from '../IntroModal/IntroModal'
 import PokedexViewer from '../PokedexViewer/PokedexViewer'
 import BottomControlBar from '../BottomControlBar/BottomControlBar'
 import useStore from '../../store/useStore'
@@ -12,6 +13,7 @@ export default function Layout() {
     <div className={`${styles.app} ${preQuery ? styles.preQuery : ''}`}>
       <TitleBar />
       <SettingsModal />
+      <IntroModal />
       <PokedexViewer />
       <BottomControlBar />
     </div>

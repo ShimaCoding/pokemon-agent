@@ -4,6 +4,7 @@ import McpBadgeDropdown from './McpBadgeDropdown'
 
 export default function TitleBar() {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen)
+  const setIntroOpen    = useStore((s) => s.setIntroOpen)
   const apiKey          = useStore((s) => s.apiKey)
   const mcpTools        = useStore((s) => s.mcpTools)
   const mcpResources    = useStore((s) => s.mcpResources)
@@ -38,6 +39,13 @@ export default function TitleBar() {
           >
             pokemon-agent
           </a>
+          <button
+            className={styles.helpBtn}
+            title="¿Cómo usar?"
+            onClick={() => setIntroOpen(true)}
+          >
+            ?
+          </button>
           <button
             className={`${styles.settingsBtn} ${apiKey ? styles.hasKey : ''}`}
             title={apiKey ? 'API Key configurada' : 'Configurar API Key'}

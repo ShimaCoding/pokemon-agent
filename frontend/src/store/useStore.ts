@@ -14,6 +14,17 @@ interface AppState {
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
 
+  // Intro modal
+  introOpen: boolean
+  setIntroOpen: (open: boolean) => void
+  introDismissed: boolean
+  setIntroDismissed: (dismissed: boolean) => void
+
+  // Query draft (pre-fill input from intro modal examples)
+  queryDraft: string
+  setQueryDraft: (q: string) => void
+  clearQueryDraft: () => void
+
   // Provider list & selection
   providers: Provider[]
   setProviders: (providers: Provider[]) => void
@@ -73,6 +84,17 @@ const useStore = create<AppState>()(
       settingsOpen: false,
       setSettingsOpen: (open) => set({ settingsOpen: open }),
 
+      // Intro modal
+      introOpen: false,
+      setIntroOpen: (open) => set({ introOpen: open }),
+      introDismissed: false,
+      setIntroDismissed: (dismissed) => set({ introDismissed: dismissed }),
+
+      // Query draft
+      queryDraft: '',
+      setQueryDraft: (q) => set({ queryDraft: q }),
+      clearQueryDraft: () => set({ queryDraft: '' }),
+
       // Providers
       providers: [],
       setProviders: (providers) => set({ providers }),
@@ -121,8 +143,8 @@ const useStore = create<AppState>()(
     }),
     {
       name: 'mcpokedex-storage',
-      // Only persist the API key — UI state resets on reload
-      partialize: (state) => ({ apiKey: state.apiKey }),
+      // Persist API key and intro dismissed flag
+      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed }),
     }
   )
 )

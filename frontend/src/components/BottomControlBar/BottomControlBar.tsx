@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import useStore from '../../store/useStore'
 import { useAgentStream } from '../../hooks/useAgentStream'
 import SlashMenu from './SlashMenu'
@@ -8,13 +8,25 @@ import SendButton from './SendButton'
 import styles from './BottomControlBar.module.css'
 
 export default function BottomControlBar() {
-  const inFlight = useStore((s) => s.inFlight)
+  const inFlight       = useStore((s) => s.inFlight)
+  const queryDraft     = useStore((s) => s.queryDraft)
+  const clearQueryDraft = useStore((s) => s.clearQueryDraft)
+
   const [inputValue, setInputValue] = useState('')
   const [slashOpen, setSlashOpen] = useState(false)
   const [slashFilter, setSlashFilter] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { runQuery } = useAgentStream()
+
+  // Pre-fill input when an example is selected from the intro modal
+  useEffect(() => {
+    if (queryDraft) {
+      setInputValue(queryDraft)
+      clearQueryDraft()
+      inputRef.current?.focus()
+    }
+  }, [queryDraft, clearQueryDraft])
 
   const handleSubmit = useCallback(async () => {
     const query = inputValue.trim()

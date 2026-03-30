@@ -93,6 +93,18 @@
 .settingsBtn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
 .settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }
 
+.helpBtn {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  background: none;
+  border: 1px solid var(--gbc-mid);
+  color: var(--gbc-mid);
+  padding: 4px 9px;
+  cursor: pointer;
+  line-height: 1;
+}
+.helpBtn:hover { border-color: var(--mcp-tool); color: var(--mcp-tool); }
+
 /* ── Mobile ───────────────────────────────── */
 @media (max-width: 640px) {
   .topRow {
