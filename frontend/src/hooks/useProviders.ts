@@ -17,11 +17,11 @@ export function useProviders() {
         const avail = list.filter((p) => p.available)
         setProviders(avail)
 
-        const openrouter = avail.find(
-          (p) => String(p.name).toLowerCase() === 'openrouter'
+        const groq = avail.find(
+          (p) => String(p.name).toLowerCase() === 'groq'
         )
-        if (openrouter) {
-          setSelectedProvider(openrouter.name)
+        if (groq) {
+          setSelectedProvider(groq.name)
         } else if (avail.length > 0) {
           setSelectedProvider(avail[0].name)
         }
