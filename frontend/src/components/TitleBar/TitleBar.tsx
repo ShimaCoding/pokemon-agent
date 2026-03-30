@@ -9,6 +9,8 @@ export default function TitleBar() {
   const mcpTools        = useStore((s) => s.mcpTools)
   const mcpResources    = useStore((s) => s.mcpResources)
   const prompts         = useStore((s) => s.prompts)
+  const devMode         = useStore((s) => s.devMode)
+  const setDevMode      = useStore((s) => s.setDevMode)
 
   // Filter to MCP-originated prompts for the badge count
   const mcpPrompts = prompts.filter((p) => p.isMcp)
@@ -39,6 +41,13 @@ export default function TitleBar() {
           >
             pokemon-agent
           </a>
+          <button
+            className={`${styles.devToggle} ${devMode ? styles.devActive : ''}`}
+            title={devMode ? 'Modo DEV: muestra consola al ejecutar' : 'Modo POKÉDEX: muestra Dexter al ejecutar'}
+            onClick={() => setDevMode(!devMode)}
+          >
+            {devMode ? 'DEV' : 'POKé'}
+          </button>
           <button
             className={styles.helpBtn}
             title="¿Cómo usar?"

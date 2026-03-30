@@ -55,7 +55,6 @@ from strands.tools.mcp import MCPClient
 from strands.vended_plugins.skills import AgentSkills, Skill
 
 from backend.providers import build_litellm_router
-from backend.tools import get_pokedex_entry
 
 MCP_SERVER_URL = os.environ.get(
     "MCP_SERVER_URL",
@@ -211,7 +210,7 @@ def create_agent(model: LiteLLMModel, tools: list, hooks: list | None = None) ->
 
     return Agent(
         model=model,
-        tools=[*tools, get_pokedex_entry],
+        tools=tools,
         system_prompt=SYSTEM_PROMPT,
         callback_handler=None,
         hooks=hooks or [],

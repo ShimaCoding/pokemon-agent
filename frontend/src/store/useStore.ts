@@ -10,6 +10,10 @@ interface AppState {
   setApiKey: (key: string) => void
   clearApiKey: () => void
 
+  // Dev mode toggle (persisted): true=consola, false=pokedex/dexter
+  devMode: boolean
+  setDevMode: (v: boolean) => void
+
   // Settings modal
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
@@ -80,6 +84,10 @@ const useStore = create<AppState>()(
       setApiKey: (key) => set({ apiKey: key }),
       clearApiKey: () => set({ apiKey: '' }),
 
+      // Dev mode
+      devMode: false,
+      setDevMode: (v) => set({ devMode: v }),
+
       // Settings modal
       settingsOpen: false,
       setSettingsOpen: (open) => set({ settingsOpen: open }),
@@ -133,9 +141,9 @@ const useStore = create<AppState>()(
       inFlight: false,
       setInFlight: (v) => set({ inFlight: v }),
 
-      // Session reset
+      // Session reset (tab navigation handled by useAgentStream based on devMode)
       resetSession: () =>
-        set({ agentResponse: '', traceLogs: [], activeTab: 'consola' }),
+        set({ agentResponse: '', traceLogs: [] }),
 
       // Pre-query (mobile)
       preQuery: true,
@@ -143,8 +151,8 @@ const useStore = create<AppState>()(
     }),
     {
       name: 'mcpokedex-storage',
-      // Persist API key and intro dismissed flag
-      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed }),
+      // Persist API key, intro dismissed flag, and dev mode
+      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, devMode: state.devMode }),
     }
   )
 )

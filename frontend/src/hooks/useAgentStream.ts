@@ -83,6 +83,7 @@ export function useAgentStream() {
   const setPokemonData  = useStore((s) => s.setPokemonData)
   const setPreQuery     = useStore((s) => s.setPreQuery)
   const setActiveTab    = useStore((s) => s.setActiveTab)
+  const devMode         = useStore((s) => s.devMode)
 
   const runQuery = useCallback(
     async (query: string) => {
@@ -91,6 +92,7 @@ export function useAgentStream() {
       setInFlight(true)
       setPreQuery(false)
       resetSession()
+      setActiveTab(devMode ? 'consola' : 'dexter')
 
       const pokemonFromQuery = extractPokemonName(query)
 
@@ -193,7 +195,7 @@ export function useAgentStream() {
                 appendText(delta)
                 if (!textStarted) {
                   textStarted = true
-                  setActiveTab('dexter')
+                  if (devMode) setActiveTab('dexter')
                 }
                 break
               }
@@ -238,6 +240,8 @@ export function useAgentStream() {
       appendTraceLog,
       setPokemonData,
       setPreQuery,
+      devMode,
+      setActiveTab,
     ]
   )
 
