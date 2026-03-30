@@ -90,8 +90,19 @@
   text-align: center;
 }
 
-/* ── Mobile: full-width constrained dropdown ── */
+/* ── Mobile ── */
 @media (max-width: 640px) {
+  .wrapper {
+    flex: 1;
+  }
+
+  .badge {
+    width: 100%;
+    text-align: center;
+    padding: 5px 4px;
+    font-size: 11px;
+  }
+
   .dropdown {
     min-width: unset;
     max-width: calc(100vw - 16px);

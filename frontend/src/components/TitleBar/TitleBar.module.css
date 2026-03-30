@@ -146,4 +146,13 @@
   .settingsBtn {
     margin-left: auto;
   }
+
+  .bottomRow {
+    justify-content: stretch;
+  }
+
+  .mcpBadges {
+    width: 100%;
+    gap: 4px;
+  }
 }
