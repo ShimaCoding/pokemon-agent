@@ -67,21 +67,26 @@ def get_available_providers() -> list[dict]:
     return sorted(available, key=lambda p: p["order"])
 
 
-def _build_router_model_list(providers: list[dict]) -> list[dict]:
+def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[str]]:
     """
-    Expand providers into LiteLLM Router deployment entries, all aliased to
-    "agent-model" so the Strands agent never needs provider-aware logic.
+    Expand providers into LiteLLM Router deployment entries.
 
-    Providers with a single model_id produce one entry; providers with model_ids
-    produce one entry per model. OpenRouter deployments inject the HTTP-Referer
-    and X-Title headers required by OpenRouter's routing layer — LiteLLM strips
-    unknown top-level keys, so the headers must live inside litellm_params.
+    Each provider gets its own model group name (e.g. "groq-models") so that
+    LiteLLM Router's ``fallbacks`` parameter can trigger cross-provider failover.
+    All models within a provider share that provider's group name so the Router
+    can load-balance across them before giving up and moving to the next group.
+
+    Returns:
+        (model_list, group_names) — group_names preserves provider order.
     """
     site_url = os.environ.get("OR_SITE_URL", "")
     app_name = os.environ.get("OR_APP_NAME", "pokemon-agent")
 
     model_list: list[dict] = []
+    group_names: list[str] = []
     for p in providers:
+        group_name = f"{p['name']}-models"
+        group_names.append(group_name)
         model_ids: list[str] = p.get("model_ids") or [p["model_id"]]
         for model_id in model_ids:
             litellm_params: dict = {
@@ -94,20 +99,27 @@ def _build_router_model_list(providers: list[dict]) -> list[dict]:
                     extra_headers["HTTP-Referer"] = site_url
                 litellm_params["extra_headers"] = extra_headers
             model_list.append(
-                {"model_name": "agent-model", "litellm_params": litellm_params}
+                {"model_name": group_name, "litellm_params": litellm_params}
             )
-    return model_list
+    return model_list, group_names
 
 
 def build_litellm_router(provider_name: Optional[str] = None):
     """
     Build and return a LiteLLM Router.
 
-    If provider_name is given and available, returns a single-provider Router (no fallback).
-    If provider_name is None or unavailable, returns a Router with all available providers.
+    If provider_name is given and available, returns a single-provider Router
+    (no cross-provider fallback) with model group name ``"agent-model"``.
 
-    All entries use the shared model_name alias "agent-model" so LiteLLMModel can use
-    model_id="agent-model" regardless of which providers are active.
+    If provider_name is None or unavailable, returns a Router with all available
+    providers using per-provider model group names and explicit ``fallbacks`` so
+    that when one provider exhausts its retries the Router automatically moves to
+    the next provider instead of raising.
+
+    Returns:
+        (Router, primary_model_group, provider_label)
+        primary_model_group is the model group name the caller must pass to
+        router.acompletion() / router.completion().
 
     Raises RuntimeError if no providers are configured.
     """
@@ -124,7 +136,10 @@ def build_litellm_router(provider_name: Optional[str] = None):
     if provider_name and provider_name in PROVIDERS:
         pinned = next((p for p in available if p["name"] == provider_name), None)
         if pinned:
-            model_list = _build_router_model_list([pinned])
+            model_list, _ = _build_router_model_list([pinned])
+            # Rename the single group to the generic alias so callers are uniform
+            for entry in model_list:
+                entry["model_name"] = "agent-model"
             router = Router(
                 model_list=model_list,
                 num_retries=3,
@@ -133,12 +148,18 @@ def build_litellm_router(provider_name: Optional[str] = None):
                 cooldown_time=3600,
                 routing_strategy="least-busy",
             )
-            return router, pinned["label"]
+            return router, "agent-model", pinned["label"]
 
-    # Full router with all available providers and automatic fallback
-    model_list = _build_router_model_list(available)
+    # Full router with all available providers and explicit cross-provider fallbacks.
+    # Each provider gets its own model group; the first group is the primary target
+    # and the rest are listed as fallbacks so LiteLLM Router actually switches
+    # providers once the primary group exhausts its retries.
+    model_list, group_names = _build_router_model_list(available)
+    primary = group_names[0]
+    fallbacks = [{primary: group_names[1:]}] if len(group_names) > 1 else []
     router = Router(
         model_list=model_list,
+        fallbacks=fallbacks,
         num_retries=3,
         retry_after=2,
         allowed_fails=1,
@@ -146,4 +167,4 @@ def build_litellm_router(provider_name: Optional[str] = None):
         routing_strategy="least-busy",
     )
     primary_label = available[0]["label"]
-    return router, f"{primary_label} (auto-fallback)"
+    return router, primary, f"{primary_label} (auto-fallback)"

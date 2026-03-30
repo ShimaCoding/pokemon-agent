@@ -95,7 +95,7 @@ def build_agent(provider_name: Optional[str] = None):
     Returns:
         (LiteLLMModel, MCPClient, str) — model, mcp client, active provider label
     """
-    router, provider_label = build_litellm_router(provider_name)
+    router, primary_model_group, provider_label = build_litellm_router(provider_name)
 
     # Per-build counter so each LLM call in a request gets a sequential index.
     _llm_call_counter: list[int] = [0]
@@ -140,6 +140,10 @@ def build_agent(provider_name: Optional[str] = None):
                 "call_index": _llm_call_counter[0],
                 "messages": _truncate_messages(list(kwargs.get("messages", []))),
             })
+        # Translate the generic alias to the primary provider's model group so
+        # LiteLLM Router can apply cross-provider fallbacks correctly.
+        if kwargs.get("model") == "agent-model":
+            kwargs = {**kwargs, "model": primary_model_group}
         token = _in_router_call.set(True)
         try:
             return router.completion(*args, **kwargs)
@@ -173,6 +177,10 @@ def build_agent(provider_name: Optional[str] = None):
                 "call_index": _llm_call_counter[0],
                 "messages": _truncate_messages(list(kwargs.get("messages", []))),
             })
+        # Translate the generic alias to the primary provider's model group so
+        # LiteLLM Router can apply cross-provider fallbacks correctly.
+        if kwargs.get("model") == "agent-model":
+            kwargs = {**kwargs, "model": primary_model_group}
         token = _in_router_call.set(True)
         try:
             return await router.acompletion(*args, **kwargs)
