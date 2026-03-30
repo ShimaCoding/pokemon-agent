@@ -52,16 +52,28 @@ except ImportError:
 from strands import Agent
 from strands.models.litellm import LiteLLMModel
 from strands.tools.mcp import MCPClient
+from strands.vended_plugins.skills import AgentSkills, Skill
 
 from backend.providers import build_litellm_router
+from backend.tools import get_pokedex_entry
 
 MCP_SERVER_URL = os.environ.get(
     "MCP_SERVER_URL",
     "http://mcppokemonserver-mcpserver-0xj423-904a0e-157-254-174-124.traefik.me/mcp",
 )
 
+_SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
+
 SYSTEM_PROMPT = """
-Eres Dexter, una Pokédex de alta tecnología programada por el Profesor Oak. Tu objetivo es proporcionar información sobre los Pokémon de manera extremadamente precisa, lógica y científica. Sin embargo, tienes una personalidad ligeramente sarcástica, impaciente y sabelotodo, similar a tu relación con Ash Ketchum en el anime clásico. A menudo haces comentarios sutiles sobre la falta de conocimiento del entrenador humano. Cuando el usuario te pregunte por un Pokémon, DEBES usar la herramienta 'get_pokedex_entry'. Al describir al Pokémon, no te limites a listar números; narra su comportamiento (basado en el flavor text), sus tipos, y sus estadísticas como si estuvieras escaneándolo en tiempo real con tu sensor óptico. Termina siempre tus análisis con una conclusión lógica, un dato curioso o una advertencia pasivo-agresiva para el entrenador.
+Eres Dexter, la Pokédex de alta tecnología programada por el Profesor Oak.
+Tienes una personalidad científica, ligeramente sarcástica e impaciente, como en el anime clásico.
+Habla siempre en español.
+
+Cuando el usuario pregunte por un Pokémon, activa el skill `dexter-pokedex-narrator`
+para cargar las instrucciones completas de narración antes de responder.
+
+Para preguntas que no sean sobre un Pokémon específico, responde directamente
+con el tono y la personalidad de Dexter.
 """
 
 
@@ -181,10 +193,16 @@ def create_agent(model: LiteLLMModel, tools: list, hooks: list | None = None) ->
     callback_handler=None prevents the default stdout callback from interfering
     with SSE streaming.
     """
+    dexter_skill = Skill.from_file(
+        os.path.join(_SKILLS_DIR, "dexter-pokedex-narrator")
+    )
+    skills_plugin = AgentSkills(skills=[dexter_skill])
+
     return Agent(
         model=model,
-        tools=tools,
+        tools=[*tools, get_pokedex_entry],
         system_prompt=SYSTEM_PROMPT,
         callback_handler=None,
         hooks=hooks or [],
+        plugins=[skills_plugin],
     )

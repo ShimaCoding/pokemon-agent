@@ -427,13 +427,21 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
             if result_text is None:
                 continue
             emitted_results.add(idx)
-            logger.info("[TOOL] Resultado de %s: %.120s%s", tool_names.get(idx, "unknown"), result_text, "…" if len(result_text) > 120 else "")
+            t_name = tool_names.get(idx, "unknown")
+            logger.info("[TOOL] Resultado de %s: %.120s%s", t_name, result_text, "…" if len(result_text) > 120 else "")
+            # Skill instructions are internal scaffolding — show a brief summary
+            # instead of the full SKILL.md text in the trace panel.
+            display_result = (
+                f"[Skill activado: instrucciones de narración cargadas ({len(result_text)} chars)]"
+                if t_name == "skills"
+                else result_text
+            )
             yield _sse(
                 {
                     "type": "tool_result",
                     "index": idx,
-                    "tool": tool_names.get(idx, "unknown"),
-                    "result": result_text,
+                    "tool": t_name,
+                    "result": display_result,
                     "timestamp_ms": elapsed_ms(),
                 }
             )
