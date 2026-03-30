@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: '../backend/static',
-    emptyOutDir: true,
+    emptyOutDir: false,
   },
   server: {
     proxy: {
