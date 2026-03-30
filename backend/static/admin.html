@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCPokedex Agent Admin</title>
+  <!-- Golden Game Boy favicon for admin -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' shape-rendering='crispEdges'%3E%3Crect x='10' y='2' width='44' height='58' rx='7' fill='%23B8860B'/%3E%3Crect x='10' y='2' width='18' height='58' rx='7' fill='%23FFD700' opacity='0.25'/%3E%3Crect x='13' y='6' width='38' height='24' rx='3' fill='%231A1A30'/%3E%3Ccircle cx='26' cy='18' r='9' fill='%231A6FAA'/%3E%3Ccircle cx='26' cy='18' r='9' fill='%232288CC' opacity='0.8'/%3E%3Cellipse cx='22.5' cy='14' rx='3.5' ry='2.5' fill='white' opacity='0.55'/%3E%3Cpolygon points='39,9 43,13 39,17 35,13' fill='%23FFD700'/%3E%3Cpolygon points='45,9 49,13 45,17 41,13' fill='%23FFD700'/%3E%3Cpolygon points='42,16 46,20 42,24 38,20' fill='%23FFD700'/%3E%3Crect x='16' y='35' width='14' height='5' rx='1.5' fill='%231A1A1A'/%3E%3Crect x='20' y='31' width='5' height='13' rx='1.5' fill='%231A1A1A'/%3E%3Cellipse cx='42' cy='38' rx='4' ry='2.8' fill='%23FFD700'/%3E%3Cellipse cx='51' cy='38' rx='4' ry='2.8' fill='%23FFD700'/%3E%3Crect x='23' y='47' width='6' height='2.5' rx='1' fill='%23B8860B'/%3E%3Crect x='33' y='47' width='6' height='2.5' rx='1' fill='%23B8860B'/%3E%3Ccircle cx='40' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='44' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='48' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='52' cy='53' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='40' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='44' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='48' cy='57' r='1.2' fill='%23B8860B'/%3E%3Ccircle cx='52' cy='57' r='1.2' fill='%23B8860B'/%3E%3C/svg%3E" />
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
+    button { cursor: pointer; background: transparent; font: inherit; }
+    input  { font: inherit; }
+    table  { border-collapse: collapse; }
+
+    /* ── Tailwind-compatible utilities (only what this page uses) ── */
+    .hidden   { display: none !important; }
+    .flex     { display: flex; }
+    .grid     { display: grid; }
+    .block    { display: block; }
+
+    .fixed    { position: fixed; }
+    .inset-0  { inset: 0; }
+    .z-40     { z-index: 40; }
+    .z-50     { z-index: 50; }
+
+    .items-center    { align-items: center; }
+    .justify-center  { justify-content: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-3           { gap: 0.75rem; }
+    .flex-col        { flex-direction: column; }
+
+    .grid-cols-2  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .col-span-2   { grid-column: span 2; }
+    @media (min-width: 768px)  { .md\:grid-cols-3  { grid-template-columns: repeat(3, minmax(0, 1fr)); } .md\:col-span-1 { grid-column: span 1; } }
+    @media (min-width: 1024px) { .lg\:grid-cols-6  { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+    .w-full  { width: 100%; }
+    .w-80    { width: 20rem; }
+    .w-64    { width: 16rem; }
+    .max-w-7xl  { max-width: 80rem; }
+    .max-w-2xl  { max-width: 42rem; }
+    .max-w-xs   { max-width: 20rem; }
+    .max-h-\[80vh\] { max-height: 80vh; }
+    .min-h-screen   { min-height: 100vh; }
+
+    .overflow-hidden  { overflow: hidden; }
+    .overflow-y-auto  { overflow-y: auto; }
+    .text-ellipsis    { text-overflow: ellipsis; }
+
+    .mx-auto  { margin-left: auto; margin-right: auto; }
+    .mb-1  { margin-bottom: 0.25rem; }
+    .mb-2  { margin-bottom: 0.5rem; }
+    .mb-3  { margin-bottom: 0.75rem; }
+    .mb-4  { margin-bottom: 1rem; }
+    .mb-5  { margin-bottom: 1.25rem; }
+    .mb-6  { margin-bottom: 1.5rem; }
+    .mt-4  { margin-top: 1rem; }
+
+    .p-4   { padding: 1rem; }
+    .p-6   { padding: 1.5rem; }
+    .p-8   { padding: 2rem; }
+    .px-3  { padding-left: 0.75rem; padding-right: 0.75rem; }
+    .px-4  { padding-left: 1rem;    padding-right: 1rem; }
+    .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+    .py-2    { padding-top: 0.5rem;   padding-bottom: 0.5rem; }
+    .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
+    .py-3    { padding-top: 0.75rem;  padding-bottom: 0.75rem; }
+    .py-6    { padding-top: 1.5rem;   padding-bottom: 1.5rem; }
+    .py-8    { padding-top: 2rem;     padding-bottom: 2rem; }
+
+    .text-xs  { font-size: 0.75rem;  line-height: 1rem; }
+    .text-sm  { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-lg  { font-size: 1.125rem; line-height: 1.75rem; }
+    .text-2xl { font-size: 1.5rem;   line-height: 2rem; }
+    .font-medium { font-weight: 500; }
+    .font-bold   { font-weight: 700; }
+    .leading-tight { line-height: 1.25; }
+    .leading-none  { line-height: 1; }
+    .text-left   { text-align: left; }
+    .text-right  { text-align: right; }
+    .text-center { text-align: center; }
+    .whitespace-nowrap  { white-space: nowrap; }
+    .whitespace-pre-wrap { white-space: pre-wrap; }
+    .break-words { overflow-wrap: break-word; word-break: break-word; }
+    .truncate    { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .text-white   { color: #fff; }
+    .text-gray-200 { color: #e5e7eb; }
+    .text-gray-300 { color: #d1d5db; }
+    .text-gray-400 { color: #9ca3af; }
+    .text-gray-500 { color: #6b7280; }
+    .text-gray-600 { color: #4b5563; }
+    .text-green-400  { color: #4ade80; }
+    .text-blue-400   { color: #60a5fa; }
+    .text-yellow-400 { color: #facc15; }
+    .text-red-400    { color: #f87171; }
+    .text-red-500    { color: #ef4444; }
+
+    .bg-gray-950 { background-color: #030712; }
+    .bg-gray-900 { background-color: #111827; }
+    .bg-gray-800 { background-color: #1f2937; }
+    .bg-blue-600 { background-color: #2563eb; }
+    .bg-black\/70   { background-color: rgb(0 0 0 / 0.7); }
+    .bg-gray-800\/30 { background-color: rgb(31 41 55 / 0.3); }
+
+    .border   { border-width: 1px; border-style: solid; }
+    .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
+    .border-gray-600 { border-color: #4b5563; }
+    .border-gray-700 { border-color: #374151; }
+    .border-gray-800 { border-color: #1f2937; }
+    .border-gray-800\/50 { border-color: rgb(31 41 55 / 0.5); }
+    .border-blue-500  { border-color: #3b82f6; }
+    .border-green-600 { border-color: #16a34a; }
+
+    .rounded-lg { border-radius: 0.5rem; }
+    .rounded-xl { border-radius: 0.75rem; }
+
+    .transition { transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease; }
+    .cursor-pointer { cursor: pointer; }
+
+    .space-y-0\.5 > * + * { margin-top: 0.125rem; }
+
+    .hover\:bg-blue-500:hover      { background-color: #3b82f6; }
+    .hover\:border-gray-500:hover  { border-color: #6b7280; }
+    .hover\:text-white:hover       { color: #fff; }
+    .hover\:bg-gray-800\/30:hover  { background-color: rgb(31 41 55 / 0.3); }
+    .focus\:outline-none:focus     { outline: none; }
+    .focus\:border-blue-500:focus  { border-color: #3b82f6; }
+    .disabled\:opacity-30:disabled { opacity: 0.3; }
+
+    ::placeholder { color: #6b7280; }
+
+    /* ── Custom ── */
+    .truncate-query { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-done  { color: #4ade80; }
+    .status-error { color: #f87171; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-200 min-h-screen">
+
+<!-- Auth overlay -->
+<div id="authOverlay" class="hidden fixed inset-0 bg-gray-950 z-50 flex items-center justify-center">
+  <div class="bg-gray-900 border border-gray-700 rounded-xl p-8 w-80">
+    <h2 class="text-lg font-bold text-white mb-1">Admin Panel</h2>
+    <p class="text-gray-400 text-sm mb-5">Ingresa la contraseña de admin</p>
+    <input id="pwInput" type="password" placeholder="Contraseña"
+      class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 mb-3" />
+    <div id="authError" class="text-red-400 text-xs mb-3 hidden">Contraseña incorrecta</div>
+    <button onclick="submitPassword()"
+      class="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-lg py-2 text-sm font-medium transition">
+      Entrar
+    </button>
+  </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges" width="36" height="36">
+        <rect x="10" y="2" width="44" height="58" rx="7" fill="#B8860B"/>
+        <rect x="10" y="2" width="18" height="58" rx="7" fill="#FFD700" opacity="0.25"/>
+        <rect x="13" y="6" width="38" height="24" rx="3" fill="#1A1A30"/>
+        <circle cx="26" cy="18" r="9" fill="#1A6FAA"/>
+        <circle cx="26" cy="18" r="9" fill="#2288CC" opacity="0.8"/>
+        <ellipse cx="22.5" cy="14" rx="3.5" ry="2.5" fill="white" opacity="0.55"/>
+        <polygon points="39,9 43,13 39,17 35,13" fill="#FFD700"/>
+        <polygon points="45,9 49,13 45,17 41,13" fill="#FFD700"/>
+        <polygon points="42,16 46,20 42,24 38,20" fill="#FFD700"/>
+        <rect x="16" y="35" width="14" height="5" rx="1.5" fill="#1A1A1A"/>
+        <rect x="20" y="31" width="5" height="13" rx="1.5" fill="#1A1A1A"/>
+        <ellipse cx="42" cy="38" rx="4" ry="2.8" fill="#FFD700"/>
+        <ellipse cx="51" cy="38" rx="4" ry="2.8" fill="#FFD700"/>
+        <rect x="23" y="47" width="6" height="2.5" rx="1" fill="#B8860B"/>
+        <rect x="33" y="47" width="6" height="2.5" rx="1" fill="#B8860B"/>
+        <circle cx="40" cy="53" r="1.2" fill="#B8860B"/>
+        <circle cx="44" cy="53" r="1.2" fill="#B8860B"/>
+        <circle cx="48" cy="53" r="1.2" fill="#B8860B"/>
+        <circle cx="52" cy="53" r="1.2" fill="#B8860B"/>
+        <circle cx="40" cy="57" r="1.2" fill="#B8860B"/>
+        <circle cx="44" cy="57" r="1.2" fill="#B8860B"/>
+        <circle cx="48" cy="57" r="1.2" fill="#B8860B"/>
+        <circle cx="52" cy="57" r="1.2" fill="#B8860B"/>
+      </svg>
+      <div>
+        <h1 class="text-lg font-bold text-white leading-tight">MCPokedex Agent Admin</h1>
+        <p class="text-xs text-gray-500">Panel de administración</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="autoRefreshLabel" class="text-xs text-gray-500"></span>
+      <button onclick="toggleAutoRefresh()"
+        id="autoRefreshBtn"
+        class="text-xs px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500 transition text-gray-300">
+        Auto-refresh: OFF
+      </button>
+      <button onclick="load()"
+        class="text-xs px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition">
+        Actualizar
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" id="statsGrid">
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800 col-span-2 md:col-span-1">
+      <p class="text-xs text-gray-500 mb-1">Total consultas</p>
+      <p class="text-2xl font-bold text-white" id="statTotal">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Hoy</p>
+      <p class="text-2xl font-bold text-green-400" id="statToday">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Avg tokens</p>
+      <p class="text-2xl font-bold text-blue-400" id="statTokens">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Avg latencia</p>
+      <p class="text-2xl font-bold text-yellow-400" id="statLatency">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Errores</p>
+      <p class="text-2xl font-bold text-red-400" id="statErrors">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-2">Tools más usadas</p>
+      <div id="statTools" class="text-xs text-gray-300 space-y-0.5">—</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-3 mb-4">
+    <input id="searchInput" type="text" placeholder="Buscar en consultas…"
+      class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 w-64"
+      oninput="onSearch()" />
+    <span class="text-xs text-gray-500" id="totalLabel"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="border-b border-gray-800 text-gray-500 text-left">
+          <th class="px-4 py-3 font-medium">Timestamp</th>
+          <th class="px-4 py-3 font-medium">Consulta</th>
+          <th class="px-4 py-3 font-medium">Provider</th>
+          <th class="px-4 py-3 font-medium">Modelos</th>
+          <th class="px-4 py-3 font-medium text-right">Tokens</th>
+          <th class="px-4 py-3 font-medium text-right">ms</th>
+          <th class="px-4 py-3 font-medium">Tools</th>
+          <th class="px-4 py-3 font-medium">Estado</th>
+        </tr>
+      </thead>
+      <tbody id="queryTable">
+        <tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="flex items-center justify-between mt-4" id="pagination">
+    <button onclick="goPage(currentPage - 1)"
+      id="prevBtn"
+      class="text-xs px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500 text-gray-300 transition disabled:opacity-30">
+      ← Anterior
+    </button>
+    <span class="text-xs text-gray-500" id="pageInfo"></span>
+    <button onclick="goPage(currentPage + 1)"
+      id="nextBtn"
+      class="text-xs px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500 text-gray-300 transition disabled:opacity-30">
+      Siguiente →
+    </button>
+  </div>
+
+  <!-- Query detail modal -->
+  <div id="detailModal" class="hidden fixed inset-0 bg-black/70 z-40 flex items-center justify-center p-4" onclick="closeDetail(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-bold text-white">Detalle de consulta</h3>
+        <button onclick="closeDetail()" class="text-gray-500 hover:text-white text-lg leading-none">×</button>
+      </div>
+      <pre id="detailContent" class="text-xs text-gray-300 whitespace-pre-wrap break-words bg-gray-950 rounded-lg p-4"></pre>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentPage = 1;
+  let totalPages = 1;
+  let apiKey = sessionStorage.getItem('adminApiKey') || '';
+  let searchTimeout = null;
+  let autoRefreshTimer = null;
+  let autoRefreshOn = false;
+
+  // --- Auth ---
+  function headers() {
+    const h = { 'Content-Type': 'application/json' };
+    if (apiKey) h['X-API-Key'] = apiKey;
+    return h;
+  }
+
+  async function checkAuth() {
+    const res = await fetch('/admin/api/stats', { headers: headers() });
+    if (res.status === 401) {
+      document.getElementById('authOverlay').classList.remove('hidden');
+      return false;
+    }
+    return true;
+  }
+
+  async function submitPassword() {
+    const pw = document.getElementById('pwInput').value;
+    apiKey = pw;
+    const res = await fetch('/admin/api/stats', { headers: headers() });
+    if (res.status === 401) {
+      document.getElementById('authError').classList.remove('hidden');
+      apiKey = '';
+    } else {
+      sessionStorage.setItem('adminApiKey', pw);
+      document.getElementById('authOverlay').classList.add('hidden');
+      load();
+    }
+  }
+
+  document.getElementById('pwInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitPassword();
+  });
+
+  // --- Auto refresh ---
+  function toggleAutoRefresh() {
+    autoRefreshOn = !autoRefreshOn;
+    const btn = document.getElementById('autoRefreshBtn');
+    if (autoRefreshOn) {
+      btn.textContent = 'Auto-refresh: 30s';
+      btn.classList.add('border-green-600', 'text-green-400');
+      btn.classList.remove('border-gray-700', 'text-gray-300');
+      autoRefreshTimer = setInterval(load, 30000);
+    } else {
+      btn.textContent = 'Auto-refresh: OFF';
+      btn.classList.remove('border-green-600', 'text-green-400');
+      btn.classList.add('border-gray-700', 'text-gray-300');
+      clearInterval(autoRefreshTimer);
+    }
+  }
+
+  // --- Search ---
+  function onSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => { currentPage = 1; loadQueries(); }, 350);
+  }
+
+  // --- Load ---
+  async function load() {
+    await loadStats();
+    await loadQueries();
+  }
+
+  async function loadStats() {
+    try {
+      const res = await fetch('/admin/api/stats', { headers: headers() });
+      if (res.status === 401) { document.getElementById('authOverlay').classList.remove('hidden'); return; }
+      const d = await res.json();
+      document.getElementById('statTotal').textContent = d.total_queries.toLocaleString();
+      document.getElementById('statToday').textContent = d.today_queries.toLocaleString();
+      document.getElementById('statTokens').textContent = d.avg_tokens.toLocaleString();
+      document.getElementById('statLatency').textContent = d.avg_elapsed_ms > 0
+        ? (d.avg_elapsed_ms / 1000).toFixed(1) + 's' : '—';
+      document.getElementById('statErrors').textContent = d.error_count.toLocaleString();
+      document.getElementById('statTools').innerHTML = d.top_tools.length
+        ? d.top_tools.map(t => `<div class="flex justify-between"><span class="text-gray-400">${t.name}</span><span class="text-white font-medium">${t.count}</span></div>`).join('')
+        : '<span class="text-gray-600">Sin datos</span>';
+    } catch (e) {
+      console.error('Stats error', e);
+    }
+  }
+
+  async function loadQueries() {
+    const search = document.getElementById('searchInput').value;
+    const url = `/admin/api/queries?page=${currentPage}&limit=50${search ? '&search=' + encodeURIComponent(search) : ''}`;
+    try {
+      const res = await fetch(url, { headers: headers() });
+      if (res.status === 401) { document.getElementById('authOverlay').classList.remove('hidden'); return; }
+      const d = await res.json();
+      totalPages = d.pages;
+      renderTable(d.items);
+      document.getElementById('totalLabel').textContent = `${d.total.toLocaleString()} consultas`;
+      document.getElementById('pageInfo').textContent = `Página ${d.page} de ${d.pages}`;
+      document.getElementById('prevBtn').disabled = d.page <= 1;
+      document.getElementById('nextBtn').disabled = d.page >= d.pages;
+    } catch (e) {
+      document.getElementById('queryTable').innerHTML =
+        '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Error al cargar</td></tr>';
+    }
+  }
+
+  function renderTable(items) {
+    if (!items.length) {
+      document.getElementById('queryTable').innerHTML =
+        '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-600">Sin consultas registradas</td></tr>';
+      return;
+    }
+    document.getElementById('queryTable').innerHTML = items.map(row => {
+      const ts = new Date(row.timestamp).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'medium' });
+      const models = (row.models_tried || []).map(m => shortModel(m)).join(', ') || '—';
+      const tools = (row.tool_names || []).join(', ') || '—';
+      const statusCls = row.status === 'done' ? 'status-done' : 'status-error';
+      const statusLabel = row.status === 'done' ? '✓ ok' : '✗ error';
+      return `<tr class="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer transition"
+                  onclick='showDetail(${JSON.stringify(JSON.stringify(row))})'>
+        <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">${ts}</td>
+        <td class="px-4 py-2.5"><span class="truncate-query block text-gray-200" title="${escHtml(row.query)}">${escHtml(row.query)}</span></td>
+        <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${providerCell(row.provider)}</td>
+        <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">${escHtml(models)}</td>
+        <td class="px-4 py-2.5 text-right text-blue-400 whitespace-nowrap">${row.total_tokens ? row.total_tokens.toLocaleString() : '—'}</td>
+        <td class="px-4 py-2.5 text-right text-yellow-400 whitespace-nowrap">${row.elapsed_ms ? (row.elapsed_ms / 1000).toFixed(1) + 's' : '—'}</td>
+        <td class="px-4 py-2.5 text-gray-500 max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">${escHtml(tools)}</td>
+        <td class="px-4 py-2.5 ${statusCls} whitespace-nowrap font-medium">${statusLabel}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function providerCell(provider) {
+    const urls = {
+      groq: 'https://console.groq.com/dashboard/usage',
+      gemini: 'https://aistudio.google.com/usage?timeRange=last-1-day',
+      openrouter: 'https://openrouter.ai/logs',
+    };
+    if (!provider) return '—';
+    const key = provider.toLowerCase();
+    const url = Object.keys(urls).find(k => key.includes(k));
+    if (!url) return escHtml(provider);
+    return `<a href="${urls[url]}" target="_blank" rel="noopener noreferrer"
+      class="text-gray-400 hover:text-blue-400 underline underline-offset-2 transition"
+      onclick="event.stopPropagation()">${escHtml(provider)}</a>`;
+  }
+
+  function shortModel(m) {
+    if (!m) return '';
+    const parts = m.split('/');
+    return parts[parts.length - 1];
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function goPage(p) {
+    if (p < 1 || p > totalPages) return;
+    currentPage = p;
+    loadQueries();
+  }
+
+  // --- Detail modal ---
+  function showDetail(jsonStr) {
+    const row = JSON.parse(jsonStr);
+    document.getElementById('detailContent').textContent = JSON.stringify(row, null, 2);
+    document.getElementById('detailModal').classList.remove('hidden');
+  }
+
+  function closeDetail(event) {
+    if (!event || event.target === document.getElementById('detailModal')) {
+      document.getElementById('detailModal').classList.add('hidden');
+    }
+  }
+
+  // --- Init ---
+  (async () => {
+    const ok = await checkAuth();
+    if (ok) load();
+  })();
+</script>
+</body>
+</html>
