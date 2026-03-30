@@ -84,6 +84,19 @@ export default function IntroModal() {
             </ol>
           </div>
 
+          {/* Examples */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>PRUEBA ESTOS EJEMPLOS</div>
+            <div className={styles.exampleList}>
+              {EXAMPLES.map((ex) => (
+                <button key={ex} className={styles.exampleBtn} onClick={() => handleExample(ex)}>
+                  <span className={styles.exampleArrow}>&gt;</span>
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Mode toggle */}
           <div className={styles.section}>
             <div className={styles.sectionTitle}>MODOS DE VISTA</div>
@@ -132,19 +145,6 @@ export default function IntroModal() {
             </div>
             <div className={styles.toolsHint}>
               Puedes ver los recursos reales del servidor en los badges de la barra superior
-            </div>
-          </div>
-
-          {/* Examples */}
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>PRUEBA ESTOS EJEMPLOS</div>
-            <div className={styles.exampleList}>
-              {EXAMPLES.map((ex) => (
-                <button key={ex} className={styles.exampleBtn} onClick={() => handleExample(ex)}>
-                  <span className={styles.exampleArrow}>&gt;</span>
-                  {ex}
-                </button>
-              ))}
             </div>
           </div>
 
