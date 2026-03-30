@@ -283,7 +283,15 @@
         <h3 class="text-sm font-bold text-white">Detalle de consulta</h3>
         <button onclick="closeDetail()" class="text-gray-500 hover:text-white text-lg leading-none">×</button>
       </div>
-      <pre id="detailContent" class="text-xs text-gray-300 whitespace-pre-wrap break-words bg-gray-950 rounded-lg p-4"></pre>
+      <!-- JSON viewer -->
+      <div class="rounded-lg overflow-hidden border border-gray-800">
+        <div style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#1f2937;border-bottom:1px solid #374151;">
+          <button id="btnPretty" onclick="setDetailMode('pretty')" style="font-family:ui-monospace,monospace;font-size:0.7rem;background:none;border:none;cursor:pointer;padding:2px 4px;color:#e5e7eb;text-decoration:underline;">pretty</button>
+          <span style="color:#6b7280;font-size:0.7rem;user-select:none;">|</span>
+          <button id="btnRaw" onclick="setDetailMode('raw')" style="font-family:ui-monospace,monospace;font-size:0.7rem;background:none;border:none;cursor:pointer;padding:2px 4px;color:#6b7280;text-decoration:none;">raw</button>
+        </div>
+        <div id="detailContent" style="overflow-y:auto;max-height:55vh;padding:10px 14px;background:#030712;"></div>
+      </div>
     </div>
   </div>
 
@@ -456,10 +464,119 @@
   }
 
   // --- Detail modal ---
+  let _detailData = null;
+  let _detailMode = 'pretty';
+
   function showDetail(jsonStr) {
-    const row = JSON.parse(jsonStr);
-    document.getElementById('detailContent').textContent = JSON.stringify(row, null, 2);
+    _detailData = JSON.parse(jsonStr);
+    _detailMode = 'pretty';
+    _renderDetail();
     document.getElementById('detailModal').classList.remove('hidden');
+  }
+
+  function setDetailMode(mode) {
+    _detailMode = mode;
+    _renderDetail();
+  }
+
+  function _renderDetail() {
+    const content = document.getElementById('detailContent');
+    const btnPretty = document.getElementById('btnPretty');
+    const btnRaw = document.getElementById('btnRaw');
+    if (_detailMode === 'pretty') {
+      btnPretty.style.color = '#e5e7eb'; btnPretty.style.textDecoration = 'underline';
+      btnRaw.style.color = '#6b7280';    btnRaw.style.textDecoration = 'none';
+    } else {
+      btnRaw.style.color = '#e5e7eb';    btnRaw.style.textDecoration = 'underline';
+      btnPretty.style.color = '#6b7280'; btnPretty.style.textDecoration = 'none';
+    }
+    content.innerHTML = '';
+    if (_detailMode === 'raw') {
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'font-family:ui-monospace,monospace;font-size:0.72rem;white-space:pre-wrap;word-break:break-all;color:#d1d5db;line-height:1.8;margin:0;';
+      pre.textContent = JSON.stringify(_detailData, null, 2);
+      content.appendChild(pre);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'font-family:ui-monospace,monospace;font-size:0.72rem;line-height:2;color:#e5e7eb;';
+      wrap.appendChild(_jsonNode(_detailData, true));
+      content.appendChild(wrap);
+    }
+  }
+
+  function _jsonNode(value, isLast) {
+    const frag = document.createDocumentFragment();
+    const comma = !isLast ? _span(',', '#6b7280') : null;
+
+    if (value === null) {
+      frag.appendChild(_span('null', '#9ca3af')); if (comma) frag.appendChild(comma); return frag;
+    }
+    if (typeof value === 'boolean') {
+      frag.appendChild(_span(String(value), '#f59e0b')); if (comma) frag.appendChild(comma); return frag;
+    }
+    if (typeof value === 'number') {
+      frag.appendChild(_span(String(value), '#60a5fa')); if (comma) frag.appendChild(comma); return frag;
+    }
+    if (typeof value === 'string') {
+      frag.appendChild(_span(JSON.stringify(value), '#4ade80')); if (comma) frag.appendChild(comma); return frag;
+    }
+
+    const isArray = Array.isArray(value);
+    const entries = isArray ? value.map((v, i) => [String(i), v]) : Object.entries(value);
+    const open = isArray ? '[' : '{';
+    const close = isArray ? ']' : '}';
+
+    if (entries.length === 0) {
+      frag.appendChild(_span(open + close, '#e5e7eb')); if (comma) frag.appendChild(comma); return frag;
+    }
+
+    const container = document.createElement('span');
+    let collapsed = false;
+
+    const collapseBtn = document.createElement('button');
+    collapseBtn.textContent = '▾';
+    collapseBtn.style.cssText = 'font-family:ui-monospace,monospace;font-size:0.72rem;background:none;border:none;cursor:pointer;padding:0 4px;color:#6b7280;vertical-align:baseline;line-height:1;';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding-left:14px;border-left:1px solid #374151;margin-left:1px;';
+
+    const ellipsisBtn = document.createElement('button');
+    ellipsisBtn.style.cssText = 'display:none;font-family:ui-monospace,monospace;font-size:0.72rem;background:none;border:none;cursor:pointer;padding:0 4px;color:#6b7280;font-style:italic;vertical-align:baseline;';
+    ellipsisBtn.textContent = '▶ ' + entries.length;
+
+    function toggle() {
+      collapsed = !collapsed;
+      body.style.display = collapsed ? 'none' : 'block';
+      collapseBtn.style.display = collapsed ? 'none' : 'inline';
+      ellipsisBtn.style.display = collapsed ? 'inline' : 'none';
+    }
+    collapseBtn.onclick = ellipsisBtn.onclick = toggle;
+
+    entries.forEach(([k, v], i) => {
+      const line = document.createElement('div');
+      if (!isArray) {
+        line.appendChild(_span('"' + k + '"', '#93c5fd'));
+        line.appendChild(_span(': ', '#6b7280'));
+      }
+      line.appendChild(_jsonNode(v, i === entries.length - 1));
+      body.appendChild(line);
+    });
+
+    container.appendChild(_span(open, '#e5e7eb'));
+    container.appendChild(collapseBtn);
+    container.appendChild(ellipsisBtn);
+    container.appendChild(body);
+    container.appendChild(_span(close, '#e5e7eb'));
+    if (comma) container.appendChild(comma);
+    frag.appendChild(container);
+    return frag;
+  }
+
+  function _span(text, color) {
+    const s = document.createElement('span');
+    s.textContent = text;
+    if (color) s.style.color = color;
+    return s;
   }
 
   function closeDetail(event) {
