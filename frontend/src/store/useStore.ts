@@ -113,7 +113,7 @@ const useStore = create<AppState>()(
 
       // Session reset
       resetSession: () =>
-        set({ agentResponse: '', traceLogs: [], activeTab: 'dexter' }),
+        set({ agentResponse: '', traceLogs: [], activeTab: 'consola' }),
 
       // Pre-query (mobile)
       preQuery: true,

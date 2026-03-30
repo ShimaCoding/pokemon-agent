@@ -4,7 +4,10 @@
   border-bottom: 2px solid var(--gbc-border);
   padding: 0 10px;
   gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tabBar::-webkit-scrollbar { display: none; }
 
 .tabArrow {
   font-size: 12px;
