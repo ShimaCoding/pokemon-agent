@@ -20,15 +20,10 @@ if _litellm_version in ("1.82.7", "1.82.8"):
 PROVIDERS: dict[str, dict] = {
     "groq": {
         "model_ids": [
-            "groq/meta-llama/llama-4-scout-17b-16e-instruct",
-            "groq/qwen/qwen3-32b",
             "groq/llama-3.3-70b-versatile",
-            "groq/openai/gpt-oss-20b",
-            "groq/openai/gpt-oss-120b",
-            "groq/llama-3.1-8b-instant",
         ],
         "env_var": "GROQ_API_KEY",
-        "label": "Groq",
+        "label": "Groq (llama-3.3-70b-versatile)",
         "order": 1,
     },
     "gemini": {
