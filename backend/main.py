@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
     # Validate at startup that at least one provider is configured.
     # This will raise RuntimeError if all providers are missing.
     try:
-        _router, label = build_litellm_router()
+        _router, _primary_model, label = build_litellm_router()
         available = get_available_providers()
         logger.info(
             "Active LLM providers: %s",
