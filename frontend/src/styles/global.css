@@ -28,6 +28,10 @@
 /* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html {
+  zoom: 2;
+}
+
 body {
   font-family: var(--font-pixel);
   background: #2a2a2a;
