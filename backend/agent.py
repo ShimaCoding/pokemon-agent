@@ -79,7 +79,7 @@ con el tono y la personalidad de Dexter descrita anteriormente.
 """
 
 
-def build_agent(provider_name: Optional[str] = None):
+def build_agent(provider_name: Optional[str] = None, authenticated: bool = False):
     """
     Build and return (model, mcp_client, provider_label).
 
@@ -90,11 +90,14 @@ def build_agent(provider_name: Optional[str] = None):
     Args:
         provider_name: Pin to a specific provider key (e.g. "groq"), or None
                        to use all configured providers with automatic fallback.
+        authenticated: Whether the request carries a valid system API key.
+                       Passed to build_litellm_router to decide which models
+                       are made available (e.g. full Groq list vs. gpt-oss-20b only).
 
     Returns:
         (LiteLLMModel, MCPClient, str) — model, mcp client, active provider label
     """
-    router, primary_model_group, provider_label = build_litellm_router(provider_name)
+    router, primary_model_group, provider_label = build_litellm_router(provider_name, authenticated=authenticated)
 
     # Per-build counter so each LLM call in a request gets a sequential index.
     _llm_call_counter: list[int] = [0]

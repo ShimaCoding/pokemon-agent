@@ -283,9 +283,10 @@ async def get_resources(request: Request):
 
 @app.post("/api/agent/run")
 @limiter.limit("3/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
-async def run_agent(request: Request, body: RunRequest):
+async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
+    authenticated = _is_valid_api_key(api_key)
     return StreamingResponse(
-        _sse_generator(body.query, body.provider),
+        _sse_generator(body.query, body.provider, authenticated=authenticated),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -359,7 +360,7 @@ class _ToolHook:
         return self._pending_results.pop(uid, None)
 
 
-async def _sse_generator(query: str, provider: Optional[str] = None):
+async def _sse_generator(query: str, provider: Optional[str] = None, authenticated: bool = False):
     """
     Async generator that yields SSE events for one agent run.
 
@@ -400,7 +401,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
     logger.info("[REQUEST] Query: %.120s%s", query, "…" if len(query) > 120 else "")
 
     try:
-        model, mcp_client, provider_label = build_agent(provider)
+        model, mcp_client, provider_label = build_agent(provider, authenticated=authenticated)
     except RuntimeError as exc:
         logger.error("[PROVIDER] Sin providers disponibles: %s", exc)
         yield _sse({"type": "error", "message": str(exc), "fallback_available": False})

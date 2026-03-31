@@ -19,12 +19,19 @@ if _litellm_version in ("1.82.7", "1.82.8"):
 
 PROVIDERS: dict[str, dict] = {
     "groq": {
+        # model_ids_public: used when the request is NOT authenticated with API_KEY.
+        # Only the cheapest model is exposed to avoid burning quota for anonymous users.
+        "model_ids_public": [
+            "groq/openai/gpt-oss-20b",
+        ],
+        # model_ids: full list available to authenticated requests.
         "model_ids": [
             "groq/openai/gpt-oss-20b",
-            "groq/llama-3.3-70b-versatile",
+            "groq/llama-3.1-8b-instant",
+            "groq/meta-llama/llama-4-scout-17b-16e-instruct",
         ],
         "env_var": "GROQ_API_KEY",
-        "label": "Groq (gpt-oss-20b)",
+        "label": "Groq",
         "order": 1,
     },
     "gemini": {
@@ -45,6 +52,11 @@ PROVIDERS: dict[str, dict] = {
             "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
             "openrouter/z-ai/glm-4.5-air:free",
             "openrouter/arcee-ai/trinity-mini:free",
+            "openrouter/minimax/minimax-m2.5:free",
+            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
+            "openrouter/openai/gpt-oss-120b:free",
+            "openrouter/openai/gpt-oss-20b:free",
+            "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
         ],
         "env_var": "OPENROUTER_API_KEY",
         "label": "OpenRouter (free tier)",
@@ -63,7 +75,7 @@ def get_available_providers() -> list[dict]:
     return sorted(available, key=lambda p: p["order"])
 
 
-def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[str]]:
+def _build_router_model_list(providers: list[dict], authenticated: bool = False) -> tuple[list[dict], list[str]]:
     """
     Expand providers into LiteLLM Router deployment entries.
 
@@ -71,6 +83,11 @@ def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[st
     LiteLLM Router's ``fallbacks`` parameter can trigger cross-provider failover.
     All models within a provider share that provider's group name so the Router
     can load-balance across them before giving up and moving to the next group.
+
+    Args:
+        authenticated: If True, use the full model list for each provider.
+                       If False, use ``model_ids_public`` when available (e.g. Groq
+                       only exposes its cheapest model to unauthenticated requests).
 
     Returns:
         (model_list, group_names) — group_names preserves provider order.
@@ -83,7 +100,10 @@ def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[st
     for p in providers:
         group_name = f"{p['name']}-models"
         group_names.append(group_name)
-        model_ids: list[str] = p.get("model_ids") or [p["model_id"]]
+        if not authenticated and "model_ids_public" in p:
+            model_ids: list[str] = p["model_ids_public"]
+        else:
+            model_ids = p.get("model_ids") or [p["model_id"]]
         for model_id in model_ids:
             litellm_params: dict = {
                 "model": model_id,
@@ -100,7 +120,7 @@ def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[st
     return model_list, group_names
 
 
-def build_litellm_router(provider_name: Optional[str] = None):
+def build_litellm_router(provider_name: Optional[str] = None, authenticated: bool = False):
     """
     Build and return a LiteLLM Router.
 
@@ -111,6 +131,14 @@ def build_litellm_router(provider_name: Optional[str] = None):
     providers using per-provider model group names and explicit ``fallbacks`` so
     that when one provider exhausts its retries the Router automatically moves to
     the next provider instead of raising.
+
+    Args:
+        provider_name: Pin to a specific provider key (e.g. "groq"), or None
+                       for all providers with automatic fallback.
+        authenticated: If True, the full model list is used for each provider.
+                       If False (anonymous request), providers expose only their
+                       public/cheap models (e.g. Groq → gpt-oss-20b only) and
+                       fallback across providers is disabled.
 
     Returns:
         (Router, primary_model_group, provider_label)
@@ -132,7 +160,7 @@ def build_litellm_router(provider_name: Optional[str] = None):
     if provider_name and provider_name in PROVIDERS:
         pinned = next((p for p in available if p["name"] == provider_name), None)
         if pinned:
-            model_list, _ = _build_router_model_list([pinned])
+            model_list, _ = _build_router_model_list([pinned], authenticated=authenticated)
             # Rename the single group to the generic alias so callers are uniform
             for entry in model_list:
                 entry["model_name"] = "agent-model"
@@ -150,9 +178,13 @@ def build_litellm_router(provider_name: Optional[str] = None):
     # Each provider gets its own model group; the first group is the primary target
     # and the rest are listed as fallbacks so LiteLLM Router actually switches
     # providers once the primary group exhausts its retries.
-    model_list, group_names = _build_router_model_list(available)
+    # Cross-provider fallback is only enabled for authenticated requests.
+    model_list, group_names = _build_router_model_list(available, authenticated=authenticated)
     primary = group_names[0]
-    fallbacks = [{primary: group_names[1:]}] if len(group_names) > 1 else []
+    if authenticated and len(group_names) > 1:
+        fallbacks = [{primary: group_names[1:]}]
+    else:
+        fallbacks = []
     router = Router(
         model_list=model_list,
         fallbacks=fallbacks,
@@ -163,4 +195,5 @@ def build_litellm_router(provider_name: Optional[str] = None):
         routing_strategy="least-busy",
     )
     primary_label = available[0]["label"]
-    return router, primary, f"{primary_label} (auto-fallback)"
+    suffix = " (auto-fallback)" if authenticated and len(group_names) > 1 else ""
+    return router, primary, f"{primary_label}{suffix}"

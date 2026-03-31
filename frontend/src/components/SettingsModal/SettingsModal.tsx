@@ -8,6 +8,8 @@ export default function SettingsModal() {
   const apiKey              = useStore((s) => s.apiKey)
   const setApiKey           = useStore((s) => s.setApiKey)
   const clearApiKey         = useStore((s) => s.clearApiKey)
+  const providers           = useStore((s) => s.providers)
+  const setSelectedProvider = useStore((s) => s.setSelectedProvider)
   const settingsDismissed    = useStore((s) => s.settingsDismissed)
   const setSettingsDismissed = useStore((s) => s.setSettingsDismissed)
 
@@ -43,14 +45,24 @@ export default function SettingsModal() {
 
   function handleSave() {
     const val = inputRef.current?.value.trim() ?? ''
-    if (val) setApiKey(val)
-    else clearApiKey()
+    if (val) {
+      setApiKey(val)
+      // Switch to Groq when an API key is saved (full model list unlocked)
+      const groq = providers.find((p) => String(p.name).toLowerCase() === 'groq')
+      if (groq) setSelectedProvider(groq.name)
+    } else {
+      clearApiKey()
+      // Revert to first available provider (OpenRouter free tier)
+      if (providers.length > 0) setSelectedProvider(providers[0].name)
+    }
     dismiss()
   }
 
   function handleClear() {
     clearApiKey()
     if (inputRef.current) inputRef.current.value = ''
+    // Revert to first available provider (OpenRouter free tier)
+    if (providers.length > 0) setSelectedProvider(providers[0].name)
     dismiss()
   }
 
