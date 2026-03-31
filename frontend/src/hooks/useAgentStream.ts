@@ -176,6 +176,7 @@ export function useAgentStream() {
         let   fullText = ''
         let   toolCallsSinceLastLlm = false
         let   textStarted = false
+        let   pokemonFromTool: string | null = null
 
         while (true) {
           const { done, value } = await reader.read()
@@ -233,6 +234,15 @@ export function useAgentStream() {
                   })
                 }
                 toolCallsSinceLastLlm = true
+                // Extract Pokémon name from the first tool call that has one.
+                // Covers local tool (args.pokemon) and MCP tools (args.pokemon or args.name).
+                if (pokemonFromTool === null) {
+                  const tce = evt as unknown as ToolCallEvent
+                  const argPokemon = tce.args['pokemon'] ?? tce.args['name']
+                  if (typeof argPokemon === 'string' && argPokemon.trim()) {
+                    pokemonFromTool = argPokemon.trim().toLowerCase()
+                  }
+                }
                 appendTraceLog(evt as unknown as ToolCallEvent)
                 break
               }
@@ -259,8 +269,9 @@ export function useAgentStream() {
           }
         }
 
-        // After stream: hydrate Pokémon panel from PokeAPI
-        const detectedName = pokemonFromQuery ?? detectPokemonInText(fullText)
+        // After stream: hydrate Pokémon panel from PokeAPI.
+        // Priority: name from tool call args > name from query heuristic > name from response text.
+        const detectedName = pokemonFromTool ?? pokemonFromQuery ?? detectPokemonInText(fullText)
         if (detectedName) {
           const data = await fetchPokemonStructured(detectedName)
           if (data) setPokemonData(data)
