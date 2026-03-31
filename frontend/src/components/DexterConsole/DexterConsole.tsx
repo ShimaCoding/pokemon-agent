@@ -16,6 +16,7 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const bottomRef   = useRef<HTMLDivElement>(null)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
   const [collapsed, setCollapsed] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(0)
 
   useEffect(() => {
     if (!inFlight) return
@@ -25,11 +26,32 @@ export default function DexterConsole({ collapsible = false }: Props) {
     return () => clearInterval(id)
   }, [inFlight])
 
+  const renderableLogs = traceLogs.filter(
+    (e) => e.type !== 'text' && e.type !== 'done' && e.type !== 'error'
+  )
+
+  useEffect(() => {
+    if (traceLogs.length === 0) {
+      setVisibleCount(0)
+    }
+  }, [traceLogs.length])
+
+  useEffect(() => {
+    if (visibleCount < renderableLogs.length) {
+      const id = setTimeout(() => {
+        setVisibleCount((c) => Math.min(c + 1, renderableLogs.length))
+      }, 500) // Esperar 500ms por cada mensaje para una cadencia de lectura natural
+      return () => clearTimeout(id)
+    }
+  }, [visibleCount, renderableLogs.length])
+
+  const visibleLogs = renderableLogs.slice(0, visibleCount)
+
   // Auto-scroll to bottom on new log (skip on initial mount when there are no logs)
   useEffect(() => {
-    if (traceLogs.length === 0) return
+    if (visibleLogs.length === 0) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [traceLogs.length])
+  }, [visibleLogs.length])
 
   const toolCallCount = traceLogs.filter((e) => e.type === 'tool_call').length
   const doneEvent     = traceLogs.find((e) => e.type === 'done') as DoneEvent | undefined
@@ -43,10 +65,6 @@ export default function DexterConsole({ collapsible = false }: Props) {
     : inFlight
       ? LOADING_PHRASES[phraseIdx]
       : 'esperando…'
-
-  const renderableLogs = traceLogs.filter(
-    (e) => e.type !== 'text' && e.type !== 'done' && e.type !== 'error'
-  )
 
   return (
     <>
@@ -76,7 +94,7 @@ export default function DexterConsole({ collapsible = false }: Props) {
             <div className={styles.empty}>Esperando herramientas…</div>
           )}
 
-          {renderableLogs.map((e, i) => {
+          {visibleLogs.map((e, i) => {
             // Pair tool_result with its matching tool_call
             if (e.type === 'tool_call') {
               const result = traceLogs.find(
@@ -93,7 +111,7 @@ export default function DexterConsole({ collapsible = false }: Props) {
             return <TraceCard key={i} event={e} />
           })}
 
-          {doneEvent && (
+          {doneEvent && visibleCount >= renderableLogs.length && (
             <TraceSummary event={doneEvent} toolCallCount={toolCallCount} />
           )}
 
