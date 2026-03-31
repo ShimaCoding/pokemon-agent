@@ -56,14 +56,33 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const doneEvent     = traceLogs.find((e) => e.type === 'done') as DoneEvent | undefined
 
   // Cambio automático de pestaña cuando la consola termina su animación
+  const hasAutoSwitched = useRef(false)
+
+  // Reseteamos el flag para cada nueva consulta
   useEffect(() => {
-    // Si la consola mostró todos los items, existe el doneEvent (lo que significa que terminó), y seguimos en consola.
-    // Solo hace el auto switch si estamos en devMode, imitando el comportamiento deseado.
-    if (doneEvent && visibleCount >= renderableLogs.length && activeTab === 'consola' && devMode) {
-      const id = setTimeout(() => {
-        setActiveTab('dexter')
-      }, 2000)
-      return () => clearTimeout(id)
+    if (inFlight) hasAutoSwitched.current = false
+  }, [inFlight])
+
+  useEffect(() => {
+    // Si la consola mostró todos los items, existe el doneEvent (lo que significa que terminó).
+    if (doneEvent && visibleCount >= renderableLogs.length && devMode && !hasAutoSwitched.current) {
+      // Si estamos en consola, esperamos los 2s pacientemente
+      if (activeTab === 'consola') {
+        const id = setTimeout(() => {
+          hasAutoSwitched.current = true
+          setActiveTab('dexter')
+        }, 2000)
+        
+        // Si el usuario cambia manualmente de pestaña antes de los 2s, 
+        // abortamos el timer y marcamos que "ya se hizo cargo"
+        return () => {
+          hasAutoSwitched.current = true
+          clearTimeout(id)
+        }
+      } else {
+        // Estaba en otra pestaña al finalizar, no intervenimos pero marcamos como switch resuelto
+        hasAutoSwitched.current = true
+      }
     }
   }, [doneEvent, visibleCount, renderableLogs.length, activeTab, devMode, setActiveTab])
 
