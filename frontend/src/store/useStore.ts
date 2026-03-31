@@ -85,6 +85,11 @@ interface AppState {
 // SECURITY (Finding 1): API key is persisted in sessionStorage (cleared on tab
 // close) instead of localStorage, reducing the window of exposure to XSS and
 // browser-extension theft. For full protection, migrate to httpOnly cookies.
+
+// One-time migration: remove the old localStorage entry left from before the
+// switch to sessionStorage so stale API keys don't linger in the browser.
+localStorage.removeItem('mcpokedex-storage')
+
 const useStore = create<AppState>()(
   persist(
     (set) => ({
