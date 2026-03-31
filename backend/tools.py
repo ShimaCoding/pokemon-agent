@@ -8,6 +8,7 @@ which is not available through the MCP server.
 """
 
 import json
+import urllib.parse
 
 import httpx
 from strands import tool
@@ -32,7 +33,7 @@ def get_pokedex_entry(pokemon: str) -> dict:
     Returns:
         A dict with full Pokédex entry data, or an error status on failure.
     """
-    name_or_id = pokemon.strip().lower()
+    name_or_id = urllib.parse.quote(pokemon.strip().lower(), safe="")
 
     try:
         with httpx.Client(timeout=_TIMEOUT) as client:
