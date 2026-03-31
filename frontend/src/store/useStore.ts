@@ -35,7 +35,8 @@ interface AppState {
 
   // Query draft (pre-fill input from intro modal examples)
   queryDraft: string
-  setQueryDraft: (q: string) => void
+  queryDraftAutoSubmit: boolean
+  setQueryDraft: (q: string, autoSubmit?: boolean) => void
   clearQueryDraft: () => void
 
   // Provider list & selection
@@ -130,8 +131,9 @@ const useStore = create<AppState>()(
 
       // Query draft
       queryDraft: '',
-      setQueryDraft: (q) => set({ queryDraft: q }),
-      clearQueryDraft: () => set({ queryDraft: '' }),
+      queryDraftAutoSubmit: false,
+      setQueryDraft: (q, autoSubmit = false) => set({ queryDraft: q, queryDraftAutoSubmit: autoSubmit }),
+      clearQueryDraft: () => set({ queryDraft: '', queryDraftAutoSubmit: false }),
 
       // Providers
       providers: [],

@@ -11,6 +11,7 @@ export default function BottomControlBar() {
   const inFlight          = useStore((s) => s.inFlight)
   const rateLimitSeconds  = useStore((s) => s.rateLimitSeconds)
   const queryDraft        = useStore((s) => s.queryDraft)
+  const queryDraftAutoSubmit = useStore((s) => s.queryDraftAutoSubmit)
   const clearQueryDraft   = useStore((s) => s.clearQueryDraft)
 
   const [inputValue, setInputValue] = useState('')
@@ -25,9 +26,13 @@ export default function BottomControlBar() {
     if (queryDraft) {
       setInputValue(queryDraft)
       clearQueryDraft()
-      inputRef.current?.focus()
+      if (queryDraftAutoSubmit) {
+        void runQuery(queryDraft)
+      } else {
+        inputRef.current?.focus()
+      }
     }
-  }, [queryDraft, clearQueryDraft])
+  }, [queryDraft, queryDraftAutoSubmit, clearQueryDraft, runQuery])
 
   const handleSubmit = useCallback(async () => {
     const query = inputValue.trim()
