@@ -11,10 +11,13 @@ interface Props {
 }
 
 export default function DexterConsole({ collapsible = false }: Props) {
-  const traceLogs   = useStore((s) => s.traceLogs)
+  const traceLogs     = useStore((s) => s.traceLogs)
   const inFlight      = useStore((s) => s.inFlight)
   const visibleCount  = useStore((s) => s.visibleTraceCount)
   const setVisibleCount = useStore((s) => s.setVisibleTraceCount)
+  const activeTab     = useStore((s) => s.activeTab)
+  const setActiveTab  = useStore((s) => s.setActiveTab)
+  const devMode       = useStore((s) => s.devMode)
 
   const bottomRef   = useRef<HTMLDivElement>(null)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
@@ -50,14 +53,26 @@ export default function DexterConsole({ collapsible = false }: Props) {
 
   const visibleLogs = renderableLogs.slice(0, visibleCount)
 
+  const toolCallCount = traceLogs.filter((e) => e.type === 'tool_call').length
+  const doneEvent     = traceLogs.find((e) => e.type === 'done') as DoneEvent | undefined
+
+  // Cambio automático de pestaña cuando la consola termina su animación
+  useEffect(() => {
+    // Si la consola mostró todos los items, existe el doneEvent (lo que significa que terminó), y seguimos en consola.
+    // Solo hace el auto switch si estamos en devMode, imitando el comportamiento deseado.
+    if (doneEvent && visibleCount >= renderableLogs.length && activeTab === 'consola' && devMode) {
+      const id = setTimeout(() => {
+        setActiveTab('dexter')
+      }, 2000)
+      return () => clearTimeout(id)
+    }
+  }, [doneEvent, visibleCount, renderableLogs.length, activeTab, devMode, setActiveTab])
+
   // Auto-scroll to bottom on new log (skip on initial mount when there are no logs)
   useEffect(() => {
     if (visibleLogs.length === 0) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [visibleLogs.length])
-
-  const toolCallCount = traceLogs.filter((e) => e.type === 'tool_call').length
-  const doneEvent     = traceLogs.find((e) => e.type === 'done') as DoneEvent | undefined
 
   const statsText = doneEvent
     ? `${toolCallCount} llamadas · ${doneEvent.elapsed_ms}ms${

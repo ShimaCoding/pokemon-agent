@@ -22,18 +22,13 @@ export default function DexterTab() {
     }
 
     if (animatedAgentResponse.length < agentResponse.length) {
-      if (!inFlight) {
-        // Si ya terminó de cargar, mostrarlo todo de inmediato sin animar
-        setAnimatedAgentResponse(agentResponse)
-      } else {
-        // Si sigue cargando, proseguir fluídamente donde quedó
-        const id = requestAnimationFrame(() => {
-          setAnimatedAgentResponse(agentResponse.slice(0, animatedAgentResponse.length + 3))
-        })
-        return () => cancelAnimationFrame(id)
-      }
+      // Si sigue habiendo diferencia, proseguir fluídamente donde quedó, sin importar si ya terminó la red
+      const id = requestAnimationFrame(() => {
+        setAnimatedAgentResponse(agentResponse.slice(0, animatedAgentResponse.length + 3))
+      })
+      return () => cancelAnimationFrame(id)
     }
-  }, [agentResponse, animatedAgentResponse, inFlight, setAnimatedAgentResponse])
+  }, [agentResponse, animatedAgentResponse, setAnimatedAgentResponse])
 
   useEffect(() => {
     if (!inFlight || agentResponse) return

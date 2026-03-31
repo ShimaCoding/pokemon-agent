@@ -244,7 +244,6 @@ export function useAgentStream() {
                 appendText(delta)
                 if (!textStarted) {
                   textStarted = true
-                  if (devMode) setActiveTab('dexter')
                 }
                 break
               }
