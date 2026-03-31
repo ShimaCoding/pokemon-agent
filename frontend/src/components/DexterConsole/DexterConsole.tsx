@@ -16,7 +16,6 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const visibleCount  = useStore((s) => s.visibleTraceCount)
   const setVisibleCount = useStore((s) => s.setVisibleTraceCount)
   const fastForward     = useStore((s) => s.fastForward)
-  const activeTab     = useStore((s) => s.activeTab)
   const setActiveTab  = useStore((s) => s.setActiveTab)
   const devMode       = useStore((s) => s.devMode)
 
@@ -55,38 +54,22 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const toolCallCount = traceLogs.filter((e) => e.type === 'tool_call').length
   const doneEvent     = traceLogs.find((e) => e.type === 'done') as DoneEvent | undefined
 
-  // Cambio automático de pestaña cuando la consola termina su animación
-  const hasAutoSwitched = useRef(false)
+  // Auto-switch a dexter cuando la consola termina de cargar.
+  // Se inicializa en mount: si la consulta ya terminó cuando el usuario llega
+  // (scroll manual de vuelta), no se dispara el timer.
+  const alreadyDoneOnMount = useRef(!!(doneEvent && visibleCount >= renderableLogs.length))
 
-  // Reseteamos el flag para cada nueva consulta
   useEffect(() => {
-    if (inFlight) hasAutoSwitched.current = false
+    if (inFlight) alreadyDoneOnMount.current = false
   }, [inFlight])
 
   useEffect(() => {
-    // Si la consola mostró todos los items, existe el doneEvent (lo que significa que terminó).
-    if (doneEvent && visibleCount >= renderableLogs.length && devMode && !hasAutoSwitched.current) {
-      // Si estamos en consola, esperamos los 2s pacientemente
-      if (activeTab === 'consola') {
-        const id = setTimeout(() => {
-          hasAutoSwitched.current = true
-          setActiveTab('dexter')
-        }, 2000)
-        
-        // Si el usuario cambia manualmente de pestaña antes de los 2s, 
-        // abortamos el timer y marcamos que "ya se hizo cargo"
-        return () => {
-          hasAutoSwitched.current = true
-          clearTimeout(id)
-        }
-      } else {
-        // Estaba en otra pestaña al finalizar, no intervenimos pero marcamos como switch resuelto
-        hasAutoSwitched.current = true
-      }
-    }
-  }, [doneEvent, visibleCount, renderableLogs.length, activeTab, devMode, setActiveTab])
+    if (!doneEvent || visibleCount < renderableLogs.length || !devMode || alreadyDoneOnMount.current) return
+    const id = setTimeout(() => setActiveTab('dexter'), 2000)
+    return () => clearTimeout(id)
+  }, [doneEvent, visibleCount, renderableLogs.length, devMode, setActiveTab])
 
-  // Auto-scroll to bottom on new log (skip on initial mount when there are no logs)
+  // Auto-scroll al último log
   useEffect(() => {
     if (visibleLogs.length === 0) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
