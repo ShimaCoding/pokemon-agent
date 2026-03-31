@@ -645,8 +645,10 @@ async def _verify_admin(api_key: str = Security(_api_key_header)) -> None:
         raise HTTPException(status_code=401, detail="Admin access denied")
 
 
-@app.get("/admin", include_in_schema=False, dependencies=[Depends(_verify_admin)])
+@app.get("/admin", include_in_schema=False)
 async def admin_panel():
+    # The HTML page itself is public; auth is enforced by the /admin/api/* endpoints.
+    # admin.html handles its own login prompt using sessionStorage.
     path = os.path.join(os.path.dirname(__file__), "static", "admin.html")
     return FileResponse(path, media_type="text/html")
 
