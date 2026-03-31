@@ -45,7 +45,25 @@ def init_db() -> None:
             )
         """)
         conn.commit()
+    purged = purge_old_queries()
+    if purged:
+        logger.info("Purged %d query log entries older than 30 days", purged)
     logger.info("Database ready at %s", _DB_PATH)
+
+
+def purge_old_queries(days: int = 30) -> int:
+    """Delete query log entries older than the given number of days."""
+    try:
+        with _connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM query_logs WHERE timestamp < datetime('now', ?)",
+                (f"-{days} days",),
+            )
+            conn.commit()
+            return cursor.rowcount
+    except Exception as exc:
+        logger.error("Failed to purge old queries: %s", exc)
+        return 0
 
 
 def log_query(

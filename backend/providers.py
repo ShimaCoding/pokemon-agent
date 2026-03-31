@@ -58,7 +58,7 @@ def get_available_providers() -> list[dict]:
     for name, config in PROVIDERS.items():
         api_key = os.environ.get(config["env_var"], "").strip()
         if api_key:
-            available.append({"name": name, **config, "api_key": api_key})
+            available.append({"name": name, **config, "_api_key": api_key})
     return sorted(available, key=lambda p: p["order"])
 
 
@@ -86,7 +86,7 @@ def _build_router_model_list(providers: list[dict]) -> tuple[list[dict], list[st
         for model_id in model_ids:
             litellm_params: dict = {
                 "model": model_id,
-                "api_key": p["api_key"],
+                "api_key": p["_api_key"],
             }
             if p["name"] == "openrouter":
                 extra_headers: dict = {"X-Title": app_name}

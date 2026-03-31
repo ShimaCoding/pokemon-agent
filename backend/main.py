@@ -16,6 +16,7 @@ Security:
     Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
 
+import hmac
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -47,19 +48,7 @@ logger = logging.getLogger(__name__)
 # Rate limiter
 # ---------------------------------------------------------------------------
 
-def _get_real_ip(request: Request) -> str:
-    """Return real client IP, respecting reverse-proxy forwarding headers."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Header may be a comma-separated list; leftmost is the original client
-        return forwarded_for.split(",")[0].strip()
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-    return get_remote_address(request)
-
-
-limiter = Limiter(key_func=_get_real_ip)
+limiter = Limiter(key_func=get_remote_address)
 
 # ContextVar so exempt_when (called with zero args by slowapi) can access the
 # current request's API key, which is set by the middleware below.
@@ -75,7 +64,9 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 def _is_valid_api_key(api_key: str | None) -> bool:
     """Return True if the provided key matches the configured API_KEY."""
     expected = os.environ.get("API_KEY", "").strip()
-    return bool(expected and api_key == expected)
+    if not expected or not api_key:
+        return False
+    return hmac.compare_digest(api_key, expected)
 
 
 async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
@@ -96,6 +87,11 @@ async def lifespan(app: FastAPI):
             ", ".join(p["label"] for p in available),
         )
         logger.info("Primary provider (auto-fallback): %s", label)
+        if _cors_origins == ["*"]:
+            logger.warning(
+                "CORS configured with wildcard '*'. "
+                "Set ALLOWED_ORIGINS in .env for production."
+            )
     except RuntimeError as exc:
         logger.error("Startup error: %s", exc)
         raise
@@ -132,6 +128,17 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    """Add standard security headers to every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
+
+
+@app.middleware("http")
 async def _capture_api_key(request: Request, call_next):
     """Store the request's X-API-Key in a ContextVar for use by exempt_when."""
     token = _req_api_key.set(request.headers.get("X-API-Key", ""))
@@ -147,7 +154,7 @@ async def _capture_api_key(request: Request, call_next):
 
 
 class RunRequest(BaseModel):
-    query: str
+    query: str = Field(..., min_length=1, max_length=500)
     provider: Optional[str] = None
 
 
@@ -159,7 +166,7 @@ class RunRequest(BaseModel):
 @app.get("/config")
 async def config():
     """Public endpoint: frontend config flags."""
-    return {"require_api_key": False}
+    return {"require_api_key": bool(os.environ.get("API_KEY", "").strip())}
 
 
 @app.get("/health")
@@ -186,7 +193,8 @@ async def providers():
 
 
 @app.get("/api/prompts")
-async def get_prompts():
+@limiter.limit("10/minute")
+async def get_prompts(request: Request):
     """Fetch the list of prompts from the MCP server."""
     import asyncio
     from backend.agent import build_agent
@@ -219,7 +227,8 @@ async def get_prompts():
 
 
 @app.get("/api/tools")
-async def get_tools():
+@limiter.limit("10/minute")
+async def get_tools(request: Request):
     """Fetch the list of tools from the MCP server."""
     import asyncio
     from backend.agent import build_agent
@@ -245,7 +254,8 @@ async def get_tools():
 
 
 @app.get("/api/resources")
-async def get_resources():
+@limiter.limit("10/minute")
+async def get_resources(request: Request):
     """Fetch the list of resources from the MCP server."""
     import asyncio
     from backend.agent import build_agent
@@ -496,6 +506,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
                         except Exception:
                             parts.append(raw)
                     prompt_text = "\n".join(parts)
+                    prompt_text = prompt_text[:2000]
                     query = f"Using MCP prompt '{prompt_name}':\n\n{prompt_text}\n\nPlease follow these instructions and provide the complete answer using the available tools."
                 except Exception as p_exc:
                     logger.warning(f"Could not fetch prompt {prompt_name}: {p_exc}")
@@ -600,7 +611,7 @@ async def _sse_generator(query: str, provider: Optional[str] = None):
         yield _sse(
             {
                 "type": "error",
-                "message": str(exc),
+                "message": "Error interno del agente. Intenta de nuevo más tarde.",
                 "fallback_available": fallback_available,
             }
         )
