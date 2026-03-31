@@ -19,11 +19,17 @@ export function useProviders() {
         setProviders(avail)
 
         // With API key → default to Groq (full model list unlocked).
-        // Without API key → default to first available (OpenRouter free tier).
+        // Without API key → default to OpenRouter (free tier).
         if (apiKey) {
           const groq = avail.find((p) => String(p.name).toLowerCase() === 'groq')
           if (groq) {
             setSelectedProvider(groq.name)
+            return
+          }
+        } else {
+          const openrouter = avail.find((p) => String(p.name).toLowerCase() === 'openrouter')
+          if (openrouter) {
+            setSelectedProvider(openrouter.name)
             return
           }
         }

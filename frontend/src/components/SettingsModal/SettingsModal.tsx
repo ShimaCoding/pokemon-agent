@@ -52,8 +52,10 @@ export default function SettingsModal() {
       if (groq) setSelectedProvider(groq.name)
     } else {
       clearApiKey()
-      // Revert to first available provider (OpenRouter free tier)
-      if (providers.length > 0) setSelectedProvider(providers[0].name)
+      // Revert to OpenRouter free tier
+      const openrouter = providers.find((p) => String(p.name).toLowerCase() === 'openrouter')
+      if (openrouter) setSelectedProvider(openrouter.name)
+      else if (providers.length > 0) setSelectedProvider(providers[0].name)
     }
     dismiss()
   }
@@ -61,8 +63,10 @@ export default function SettingsModal() {
   function handleClear() {
     clearApiKey()
     if (inputRef.current) inputRef.current.value = ''
-    // Revert to first available provider (OpenRouter free tier)
-    if (providers.length > 0) setSelectedProvider(providers[0].name)
+    // Revert to OpenRouter free tier
+    const openrouter = providers.find((p) => String(p.name).toLowerCase() === 'openrouter')
+    if (openrouter) setSelectedProvider(openrouter.name)
+    else if (providers.length > 0) setSelectedProvider(providers[0].name)
     dismiss()
   }
 
