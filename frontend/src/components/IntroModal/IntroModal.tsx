@@ -18,6 +18,7 @@ export default function IntroModal() {
   const setQueryDraft    = useStore((s) => s.setQueryDraft)
 
   const setSettingsDismissed = useStore((s) => s.setSettingsDismissed)
+  const setSettingsOpen      = useStore((s) => s.setSettingsOpen)
 
   const mcpTools     = useStore((s) => s.mcpTools)
   const mcpResources = useStore((s) => s.mcpResources)
@@ -40,6 +41,7 @@ export default function IntroModal() {
   function handleExample(text: string) {
     setQueryDraft(text, true)
     setSettingsDismissed(true)
+    setSettingsOpen(false)
     handleClose()
   }
 
