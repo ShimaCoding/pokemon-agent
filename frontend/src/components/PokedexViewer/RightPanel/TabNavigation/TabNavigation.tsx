@@ -4,7 +4,6 @@ import styles from './TabNavigation.module.css'
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'info',    label: 'INFO'    },
-  { key: 'stats',   label: 'STATS'   },
   { key: 'moves',   label: 'MOVES'   },
   { key: 'evos',    label: 'EVOS'    },
   { key: 'dexter',  label: 'DEXTER'  },

@@ -148,4 +148,4 @@ export interface McpResource {
 
 // ── UI ──────────────────────────────────────────────────────────
 
-export type TabKey = 'info' | 'stats' | 'moves' | 'evos' | 'dexter' | 'consola'
+export type TabKey = 'info' | 'moves' | 'evos' | 'dexter' | 'consola'
