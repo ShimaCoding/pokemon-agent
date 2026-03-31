@@ -3,11 +3,13 @@ import useStore from '../../store/useStore'
 import styles from './SettingsModal.module.css'
 
 export default function SettingsModal() {
-  const settingsOpen    = useStore((s) => s.settingsOpen)
-  const setSettingsOpen = useStore((s) => s.setSettingsOpen)
-  const apiKey          = useStore((s) => s.apiKey)
-  const setApiKey       = useStore((s) => s.setApiKey)
-  const clearApiKey     = useStore((s) => s.clearApiKey)
+  const settingsOpen        = useStore((s) => s.settingsOpen)
+  const setSettingsOpen     = useStore((s) => s.setSettingsOpen)
+  const apiKey              = useStore((s) => s.apiKey)
+  const setApiKey           = useStore((s) => s.setApiKey)
+  const clearApiKey         = useStore((s) => s.clearApiKey)
+  const settingsDismissed    = useStore((s) => s.settingsDismissed)
+  const setSettingsDismissed = useStore((s) => s.setSettingsDismissed)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const boxRef   = useRef<HTMLDivElement>(null)
@@ -20,12 +22,12 @@ export default function SettingsModal() {
     }
   }, [settingsOpen, apiKey])
 
-  // Check /config on mount to open modal if API key is required but not set
+  // Check /config on mount to open modal if API key is required but not set and user hasn't dismissed it
   useEffect(() => {
     async function checkConfig() {
       try {
         const cfg = await fetch('/config').then((r) => r.json()) as { require_api_key?: boolean }
-        if (cfg.require_api_key && !apiKey) {
+        if (cfg.require_api_key && !apiKey && !settingsDismissed) {
           setSettingsOpen(true)
         }
       } catch { /* ignore */ }
@@ -34,29 +36,34 @@ export default function SettingsModal() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function dismiss() {
+    setSettingsDismissed(true)
+    setSettingsOpen(false)
+  }
+
   function handleSave() {
     const val = inputRef.current?.value.trim() ?? ''
     if (val) setApiKey(val)
     else clearApiKey()
-    setSettingsOpen(false)
+    dismiss()
   }
 
   function handleClear() {
     clearApiKey()
     if (inputRef.current) inputRef.current.value = ''
-    setSettingsOpen(false)
+    dismiss()
   }
 
   // Enter/Escape on the input field
   function handleInputKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') handleSave()
-    if (e.key === 'Escape') setSettingsOpen(false)
+    if (e.key === 'Escape') dismiss()
   }
 
   // Focus trap + Escape for the whole dialog box
   function handleBoxKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
-      setSettingsOpen(false)
+      dismiss()
       return
     }
     if (e.key !== 'Tab' || !boxRef.current) return
@@ -89,7 +96,7 @@ export default function SettingsModal() {
     <div className={styles.modal} id="settings-modal">
       <div
         className={styles.overlay}
-        onClick={() => setSettingsOpen(false)}
+        onClick={dismiss}
       />
       {/* role="dialog" + aria-modal prevent screen readers from browsing outside */}
       <div
@@ -122,7 +129,7 @@ export default function SettingsModal() {
           >BORRAR</button>
           <button
             className={styles.cancelBtn}
-            onClick={() => setSettingsOpen(false)}
+            onClick={dismiss}
             aria-label="Cancelar y cerrar ajustes"
           >CANCELAR</button>
           <button

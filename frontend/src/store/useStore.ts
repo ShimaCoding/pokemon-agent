@@ -20,6 +20,8 @@ interface AppState {
   // Settings modal
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
+  settingsDismissed: boolean
+  setSettingsDismissed: (dismissed: boolean) => void
 
   // Intro modal
   introOpen: boolean
@@ -105,6 +107,8 @@ const useStore = create<AppState>()(
       // Settings modal
       settingsOpen: false,
       setSettingsOpen: (open) => set({ settingsOpen: open }),
+      settingsDismissed: false,
+      setSettingsDismissed: (dismissed) => set({ settingsDismissed: dismissed }),
 
       // Intro modal
       introOpen: false,
@@ -173,7 +177,7 @@ const useStore = create<AppState>()(
     {
       name: 'mcpokedex-storage',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, devMode: state.devMode }),
+      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, devMode: state.devMode }),
     }
   )
 )
