@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="50%" style="stop-color:#16213e"/>
+      <stop offset="100%" style="stop-color:#0f3460"/>
+    </linearGradient>
+    <linearGradient id="redGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#CC2222"/>
+      <stop offset="100%" style="stop-color:#880000"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="20" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff08" stroke-width="1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Glow circle behind logo -->
+  <circle cx="300" cy="315" r="200" fill="#CC222220"/>
+  <circle cx="300" cy="315" r="140" fill="#CC222215"/>
+
+  <!-- Pokédex device (scaled up from favicon, ~4x) -->
+  <g transform="translate(172, 55) scale(4)">
+    <!-- Device body -->
+    <rect x="10" y="2" width="44" height="58" rx="7" fill="url(#redGlow)"/>
+    <!-- Body highlight strip -->
+    <rect x="10" y="2" width="18" height="58" rx="7" fill="#DD4444" opacity="0.25"/>
+
+    <!-- Screen bezel -->
+    <rect x="13" y="6" width="38" height="24" rx="3" fill="#1A1A30"/>
+
+    <!-- Blue screen lens -->
+    <circle cx="26" cy="18" r="9" fill="#1A6FAA"/>
+    <circle cx="26" cy="18" r="9" fill="#2288CC" opacity="0.8"/>
+    <!-- Lens glare -->
+    <ellipse cx="22.5" cy="14" rx="3.5" ry="2.5" fill="white" opacity="0.55"/>
+
+    <!-- Diamond buttons -->
+    <polygon points="39,9 43,13 39,17 35,13" fill="#EE2222"/>
+    <polygon points="45,9 49,13 45,17 41,13" fill="#F5C30A"/>
+    <polygon points="42,16 46,20 42,24 38,20" fill="#33BB44"/>
+
+    <!-- D-pad horizontal -->
+    <rect x="16" y="35" width="14" height="5" rx="1.5" fill="#1A1A1A"/>
+    <!-- D-pad vertical -->
+    <rect x="20" y="31" width="5" height="13" rx="1.5" fill="#1A1A1A"/>
+
+    <!-- A/B buttons -->
+    <ellipse cx="42" cy="38" rx="4" ry="2.8" fill="#D4AA00"/>
+    <ellipse cx="51" cy="38" rx="4" ry="2.8" fill="#D4AA00"/>
+
+    <!-- Select / Start -->
+    <rect x="23" y="47" width="6" height="2.5" rx="1" fill="#AA1111"/>
+    <rect x="33" y="47" width="6" height="2.5" rx="1" fill="#AA1111"/>
+
+    <!-- Speaker grille dots -->
+    <circle cx="40" cy="53" r="1.2" fill="#AA1111"/>
+    <circle cx="44" cy="53" r="1.2" fill="#AA1111"/>
+    <circle cx="48" cy="53" r="1.2" fill="#AA1111"/>
+    <circle cx="52" cy="53" r="1.2" fill="#AA1111"/>
+    <circle cx="40" cy="57" r="1.2" fill="#AA1111"/>
+    <circle cx="44" cy="57" r="1.2" fill="#AA1111"/>
+    <circle cx="48" cy="57" r="1.2" fill="#AA1111"/>
+    <circle cx="52" cy="57" r="1.2" fill="#AA1111"/>
+  </g>
+
+  <!-- Divider line -->
+  <line x1="540" y1="120" x2="540" y2="510" stroke="#ffffff15" stroke-width="1"/>
+
+  <!-- Text section -->
+  <!-- Main title -->
+  <text x="650" y="240" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="700" fill="white" letter-spacing="-2">MCPokédex</text>
+
+  <!-- Accent line -->
+  <rect x="650" y="265" width="80" height="4" rx="2" fill="#CC2222"/>
+
+  <!-- Subtitle -->
+  <text x="650" y="330" font-family="system-ui, -apple-system, sans-serif" font-size="30" fill="#ffffffcc" font-weight="400">AI-Powered Pokédex</text>
+  <text x="650" y="375" font-family="system-ui, -apple-system, sans-serif" font-size="30" fill="#ffffffcc" font-weight="400">with MCP · Groq · Gemini · OpenAI</text>
+
+  <!-- Tags -->
+  <rect x="650" y="420" width="120" height="36" rx="18" fill="#CC222240" stroke="#CC222280" stroke-width="1"/>
+  <text x="710" y="443" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#ff6666" text-anchor="middle" font-weight="600">MCP</text>
+
+  <rect x="786" y="420" width="120" height="36" rx="18" fill="#2288CC40" stroke="#2288CC80" stroke-width="1"/>
+  <text x="846" y="443" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#66aaff" text-anchor="middle" font-weight="600">AI Agent</text>
+
+  <rect x="922" y="420" width="160" height="36" rx="18" fill="#33BB4440" stroke="#33BB4480" stroke-width="1"/>
+  <text x="1002" y="443" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#66dd88" text-anchor="middle" font-weight="600">Real-time SSE</text>
+
+  <!-- Domain -->
+  <text x="650" y="530" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="#ffffff60">mcpokedex.com</text>
+</svg>
