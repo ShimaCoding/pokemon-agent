@@ -92,6 +92,7 @@ export function useAgentStream() {
   const setPreQuery         = useStore((s) => s.setPreQuery)
   const setActiveTab        = useStore((s) => s.setActiveTab)
   const devMode             = useStore((s) => s.devMode)
+  const fastForward         = useStore((s) => s.fastForward)
   const setRateLimitSeconds = useStore((s) => s.setRateLimitSeconds)
 
   const runQuery = useCallback(
@@ -244,6 +245,7 @@ export function useAgentStream() {
                 appendText(delta)
                 if (!textStarted) {
                   textStarted = true
+                  if (devMode && fastForward) setActiveTab('dexter')
                 }
                 break
               }
@@ -283,6 +285,7 @@ export function useAgentStream() {
       setPokemonData,
       setPreQuery,
       devMode,
+      fastForward,
       setActiveTab,
       setRateLimitSeconds,
     ]
