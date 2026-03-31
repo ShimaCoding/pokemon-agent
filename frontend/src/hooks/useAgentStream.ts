@@ -119,6 +119,9 @@ export function useAgentStream() {
         if (!res.ok) {
           if (res.status === 429) {
             const retryAfter = parseInt(res.headers.get('Retry-After') ?? '60', 10)
+            appendText(
+              `⚡ **¡Demasiadas consultas!** El Maestro Pokémon pide calma... Vuelve a intentarlo en **${retryAfter} segundos**.`
+            )
             appendTraceLog({
               type: 'system_log',
               message: `⚡ Demasiadas consultas. Espera ${retryAfter}s antes de reintentar.`,
