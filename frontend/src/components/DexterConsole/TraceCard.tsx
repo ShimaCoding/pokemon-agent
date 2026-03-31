@@ -127,6 +127,20 @@ def get_pokedex_entry(pokemon: str) -> dict:
 El decorador \`@tool\` genera automáticamente el **JSON Schema** del argumento a partir del type hint y el docstring, para que el LLM sepa exactamente cómo invocar la función.
 `,
 
+  skill: `
+### ¿Qué son las Skills?
+
+Las **Skills** son módulos de instrucciones especializadas que el agente Dexter carga dinámicamente durante una conversación. Cada skill contiene directrices que ajustan su estilo de respuesta y conocimiento para una tarea concreta.
+
+\`\`\`
+backend/skills/dexter-pokedex-narrator/SKILL.md
+  → instrucciones de narración pokédex
+  → tono, formato, ejemplos de respuesta
+\`\`\`
+
+Cuando el agente invoca la herramienta \`skills\`, las instrucciones del skill se inyectan como contexto adicional en su prompt, cambiando su comportamiento **sin reiniciar la sesión**.
+`,
+
   tool_generic: `
 ### ¿Cómo funciona esta herramienta MCP?
 
@@ -247,10 +261,32 @@ function ModelAttemptCard({ e }: { e: ModelAttemptEvent }) {
   )
 }
 
+// ── Skill Call ────────────────────────────────────────────────────
+
+function SkillCallCard({ e }: { e: ToolCallEvent }) {
+  const skillName = (e.args as Record<string, unknown>)?.skill_name as string ?? e.tool
+
+  return (
+    <div className={`${styles.card} ${styles.skill}`}>
+      <div className={styles.header}>
+        <span className={`${styles.typeBadge} ${styles.skill}`}>SKILL</span>
+        <span className={styles.name}>{skillName}</span>
+        <span className={styles.timing}>+{e.timestamp_ms ?? 0}ms</span>
+      </div>
+      <div className={styles.meta}>
+        Cargando instrucciones de skill para el agente Dexter...
+      </div>
+      <EduPanel markdown={DOCS.skill} />
+    </div>
+  )
+}
+
 // ── Tool Call ─────────────────────────────────────────────────────
 
 function ToolCallCard({ e }: { e: ToolCallEvent }) {
   const typeKey = guessToolType(e.tool)
+
+  if (typeKey === 'skill') return <SkillCallCard e={e} />
 
   return (
     <div className={`${styles.card} ${styles[typeKey]}`}>

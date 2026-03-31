@@ -10,6 +10,7 @@
 .card.tool     { border-color: var(--mcp-tool);     background: #dce8f5; }
 .card.resource { border-color: var(--mcp-resource); background: #dceede; }
 .card.prompt   { border-color: var(--mcp-prompt);   background: #f5dce8; }
+.card.skill    { border-color: #9b6f00;             background: #f5edda; }
 .card.result   { border-color: var(--gbc-border);   background: var(--gbc-bg); border-style: dashed; }
 .card.llm      { border-color: #7c6fa0; background: #ebe7f2; }
 .card.modelOk  { border-color: var(--mcp-resource); background: #e4f0e4; }
@@ -31,6 +32,7 @@
 .typeBadge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool); }
 .typeBadge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
 .typeBadge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt); }
+.typeBadge.skill    { border-color: #9b6f00;             color: #9b6f00; }
 .typeBadge.result   { border-color: var(--gbc-border);   color: var(--gbc-dark); }
 .typeBadge.llm      { border-color: #7c6fa0; color: #7c6fa0; }
 .typeBadge.modelOk  { border-color: var(--mcp-resource); color: var(--mcp-resource); }

@@ -73,6 +73,7 @@ export function detectPokemonInText(text: string): string | null {
 
 export function guessToolType(toolName: string): string {
   if (!toolName) return 'tool'
+  if (toolName === 'skills' || toolName === 'skill')                        return 'skill'
   if (toolName.includes('resource') || toolName.startsWith('pokemon://')) return 'resource'
   if (toolName.includes('prompt') || toolName.includes('educational'))    return 'prompt'
   return 'tool'
