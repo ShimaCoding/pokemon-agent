@@ -49,6 +49,7 @@ const ChatInput = forwardRef<HTMLInputElement, Props>(function ChatInput(
       disabled={inFlight}
       autoComplete="off"
       spellCheck={false}
+      maxLength={500}
     />
   )
 })

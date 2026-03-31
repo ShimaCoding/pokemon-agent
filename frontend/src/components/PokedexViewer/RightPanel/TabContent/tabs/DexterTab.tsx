@@ -33,6 +33,9 @@ export default function DexterTab() {
 
   return (
     <div className={`${styles.tabContent} md-content`} id="tab-dexter">
+      {/* SECURITY (Finding 7): Do NOT add rehype-raw here. That plugin enables
+          raw HTML rendering, which would create a direct XSS vector from
+          LLM-generated content (prompt-injected <script> or <img onerror>). */}
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {agentResponse}
       </ReactMarkdown>

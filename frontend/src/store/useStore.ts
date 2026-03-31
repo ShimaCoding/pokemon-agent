@@ -1,6 +1,9 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { McpResource, McpTool, PokemonData, Provider, SlashPrompt, TabKey, TraceEvent } from '../types'
+
+// SECURITY (Finding 5): cap trace log history to avoid unbounded memory growth.
+const MAX_TRACE_LOGS = 200
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -79,7 +82,9 @@ interface AppState {
 
 // ── Store ────────────────────────────────────────────────────────
 
-// The apiKey is persisted in localStorage; everything else is ephemeral.
+// SECURITY (Finding 1): API key is persisted in sessionStorage (cleared on tab
+// close) instead of localStorage, reducing the window of exposure to XSS and
+// browser-extension theft. For full protection, migrate to httpOnly cookies.
 const useStore = create<AppState>()(
   persist(
     (set) => ({
@@ -139,7 +144,10 @@ const useStore = create<AppState>()(
       // Trace logs
       traceLogs: [],
       appendTraceLog: (event) =>
-        set((s) => ({ traceLogs: [...s.traceLogs, event] })),
+        set((s) => {
+          const updated = [...s.traceLogs, event]
+          return { traceLogs: updated.length > MAX_TRACE_LOGS ? updated.slice(-MAX_TRACE_LOGS) : updated }
+        }),
 
       // In-flight
       inFlight: false,
@@ -159,7 +167,7 @@ const useStore = create<AppState>()(
     }),
     {
       name: 'mcpokedex-storage',
-      // Persist API key, intro dismissed flag, and dev mode
+      storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, devMode: state.devMode }),
     }
   )

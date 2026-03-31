@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useCallback } from 'react'
 import useStore from '../store/useStore'
 import { fetchPokemonStructured } from './usePokeAPI'
 import type {
@@ -8,6 +8,15 @@ import type {
   ToolCallEvent,
   ToolResultEvent,
 } from '../types'
+
+// ── Module-level guards (survive component remounts) ─────────────
+// SECURITY: using a module-level ref prevents a malicious devtools
+// manipulation of the Zustand `inFlight` store value from bypassing
+// the actual in-flight guard (Finding 3).
+const _globalInFlight = { current: false }
+// SECURITY: module-level timer ID so any pending rate-limit countdown
+// is cancelled on the next runQuery call even after a remount (Finding 4).
+let _rateLimitTimer: number | null = null
 
 // ── Loading phrases ───────────────────────────────────────────────
 
@@ -72,10 +81,9 @@ export function guessToolType(toolName: string): string {
 // ── Hook ──────────────────────────────────────────────────────────
 
 export function useAgentStream() {
-  const inFlightRef = useRef(false)
-
   const apiKey              = useStore((s) => s.apiKey)
   const selectedProvider    = useStore((s) => s.selectedProvider)
+  const providers           = useStore((s) => s.providers)
   const setInFlight         = useStore((s) => s.setInFlight)
   const resetSession        = useStore((s) => s.resetSession)
   const appendText          = useStore((s) => s.appendText)
@@ -88,8 +96,14 @@ export function useAgentStream() {
 
   const runQuery = useCallback(
     async (query: string) => {
-      if (inFlightRef.current) return
-      inFlightRef.current = true
+      if (_globalInFlight.current) return
+      // SECURITY (Finding 4): cancel any stale rate-limit countdown from a
+      // previous request so it doesn't desync state after a remount.
+      if (_rateLimitTimer !== null) {
+        window.clearInterval(_rateLimitTimer)
+        _rateLimitTimer = null
+      }
+      _globalInFlight.current = true
       setInFlight(true)
       setPreQuery(false)
       resetSession()
@@ -107,12 +121,19 @@ export function useAgentStream() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' }
         if (apiKey) headers['X-API-Key'] = apiKey
 
+        // SECURITY (Finding 6): only forward the provider name if it matches
+        // one returned by the backend — prevents store manipulation from
+        // injecting arbitrary values into the request body.
+        const safeProvider = providers.some((p) => p.name === selectedProvider)
+          ? selectedProvider
+          : null
+
         const res = await fetch('/api/agent/run', {
           method: 'POST',
           headers,
           body: JSON.stringify({
             query,
-            provider: selectedProvider || null,
+            provider: safeProvider,
           }),
         })
 
@@ -127,13 +148,16 @@ export function useAgentStream() {
               message: `⚡ Demasiadas consultas. Espera ${retryAfter}s antes de reintentar.`,
               level: 'warn',
             })
-            // Start countdown — disables the submit button for retryAfter seconds
+            // Start countdown — disables the submit button for retryAfter seconds.
+            // SECURITY (Finding 4): stored at module level so it can be cleared
+            // even if the component remounts before the countdown ends.
             let remaining = retryAfter
             setRateLimitSeconds(remaining)
-            const tid = window.setInterval(() => {
+            _rateLimitTimer = window.setInterval(() => {
               remaining--
               if (remaining <= 0) {
-                window.clearInterval(tid)
+                window.clearInterval(_rateLimitTimer!)
+                _rateLimitTimer = null
                 setRateLimitSeconds(0)
               } else {
                 setRateLimitSeconds(remaining)
@@ -245,13 +269,14 @@ export function useAgentStream() {
         appendText(`❌ *${msg}*`)
         appendTraceLog({ type: 'error', message: msg })
       } finally {
-        inFlightRef.current = false
+        _globalInFlight.current = false
         setInFlight(false)
       }
     },
     [
       apiKey,
       selectedProvider,
+      providers,
       setInFlight,
       resetSession,
       appendText,

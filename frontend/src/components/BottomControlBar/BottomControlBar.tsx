@@ -31,7 +31,9 @@ export default function BottomControlBar() {
 
   const handleSubmit = useCallback(async () => {
     const query = inputValue.trim()
-    if (!query || inFlight || rateLimitSeconds > 0) return
+    // SECURITY (Finding 2): enforce client-side length cap to prevent oversized
+    // payloads and reduce prompt-injection surface area.
+    if (!query || query.length > 500 || inFlight || rateLimitSeconds > 0) return
     setInputValue('')
     setSlashOpen(false)
     await runQuery(query)
