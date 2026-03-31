@@ -60,11 +60,15 @@ interface AppState {
 
   // Agent stream response (markdown)
   agentResponse: string
+  animatedAgentResponse: string
   appendText: (delta: string) => void
+  setAnimatedAgentResponse: (text: string) => void
 
   // Trace logs
   traceLogs: TraceEvent[]
+  visibleTraceCount: number
   appendTraceLog: (event: TraceEvent) => void
+  setVisibleTraceCount: (count: number | ((c: number) => number)) => void
 
   // In-flight status (for disabling UI inputs)
   inFlight: boolean
@@ -147,16 +151,21 @@ const useStore = create<AppState>()(
 
       // Agent response text (streaming markdown)
       agentResponse: '',
+      animatedAgentResponse: '',
       appendText: (delta) =>
         set((s) => ({ agentResponse: s.agentResponse + delta })),
+      setAnimatedAgentResponse: (text: string) => set({ animatedAgentResponse: text }),
 
       // Trace logs
       traceLogs: [],
+      visibleTraceCount: 0,
       appendTraceLog: (event) =>
         set((s) => {
           const updated = [...s.traceLogs, event]
           return { traceLogs: updated.length > MAX_TRACE_LOGS ? updated.slice(-MAX_TRACE_LOGS) : updated }
         }),
+      setVisibleTraceCount: (count) => 
+        set((s) => ({ visibleTraceCount: typeof count === 'function' ? count(s.visibleTraceCount) : count })),
 
       // In-flight
       inFlight: false,
@@ -168,7 +177,7 @@ const useStore = create<AppState>()(
 
       // Session reset (tab navigation handled by useAgentStream based on devMode)
       resetSession: () =>
-        set({ agentResponse: '', traceLogs: [] }),
+        set({ agentResponse: '', animatedAgentResponse: '', traceLogs: [], visibleTraceCount: 0 }),
 
       // Pre-query (mobile)
       preQuery: true,

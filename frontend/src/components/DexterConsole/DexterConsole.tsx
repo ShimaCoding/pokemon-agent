@@ -12,11 +12,13 @@ interface Props {
 
 export default function DexterConsole({ collapsible = false }: Props) {
   const traceLogs   = useStore((s) => s.traceLogs)
-  const inFlight    = useStore((s) => s.inFlight)
+  const inFlight      = useStore((s) => s.inFlight)
+  const visibleCount  = useStore((s) => s.visibleTraceCount)
+  const setVisibleCount = useStore((s) => s.setVisibleTraceCount)
+
   const bottomRef   = useRef<HTMLDivElement>(null)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
   const [collapsed, setCollapsed] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(0)
 
   useEffect(() => {
     if (!inFlight) return
@@ -31,19 +33,20 @@ export default function DexterConsole({ collapsible = false }: Props) {
   )
 
   useEffect(() => {
-    if (traceLogs.length === 0) {
-      setVisibleCount(0)
-    }
-  }, [traceLogs.length])
-
-  useEffect(() => {
     if (visibleCount < renderableLogs.length) {
-      const id = setTimeout(() => {
-        setVisibleCount((c) => Math.min(c + 1, renderableLogs.length))
-      }, 500) // Esperar 500ms por cada mensaje para una cadencia de lectura natural
-      return () => clearTimeout(id)
+      if (!inFlight) {
+        // La consulta finalizó por completo. Podemos optar por mostrar todo o revelarlo igual.
+        // Hacemos que se revele todo instantáneamente para que no el usuario no espere innecesariamente
+        // si saltó devolada y ya estaba finalizado.
+        setVisibleCount(renderableLogs.length)
+      } else {
+        const id = setTimeout(() => {
+          setVisibleCount((c) => Math.min(c + 1, renderableLogs.length))
+        }, 500)
+        return () => clearTimeout(id)
+      }
     }
-  }, [visibleCount, renderableLogs.length])
+  }, [visibleCount, renderableLogs.length, inFlight, setVisibleCount])
 
   const visibleLogs = renderableLogs.slice(0, visibleCount)
 
