@@ -17,6 +17,10 @@ interface AppState {
   devMode: boolean
   setDevMode: (v: boolean) => void
 
+  // Fast-Forward (bypass UI animation)
+  fastForward: boolean
+  setFastForward: (v: boolean) => void
+
   // Settings modal
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
@@ -106,7 +110,11 @@ const useStore = create<AppState>()(
 
       // Dev mode
       devMode: true,
-      setDevMode: (v) => set({ devMode: v }),
+      setDevMode: (v) => set({ devMode: v, fastForward: !v }),
+
+      // Fast-Forward
+      fastForward: false,
+      setFastForward: (v) => set({ fastForward: v }),
 
       // Settings modal
       settingsOpen: false,
@@ -186,7 +194,7 @@ const useStore = create<AppState>()(
     {
       name: 'mcpokedex-storage',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, devMode: state.devMode }),
+      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, devMode: state.devMode, fastForward: state.fastForward }),
     }
   )
 )

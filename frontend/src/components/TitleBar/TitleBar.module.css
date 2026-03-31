@@ -107,6 +107,20 @@
 .devToggle:hover { border-color: var(--gbc-screen); color: var(--gbc-screen); }
 .devToggle.devActive { border-color: var(--mcp-prompt, #f0c040); color: var(--mcp-prompt, #f0c040); }
 
+.fastForwardBtn {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  background: none;
+  border: 1px solid var(--gbc-mid);
+  color: var(--gbc-mid);
+  padding: 4px 6px;
+  cursor: pointer;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.fastForwardBtn:hover { border-color: var(--gbc-screen); color: var(--gbc-screen); }
+.fastForwardBtn.fastActive { border-color: var(--gbc-screen); color: var(--gbc-screen); }
+
 .helpBtn {
   font-family: var(--font-pixel);
   font-size: 12px;

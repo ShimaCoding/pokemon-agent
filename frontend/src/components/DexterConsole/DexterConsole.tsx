@@ -15,6 +15,7 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const inFlight      = useStore((s) => s.inFlight)
   const visibleCount  = useStore((s) => s.visibleTraceCount)
   const setVisibleCount = useStore((s) => s.setVisibleTraceCount)
+  const fastForward     = useStore((s) => s.fastForward)
   const activeTab     = useStore((s) => s.activeTab)
   const setActiveTab  = useStore((s) => s.setActiveTab)
   const devMode       = useStore((s) => s.devMode)
@@ -37,10 +38,8 @@ export default function DexterConsole({ collapsible = false }: Props) {
 
   useEffect(() => {
     if (visibleCount < renderableLogs.length) {
-      if (!inFlight) {
-        // La consulta finalizó por completo. Podemos optar por mostrar todo o revelarlo igual.
-        // Hacemos que se revele todo instantáneamente para que no el usuario no espere innecesariamente
-        // si saltó devolada y ya estaba finalizado.
+      if (!inFlight || fastForward) {
+        // La consulta finalizó o el usuario quiere adelantarlo a máxima velocidad
         setVisibleCount(renderableLogs.length)
       } else {
         const id = setTimeout(() => {
@@ -49,7 +48,7 @@ export default function DexterConsole({ collapsible = false }: Props) {
         return () => clearTimeout(id)
       }
     }
-  }, [visibleCount, renderableLogs.length, inFlight, setVisibleCount])
+  }, [visibleCount, renderableLogs.length, inFlight, fastForward, setVisibleCount])
 
   const visibleLogs = renderableLogs.slice(0, visibleCount)
 

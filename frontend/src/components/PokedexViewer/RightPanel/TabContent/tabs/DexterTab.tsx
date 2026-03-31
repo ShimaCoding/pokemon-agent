@@ -10,6 +10,7 @@ export default function DexterTab() {
   const animatedAgentResponse = useStore((s) => s.animatedAgentResponse)
   const setAnimatedAgentResponse = useStore((s) => s.setAnimatedAgentResponse)
   const inFlight      = useStore((s) => s.inFlight)
+  const fastForward   = useStore((s) => s.fastForward)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
 
   useEffect(() => {
@@ -22,13 +23,17 @@ export default function DexterTab() {
     }
 
     if (animatedAgentResponse.length < agentResponse.length) {
-      // Si sigue habiendo diferencia, proseguir fluídamente donde quedó, sin importar si ya terminó la red
-      const id = requestAnimationFrame(() => {
-        setAnimatedAgentResponse(agentResponse.slice(0, animatedAgentResponse.length + 3))
-      })
-      return () => cancelAnimationFrame(id)
+      if (fastForward) {
+        setAnimatedAgentResponse(agentResponse)
+      } else {
+        // Si sigue habiendo diferencia, proseguir fluídamente donde quedó, sin importar si ya terminó la red
+        const id = requestAnimationFrame(() => {
+          setAnimatedAgentResponse(agentResponse.slice(0, animatedAgentResponse.length + 3))
+        })
+        return () => cancelAnimationFrame(id)
+      }
     }
-  }, [agentResponse, animatedAgentResponse, setAnimatedAgentResponse])
+  }, [agentResponse, animatedAgentResponse, fastForward, setAnimatedAgentResponse])
 
   useEffect(() => {
     if (!inFlight || agentResponse) return
