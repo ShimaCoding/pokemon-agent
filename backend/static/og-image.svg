@@ -40,7 +40,7 @@
   <circle cx="300" cy="315" r="140" fill="#CC222215"/>
 
   <!-- Pokédex device (scaled up from favicon, ~4x) -->
-  <g transform="translate(172, 55) scale(4)">
+  <g transform="translate(172, 191) scale(4)">
     <!-- Device body -->
     <rect x="10" y="2" width="44" height="58" rx="7" fill="url(#redGlow)"/>
     <!-- Body highlight strip -->
@@ -96,7 +96,7 @@
 
   <!-- Subtitle -->
   <text x="650" y="330" font-family="system-ui, -apple-system, sans-serif" font-size="30" fill="#ffffffcc" font-weight="400">AI-Powered Pokédex</text>
-  <text x="650" y="375" font-family="system-ui, -apple-system, sans-serif" font-size="30" fill="#ffffffcc" font-weight="400">with MCP · Groq · Gemini · OpenAI</text>
+  <text x="650" y="375" font-family="system-ui, -apple-system, sans-serif" font-size="26" fill="#ffffffcc" font-weight="400">with MCP · OpenRouter · Groq · Gemini · OpenAI</text>
 
   <!-- Tags -->
   <rect x="650" y="420" width="120" height="36" rx="18" fill="#CC222240" stroke="#CC222280" stroke-width="1"/>
