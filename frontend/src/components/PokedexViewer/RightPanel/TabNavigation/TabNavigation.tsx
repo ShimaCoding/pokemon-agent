@@ -16,15 +16,25 @@ export default function TabNavigation() {
   const setActiveTab = useStore((s) => s.setActiveTab)
 
   return (
-    <div id="tab-bar" className={styles.tabBar}>
+    <div
+      id="tab-bar"
+      className={styles.tabBar}
+      role="tablist"
+      aria-label="Secciones del Pokédex"
+    >
       {TABS.flatMap(({ key, label }) => [
-        activeTab === key ? <span key={`arrow-${key}`} className={styles.tabArrow}>▶</span> : null,
+        activeTab === key
+          ? <span key={`arrow-${key}`} className={styles.tabArrow} aria-hidden="true">▶</span>
+          : null,
         <button
           key={key}
           className={[
             styles.tabBtn,
             activeTab === key ? styles.active : '',
           ].filter(Boolean).join(' ')}
+          role="tab"
+          aria-selected={activeTab === key}
+          aria-controls={`tabpanel-${key}`}
           data-tab={key}
           onClick={() => setActiveTab(key)}
         >

@@ -10,8 +10,9 @@ export default function SettingsModal() {
   const clearApiKey     = useStore((s) => s.clearApiKey)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const boxRef   = useRef<HTMLDivElement>(null)
 
-  // On open: populate input with current key
+  // On open: populate input with current key and move focus inside dialog
   useEffect(() => {
     if (settingsOpen && inputRef.current) {
       inputRef.current.value = apiKey
@@ -46,9 +47,40 @@ export default function SettingsModal() {
     setSettingsOpen(false)
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  // Enter/Escape on the input field
+  function handleInputKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') handleSave()
     if (e.key === 'Escape') setSettingsOpen(false)
+  }
+
+  // Focus trap + Escape for the whole dialog box
+  function handleBoxKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      setSettingsOpen(false)
+      return
+    }
+    if (e.key !== 'Tab' || !boxRef.current) return
+
+    const focusable = Array.from(
+      boxRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => !el.hasAttribute('disabled'))
+
+    const first = focusable[0]
+    const last  = focusable[focusable.length - 1]
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
   }
 
   if (!settingsOpen) return null
@@ -59,8 +91,16 @@ export default function SettingsModal() {
         className={styles.overlay}
         onClick={() => setSettingsOpen(false)}
       />
-      <div className={styles.box}>
-        <div className={styles.title}>AJUSTES</div>
+      {/* role="dialog" + aria-modal prevent screen readers from browsing outside */}
+      <div
+        ref={boxRef}
+        className={styles.box}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        onKeyDown={handleBoxKeyDown}
+      >
+        <div className={styles.title} id="settings-title">AJUSTES</div>
         <label className={styles.label} htmlFor="api-key-input">API KEY</label>
         <input
           ref={inputRef}
@@ -69,15 +109,27 @@ export default function SettingsModal() {
           className={styles.input}
           placeholder="dejar vacío si no se requiere"
           autoComplete="off"
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleInputKeyDown}
         />
-        <div className={styles.hint}>
-          Se guarda en localStorage. Enviar como cabecera X-API-Key.
+        <div className={styles.hint} role="note">
+          Se guarda temporalmente en sessionStorage. Se borra al cerrar la pestaña del navegador.
         </div>
         <div className={styles.actions}>
-          <button className={styles.clearBtn} onClick={handleClear}>BORRAR</button>
-          <button className={styles.cancelBtn} onClick={() => setSettingsOpen(false)}>CANCELAR</button>
-          <button className={styles.saveBtn} onClick={handleSave}>GUARDAR</button>
+          <button
+            className={styles.clearBtn}
+            onClick={handleClear}
+            aria-label="Borrar API Key guardada"
+          >BORRAR</button>
+          <button
+            className={styles.cancelBtn}
+            onClick={() => setSettingsOpen(false)}
+            aria-label="Cancelar y cerrar ajustes"
+          >CANCELAR</button>
+          <button
+            className={styles.saveBtn}
+            onClick={handleSave}
+            aria-label="Guardar API Key"
+          >GUARDAR</button>
         </div>
       </div>
     </div>
