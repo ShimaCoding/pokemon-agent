@@ -162,11 +162,6 @@ export default function IntroModal() {
           <div className={styles.section}>
             <div className={styles.sectionTitle}>HERRAMIENTAS DISPONIBLES</div>
             <div className={styles.toolList}>
-              {/* Local tool always present */}
-              <div className={styles.toolItem}>
-                <span className={`${styles.badge} ${styles.badgeLocal}`}>LOCAL</span>
-                <span className={styles.toolName}>get_pokedex_entry</span>
-              </div>
               {!mcpLoaded && (
                 <div className={styles.toolItem}>
                   <span className={`${styles.badge} ${styles.badgeLocal}`}>MCP</span>

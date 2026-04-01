@@ -18,7 +18,11 @@ const DOCS = {
   agent: `
 ### ¿Cómo funciona el Agente?
 
-El agente **Dexter** está construido con el SDK de **Strands Agents**. El backend crea un \`LiteLLMModel\` (con fallback automático entre proveedores via Router) y un \`MCPClient\` que se conecta al servidor MCP remoto para obtener las herramientas disponibles.
+El agente **Dexter** es una aplicación **Strands + MCP + LiteLLM** con FastAPI. El backend implementa un flujo agentico que:
+
+1. Conecta a un **servidor MCP remoto** (p. ej., \`mcpokedex.com/mcp\`) vía MCPClient para descubrir herramientas
+2. Usa **LiteLLM Router** para LLM calls con fallback multi-proveedor (Groq → Gemini → OpenAI)
+3. Delega el **loop agentico a Strands**: LLM decide → herramienta ejecutada → resultado al LLM → repetir
 
 \`\`\`python
 # backend/agent.py
@@ -26,105 +30,99 @@ from strands import Agent
 from strands.models.litellm import LiteLLMModel
 from strands.tools.mcp import MCPClient
 
-SYSTEM_PROMPT = """
-Eres Dexter, una Pokédex de alta tecnología programada
-por el Profesor Oak. Tu objetivo es proporcionar información
-precisa y científica sobre los Pokémon...
-"""
+# 1. Crear el modelo LiteLLM (con Router + fallback)
+model = LiteLLMModel(model_id="agent-model")
 
-def build_agent(provider_name=None):
-    model = LiteLLMModel(model_id="agent-model")
-    mcp_client = MCPClient(lambda: _http_transport(MCP_SERVER_URL))
+# 2. Conectar a servidor MCP remoto
+mcp_client = MCPClient(lambda: streamablehttp_client("http://mcpokedex.com/mcp"))
 
-    with mcp_client:
-        tools = mcp_client.list_tools_sync()
-        agent = Agent(
-            model=model,
-            system_prompt=SYSTEM_PROMPT,
-            tools=tools,
-        )
-        return agent
+# 3. Dentro de un contexto MCP, listar herramientas
+with mcp_client:
+    # list_tools_sync() retorna TODAS las herramientas del servidor MCP
+    tools = mcp_client.list_tools_sync()
+    
+    # 4. Crear el agente con TODOS los tools
+    agent = Agent(
+        model=model,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT,
+    )
+    
+    # 5. Strands maneja el loop internamente
+    async for event in agent.stream_async(query):
+        # Eventos: {"data": "texto"}, {"type": "tool_use", ...}, etc.
+        # Strands automáticamente llama herramientas del servidor MCP
 \`\`\`
 
-Antes de construir el modelo, el backend **parchea globalmente** \`litellm.completion\` con el Router para que todos los llamados pasen por el mecanismo de fallback (Groq → Gemini → OpenAI) sin modificar el SDK de Strands.
+**Arquitectura simplificada:**
+- Solo herramientas **remotas** del servidor MCP (mcpokedex.com/mcp)
+- Ejecución vía JSON-RPC over HTTP (~50-100ms de latencia típica)
+- Descubrimiento dinámico: agregar nuevas herramientas en el servidor sin actualizar el backend
+
+**Monkey-patching de LiteLLM:**
+El LiteLLMModel de Strands llama \`litellm.completion()\` directamente. Como Strands no soporta nativo Router, el backend reemplaza las funciones de litellm globalmente ANTES de construir el modelo:
+
+\`\`\`python
+# Guardar originals antes de cualquier importación
+_orig_completion = litellm.completion
+_orig_acompletion = litellm.acompletion
+
+# Reemplazar con Router
+litellm.completion = router.completion
+litellm.acompletion = router.acompletion
+
+# Ahora crear el modelo → todas sus llamadas van por el Router
+model = LiteLLMModel(model_id="agent-model")
+\`\`\`
+
+Un ContextVar (\`_in_router_call\`) previene bucles infinitos: cuando el Router internamente llama \`litellm.completion\`, se detecta y se usa la función original.
 `,
 
   tool_pokemon: `
 ### ¿Cómo funciona esta herramienta?
 
-\`get_pokedex_entry\` es una herramienta **local de Strands**, decorada con \`@tool\`. Cuando el agente la necesita, la ejecuta directamente en el backend (sin pasar por MCP), llamando a la **PokeAPI** en dos endpoints: \`/pokemon/{id}\` para datos base y \`/pokemon-species/{id}\` para flavor text y metadatos de especie.
+\`get_pokedex_entry\` es una herramienta **remota del servidor MCP** (mcpokedex.com/mcp).
+
+El agente (**Strands Agent**) descubre esta herramienta a través de MCPClient y la ejecuta vía JSON-RPC:
+
+1. Backend se conecta al servidor MCP remoto
+2. MCPClient lista todas las herramientas disponibles (incluyendo \`get_pokedex_entry\`)
+3. El LLM elige \`get_pokedex_entry\` según el contexto
+4. La herramienta se ejecuta en el servidor remoto vía JSON-RPC
+5. El resultado retorna al agente para continuar la conversación
 
 \`\`\`python
-# backend/tools.py
-import json
-import httpx
-from strands import tool
+# En el servidor MCP remoto (mcpokedex.com/mcp)
+from mcp.tool import tool
 
-_POKEAPI_BASE = "https://pokeapi.co/api/v2"
-
-@tool
+@tool()
 def get_pokedex_entry(pokemon: str) -> dict:
     """Fetch a complete Pokédex entry for a Pokémon from PokeAPI.
 
     Retrieves types, base stats, abilities, height, weight, flavor text
-    descriptions from the games (in Spanish when available, otherwise
-    English), generation, habitat, legendary/mythical status, and capture
-    rate. Use this tool whenever the user asks about a specific Pokémon.
+    descriptions from the games (en Spanish when available, otherwise English),
+    generation, habitat, legendary/mythical status, and capture rate.
 
     Args:
-        pokemon: The Pokémon name (lowercase, e.g. "pikachu") or National
-                 Pokédex number as a string (e.g. "25").
+        pokemon: The Pokémon name or National Pokédex number as string
 
     Returns:
-        A dict with full Pokédex entry data, or an error status on failure.
+        Dict with complete pokedex entry or error status
     """
-    name_or_id = pokemon.strip().lower()
+    # Conecta a PokeAPI
+    _POKEAPI_BASE = "https://pokeapi.co/api/v2"
+    name_or_id = urllib.parse.quote(pokemon.strip().lower(), safe="")
+    
     with httpx.Client(timeout=10.0) as client:
         r_poke = client.get(f"{_POKEAPI_BASE}/pokemon/{name_or_id}")
-        if r_poke.status_code == 404:
-            return {"status": "error", "content": [{"text": f"No se encontró '{pokemon}'."}]}
-        r_poke.raise_for_status()
-        poke = r_poke.json()
-
-        species_url = poke.get("species", {}).get("url", f"{_POKEAPI_BASE}/pokemon-species/{name_or_id}")
+        species_url = r_poke.json().get("species", {}).get("url")
         species = client.get(species_url).json()
-
-    types = [t["type"]["name"] for t in sorted(poke["types"], key=lambda x: x["slot"])]
-    base_stats = {s["stat"]["name"]: s["base_stat"] for s in poke["stats"]}
-    abilities = [{"name": a["ability"]["name"], "is_hidden": a["is_hidden"]}
-                 for a in sorted(poke["abilities"], key=lambda x: x["slot"])]
-
-    # Flavor texts: prefer Spanish, fallback to English; deduplicate; cap at 3
-    def _collect_texts(lang):
-        seen, result = set(), []
-        for entry in species.get("flavor_text_entries", []):
-            if entry["language"]["name"] == lang:
-                text = entry["flavor_text"].replace("\\f", " ").replace("\\n", " ").strip()
-                if text and text not in seen:
-                    seen.add(text); result.append(text)
-                    if len(result) == 3: break
-        return result
-
-    flavor_texts = _collect_texts("es") or _collect_texts("en")
-    generation = species.get("generation", {}).get("name", "").replace("generation-", "").upper()
-    habitat_obj = species.get("habitat")
-
-    return {
-        "status": "success",
-        "content": [{"text": json.dumps({
-            "id": poke["id"], "name": poke["name"],
-            "height_dm": poke["height"], "weight_hg": poke["weight"],
-            "types": types, "base_stats": base_stats, "abilities": abilities,
-            "flavor_text": flavor_texts, "generation": generation,
-            "habitat": habitat_obj["name"] if habitat_obj else "unknown",
-            "is_legendary": species.get("is_legendary", False),
-            "is_mythical": species.get("is_mythical", False),
-            "capture_rate": species.get("capture_rate"),
-        }, ensure_ascii=False)}],
-    }
+    
+    # Extract types, stats, abilities, flavor text, generation, habitat, etc.
+    return {"status": "success", "data": {...}}
 \`\`\`
 
-El decorador \`@tool\` genera automáticamente el **JSON Schema** del argumento a partir del type hint y el docstring, para que el LLM sepa exactamente cómo invocar la función.
+**Ventaja de herramientas remotas**: Descubrimiento dinámico y ejecución centralizada en el servidor MCP sin necesidad de actualizar el backend.
 `,
 
   skill: `
@@ -142,30 +140,55 @@ Cuando el agente invoca la herramienta \`skills\`, las instrucciones del skill s
 `,
 
   tool_generic: `
-### ¿Cómo funciona esta herramienta MCP?
+### ¿Cómo funciona esta herramienta (Remota)?
 
-Las herramientas remotas se exponen a través del **servidor MCP** (Model Context Protocol). El servidor las registra con el decorador \`@mcp.tool()\` y las publica vía HTTP. El agente las descubre dinámicamente en cada request.
+Todas las herramientas se exponen a través del **Protocolo de Contexto del Modelo (MCP)** desde el servidor remoto (\`mcpokedex.com/mcp\`) e integradas con **Strands**.
+
+**Flujo de descubrimiento y ejecución:**
+1. Backend crea MCPClient (cliente HTTP + JSON-RPC del protocolo MCP)
+2. MCPClient se conecta al servidor MCP remoto durante cada request
+3. \`mcp_client.list_tools_sync()\` descubre todas las herramientas disponibles
+4. Strands Agent recibe el catálogo completo de herramientas MCP
+5. El LLM decide qué herramienta usar según el contexto del usuario
+6. Cuando el LLM elige una herramienta:
+   - Strands invoca MCPClient para ejecutar la herramienta
+   - MCPClient realiza el RPC en el servidor remoto (JSON-RPC over HTTP)
+   - El servidor ejecuta la herramienta (típicamente consultando PokeAPI o procesando datos)
+   - El resultado retorna al agente para continuar el diálogo
 
 \`\`\`python
-# En el servidor MCP (mcpokedex.com/mcp)
-from mcp.server.fastmcp import FastMCP
+# backend/main.py - Arquitectura MCP
+from strands.tools.mcp import MCPClient
 
-mcp = FastMCP("Pokemon MCP Server")
+# Crear cliente MCP
+mcp_client = MCPClient(
+    lambda: streamablehttp_client("http://mcpokedex.com/mcp")
+)
 
-@mcp.tool()
-def search_pokemon(query: str) -> dict:
-    """Search for a Pokémon by name or type.
-
-    Args:
-        query: Name or type to search for.
-    Returns:
-        List of matching Pokémon with basic info.
-    """
-    # ... lógica de búsqueda
-    return results
+# Dentro del contexto MCP
+with mcp_client:
+    # Discover todas las herramientas del servidor MCP
+    tools = mcp_client.list_tools_sync()
+    
+    # Crear agente con Strands
+    agent = Agent(
+        model=model,
+        tools=tools,  # Solo herramientas remotas del MCP
+        system_prompt=SYSTEM_PROMPT,
+    )
+    
+    # Strands maneja el loop agentico
+    async for event in agent.stream_async(query):
+        # {"type": "tool_use", "name": "...", "input": {...}}
+        # Strands ejecuta la herramienta remotamente vía MCPClient
 \`\`\`
 
-El cliente MCP en el backend usa \`MCPClient.list_tools_sync()\` para obtener el **catálogo completo** de herramientas al inicio de cada petición, y las pasa al agente Strands como tools disponibles.
+**Características de MCP:**
+- **Descubrimiento dinámico**: Agregar nuevas herramientas en el servidor remoto sin actualizar el backend
+- **Ejecución remota**: JSON-RPC over HTTP, ~50-100ms de latencia típica
+- **Compatible con cualquier servidor MCP**: Arquitectura agnóstica y extensible
+
+**Ventaja**: Mayor flexibilidad y escalabilidad al centralizar la lógica de herramientas en el servidor MCP.
 `,
 }
 
