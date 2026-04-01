@@ -2,11 +2,12 @@
 
 **Sandbox educativo para entender flujos agénticos de principio a fin.**
 
-Un agente de IA que responde preguntas sobre Pokémon conectándose al servidor MCP en vivo de `mcpokedex.com/mcp`. Cada paso del flujo — qué herramienta se invocó, con qué argumentos, qué devolvió y cuánto tardó — se muestra al usuario en tiempo real. Nada es una caja negra.
+Un agente de IA que responde preguntas sobre Pokémon conectándose al servidor MCP en vivo de `mcp.mcpokedex.com/mcp` (https://github.com/ShimaCoding/mcp-pokemon-server). Cada paso del flujo — qué herramienta se invocó, con qué argumentos, qué devolvió y cuánto tardó — se muestra al usuario en tiempo real. Nada es una caja negra.
 
 El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SPA en React** con Zustand, CSS Modules y Vite, que consume el stream SSE del backend y actualiza la UI de forma reactiva.
 
-**Demo:** https://pokemon-agent.cubepath.app · **Repo:** https://github.com/ShimaCoding/pokemon-agent
+**Demo:** http://vps22626.cubepath.net / https://mcpokedex.com
+**Repos:** https://github.com/ShimaCoding/pokemon-agent https://github.com/ShimaCoding/mcp-pokemon-server
 
 ---
 
@@ -14,7 +15,7 @@ El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SP
 
 | Herramientas MCP descubiertas dinámicamente | Respuesta con narración Dexter |
 |:---:|:---:|
-| ![MCP Tools panel](Screenshot%202026-03-29%20at%2011.56.13%E2%80%AFPM.png) | ![Dexter narration](Screenshot%202026-03-29%20at%2011.50.58%E2%80%AFPM.png) |
+| ![MCP Tools panel](Screenshot%202026-03-29%20at%2011.56.32%E2%80%AFPM.png) | ![Dexter narration](Screenshot%202026-03-29%20at%2011.50.58%E2%80%AFPM.png) |
 
 | Trazas del LLM Router con fallback | Admin dashboard |
 |:---:|:---:|
@@ -74,6 +75,7 @@ Solo necesitas **una** para que el agente funcione. El Router hace fallback auto
 
 | Proveedor | Tier gratuito | Obtener key |
 |-----------|---------------|-------------|
+| **OpenRouter** | Sí — multiples modeles completamente gratis | https://platform.openai.com/api-keys |
 | **Groq** | Sí — muy generoso | https://console.groq.com/keys |
 | **Gemini** | Sí — cuota de Google AI Studio | https://aistudio.google.com/app/apikey |
 | **OpenAI** | No — pay-as-you-go | https://platform.openai.com/api-keys |
@@ -118,6 +120,7 @@ El panel derecho muestra cada invocación en tiempo real:
 
 Todas las llamadas MCP son **server-side** — el navegador nunca habla directamente con `mcpokedex.com`.
 
+
 ---
 
 ## Admin Dashboard
@@ -135,8 +138,6 @@ Disponible en `/admin`. Registra en SQLite cada consulta con:
 
 ## Limitaciones conocidas (MVP)
 
-- Sin autenticación — no exponer el puerto 8000 a internet sin añadir auth.
-- Sin rate limiting — añadir `slowapi` antes de producción.
 - Sin historial de sesión — la conversación se reinicia al refrescar la página.
 - El monkey-patch de LiteLLM Router funciona para deployments de un solo worker; usar `--workers 1` (por defecto en Docker) o refactorizar a instancias por request para concurrencia real.
 - `list_tools_sync()` es sincrónico y añade ~100–300 ms de latencia por request en la conexión inicial al MCP.
