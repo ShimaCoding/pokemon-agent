@@ -219,12 +219,6 @@ function LlmCallCard({ e }: { e: LlmCallEvent }) {
         <span className={`${styles.typeBadge} ${styles.llm}`}>PROMPT</span>
         <span className={styles.name}>LLM Call #{e.call_index}</span>
         <span className={styles.timing}>+{e.timestamp_ms ?? 0}ms</span>
-        <button
-          className={styles.toggleBtn}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? '[ocultar]' : '[ver msgs]'}
-        </button>
       </div>
       {preview && (
         <div className={styles.meta} style={{ fontStyle: 'italic' }}>
@@ -232,11 +226,19 @@ function LlmCallCard({ e }: { e: LlmCallEvent }) {
         </div>
       )}
       <EduPanel markdown={DOCS.agent} />
-      {open && (
-        <div className={styles.expandable}>
-          <JsonViewer data={messages} maxHeight="400px" />
-        </div>
-      )}
+      <div className={styles.actionContainer}>
+        <button
+          className={styles.actionBtn}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '[cerrar]' : '🔍 ¿cómo funciona por dentro?'}
+        </button>
+        {open && (
+          <div className={styles.expandable}>
+            <JsonViewer data={messages} maxHeight="400px" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -317,22 +319,23 @@ function ToolResultCard({ e }: { e: ToolResultEvent }) {
       {parsed !== null ? (
         <JsonViewer data={parsed} maxHeight="160px" />
       ) : (
-        <div className={styles.meta} style={{ marginTop: 3, borderTop: '1px dashed var(--gbc-border)', paddingTop: 3 }}>
-          <span>Resultado:</span> {full.slice(0, 300)}{full.length > 300 ? '…' : ''}
+        <>
+          <div className={styles.meta} style={{ marginTop: 3, borderTop: '1px dashed var(--gbc-border)', paddingTop: 3 }}>
+            <span>Resultado:</span> {full.slice(0, 300)}{full.length > 300 ? '…' : ''}
+          </div>
           {full.length > 300 && (
-            <>
-              {' '}
-              <button className={styles.toggleBtn} onClick={() => setOpen((v) => !v)}>
-                {open ? '[ocultar]' : '[ver todo]'}
+            <div className={styles.actionContainer}>
+              <button className={styles.actionBtn} onClick={() => setOpen((v) => !v)}>
+                {open ? '[cerrar]' : '📄 ver todo'}
               </button>
               {open && (
                 <div className={styles.expandable}>
                   <pre className={styles.resultFull}>{full}</pre>
                 </div>
               )}
-            </>
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   )

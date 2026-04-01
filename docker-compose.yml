@@ -43,10 +43,14 @@ services:
 
     networks:
       - pokemon-net
+      - mcp-backend
 
 networks:
   pokemon-net:
     driver: bridge
+  mcp-backend:
+    external: true
+    name: mcp-pokemon-server_mcp-network
 
 volumes:
   pokemon_data:

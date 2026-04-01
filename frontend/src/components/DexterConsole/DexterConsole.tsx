@@ -94,7 +94,6 @@ export default function DexterConsole({ collapsible = false }: Props) {
         role={collapsible ? 'button' : undefined}
         aria-expanded={collapsible ? !collapsed : undefined}
       >
-        <div className={styles.traceTitle}>Consola de Dexter (Logs)</div>
         <div className={styles.traceRight}>
           <div className={styles.traceStats} id="trace-stats">{statsText}</div>
           {collapsible && (
