@@ -220,6 +220,20 @@
   font-family: inherit;
 }
 
+/* Lists styling */
+.eduContent ol,
+.eduContent ul {
+  margin: 5px 0;
+  padding-left: 20px;
+  font-size: 10px;
+  color: var(--gbc-dark);
+}
+
+.eduContent li {
+  margin: 2px 0;
+  line-height: 1.8;
+}
+
 /* inline code (not inside pre) */
 .eduContent p code,
 .eduContent li code {
