@@ -211,7 +211,8 @@
   font-size: 10px;
   line-height: 1.6;
   margin: 5px 0;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .eduContent code {
