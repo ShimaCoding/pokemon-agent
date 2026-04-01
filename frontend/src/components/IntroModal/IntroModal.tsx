@@ -22,6 +22,7 @@ export default function IntroModal() {
 
   const mcpTools     = useStore((s) => s.mcpTools)
   const mcpResources = useStore((s) => s.mcpResources)
+  const mcpLoaded    = useStore((s) => s.mcpLoaded)
   const prompts      = useStore((s) => s.prompts)
   const mcpPrompts   = prompts.filter((p) => p.isMcp)
 
@@ -114,9 +115,46 @@ export default function IntroModal() {
                 <span className={`${styles.badge} ${styles.badgeTool}`}>POKé</span>
                 <span className={styles.toolName}>Modo Pokédex — muestra la ficha visual del Pokémon y la respuesta de Dexter</span>
               </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgePrompt}`}>&gt;&gt;</span>
+                <span className={styles.toolName}>Fast Forward — salta las animaciones de escritura, muestra la respuesta al instante</span>
+              </div>
             </div>
             <div className={styles.toolsHint}>
-              Cambia el modo con el botón DEV / POKé en la barra superior
+              Cambia el modo con DEV / POKé · activa Fast Forward con el botón &gt;&gt; en la barra superior
+            </div>
+          </div>
+
+          {/* Provider & Fallback */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>PROVEEDOR DE IA Y FALLBACK</div>
+            <div className={styles.toolList}>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeResource}`}>GRATIS</span>
+                <span className={styles.toolName}>OpenRouter — modelos gratuitos, <strong>sin API key</strong></span>
+              </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeLocal}`}>KEY</span>
+                <span className={styles.toolName}>Groq — modelos ultra-rápidos</span>
+              </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeLocal}`}>KEY</span>
+                <span className={styles.toolName}>Gemini — gemini-2.5-flash</span>
+              </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeLocal}`}>KEY</span>
+                <span className={styles.toolName}>OpenAI — gpt-4o-mini</span>
+              </div>
+              <div className={styles.toolItem}>
+                <span className={`${styles.badge} ${styles.badgeSoon}`}>PRONTO</span>
+                <span className={styles.toolName}>Ollama — modelos locales sin internet</span>
+              </div>
+            </div>
+            <div className={styles.toolsHint}>
+              Cambia el proveedor desde el selector en la barra inferior ↓
+            </div>
+            <div className={styles.fallbackHint}>
+              ⚡ Fallback automático — si el proveedor activo falla, el sistema intenta el siguiente sin interrupciones
             </div>
           </div>
 
@@ -129,6 +167,12 @@ export default function IntroModal() {
                 <span className={`${styles.badge} ${styles.badgeLocal}`}>LOCAL</span>
                 <span className={styles.toolName}>get_pokedex_entry</span>
               </div>
+              {!mcpLoaded && (
+                <div className={styles.toolItem}>
+                  <span className={`${styles.badge} ${styles.badgeLocal}`}>MCP</span>
+                  <span className={`${styles.toolName} ${styles.loading}`}>Conectando al servidor MCP…</span>
+                </div>
+              )}
               {mcpTools.map((t) => (
                 <div key={t.name} className={styles.toolItem}>
                   <span className={`${styles.badge} ${styles.badgeTool}`}>TOOL</span>

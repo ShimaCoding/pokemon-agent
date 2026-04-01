@@ -6,6 +6,7 @@ export function useMcpCapabilities() {
   const apiKey          = useStore((s) => s.apiKey)
   const setMcpTools     = useStore((s) => s.setMcpTools)
   const setMcpResources = useStore((s) => s.setMcpResources)
+  const setMcpLoaded    = useStore((s) => s.setMcpLoaded)
 
   useEffect(() => {
     const headers: Record<string, string> = {}
@@ -23,8 +24,9 @@ export function useMcpCapabilities() {
       if (resourcesResp.status === 'fulfilled') {
         setMcpResources((resourcesResp.value as McpResource[]) ?? [])
       }
+      setMcpLoaded(true)
     }
 
     void load()
-  }, [apiKey, setMcpTools, setMcpResources])
+  }, [apiKey, setMcpTools, setMcpResources, setMcpLoaded])
 }

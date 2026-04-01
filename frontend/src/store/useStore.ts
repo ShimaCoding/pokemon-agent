@@ -54,6 +54,8 @@ interface AppState {
   setMcpTools: (tools: McpTool[]) => void
   mcpResources: McpResource[]
   setMcpResources: (resources: McpResource[]) => void
+  mcpLoaded: boolean
+  setMcpLoaded: (v: boolean) => void
 
   // Active tab
   activeTab: TabKey
@@ -150,6 +152,8 @@ const useStore = create<AppState>()(
       setMcpTools: (mcpTools) => set({ mcpTools }),
       mcpResources: [],
       setMcpResources: (mcpResources) => set({ mcpResources }),
+      mcpLoaded: false,
+      setMcpLoaded: (v) => set({ mcpLoaded: v }),
 
       // Active tab
       activeTab: 'info',
