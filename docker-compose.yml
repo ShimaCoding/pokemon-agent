@@ -3,8 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8001:8000"
     env_file: .env
     restart: unless-stopped
 
@@ -21,7 +19,6 @@ services:
       retries: 3
       start_period: 15s
 
-    # Prevent a runaway container from starving the host
     deploy:
       resources:
         limits:
@@ -31,7 +28,6 @@ services:
           cpus: "0.25"
           memory: 256M
 
-    # Rotating JSON logs — avoids unbounded disk growth
     logging:
       driver: "json-file"
       options:
@@ -42,15 +38,18 @@ services:
       - pokemon_data:/app/data
 
     networks:
-      - pokemon-net
-      - mcp-backend
+      - dokploy-network
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcpokedex.rule=Host(`mcpokedex.shimadev.xyz`)"
+      - "traefik.http.routers.mcpokedex.entrypoints=websecure"
+      - "traefik.http.routers.mcpokedex.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcpokedex.loadbalancer.server.port=8000"
 
 networks:
-  pokemon-net:
-    driver: bridge
-  mcp-backend:
+  dokploy-network:
     external: true
-    name: mcp-pokemon-server_mcp-network
 
 volumes:
   pokemon_data:
