@@ -93,19 +93,32 @@
 .settingsBtn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
 .settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }
 
-.devToggle {
+.modeSegmented {
+  display: inline-flex;
+  border: 1px solid var(--gbc-mid);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.modeOption {
   font-family: var(--font-pixel);
   font-size: 10px;
   background: none;
-  border: 1px solid var(--gbc-mid);
+  border: none;
+  border-right: 1px solid var(--gbc-mid);
   color: var(--gbc-mid);
   padding: 4px 8px;
   cursor: pointer;
   line-height: 1;
   letter-spacing: 0.5px;
+  transition: color 0.15s, background 0.15s;
 }
-.devToggle:hover { border-color: var(--gbc-screen); color: var(--gbc-screen); }
-.devToggle.devActive { border-color: var(--mcp-prompt, #f0c040); color: var(--mcp-prompt, #f0c040); }
+.modeOption:last-child { border-right: none; }
+.modeOption:hover { color: var(--gbc-screen); }
+.modeOption.modeActive {
+  background: var(--gbc-mid);
+  color: var(--gbc-dark);
+}
 
 .fastForwardBtn {
   font-family: var(--font-pixel);

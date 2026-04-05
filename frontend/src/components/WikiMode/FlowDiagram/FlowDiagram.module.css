@@ -1,0 +1,105 @@
+.diagramWrap {
+  width: 100%;
+  overflow: auto;
+  background: var(--gbc-cream, #fff8e0);
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  font-family: var(--font-pixel);
+}
+
+.edge {
+  stroke: var(--gbc-mid, #585858);
+  stroke-width: 1.5;
+  fill: none;
+  transition: stroke 0.25s, stroke-width 0.25s;
+}
+
+.edge.edgeActive {
+  stroke: #3a7bd5;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 4;
+  animation: dashflow 0.8s linear infinite;
+}
+
+@keyframes dashflow {
+  to { stroke-dashoffset: -10; }
+}
+
+.edgeLabel {
+  font-size: 8px;
+  fill: var(--gbc-mid, #585858);
+}
+
+.nodeGroup {
+  transition: transform 0.25s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.nodeRect {
+  stroke: var(--gbc-border, #585858);
+  stroke-width: 2;
+  fill: var(--gbc-cream, #fff8e0);
+  cursor: pointer;
+  transition: fill 0.25s, stroke 0.25s;
+}
+.nodeRect:hover {
+  fill: var(--gbc-screen, #e8e8d0);
+  stroke: var(--gbc-dark, #101828);
+}
+
+/* ── States ───────────────────────────────────────────────────── */
+
+.nodeGroup.stateIdle .nodeRect {
+  fill: var(--gbc-cream, #fff8e0);
+}
+
+.nodeGroup.stateActive .nodeRect {
+  fill: #9cc4f5;
+  stroke: #3a7bd5;
+  animation: nodePulse 1.2s ease-in-out infinite;
+}
+
+.nodeGroup.stateSuccess .nodeRect {
+  fill: #a8d8a8;
+  stroke: #4a8a4a;
+}
+
+.nodeGroup.stateError .nodeRect {
+  fill: #e89898;
+  stroke: #b84a4a;
+}
+
+.nodeGroup.stateError {
+  animation: nodeShake 0.35s ease-in-out 2;
+}
+
+@keyframes nodePulse {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes nodeShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.nodeLabel {
+  font-size: 10px;
+  fill: var(--gbc-dark, #101828);
+  pointer-events: none;
+  text-anchor: middle;
+  font-weight: bold;
+}

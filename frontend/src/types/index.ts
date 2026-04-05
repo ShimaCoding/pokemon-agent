@@ -89,6 +89,15 @@ export interface ErrorEvent {
   message?: string
 }
 
+export interface AgentInitEvent {
+  type: 'agent_init'
+  mcp_tools_count: number
+  tool_names: string[]
+  skill_loaded: string | null
+  system_prompt_preview: string | null
+  timestamp_ms: number
+}
+
 export interface SystemLogEvent {
   type: 'system_log'
   message: string
@@ -104,6 +113,50 @@ export type TraceEvent =
   | DoneEvent
   | ErrorEvent
   | SystemLogEvent
+  | AgentInitEvent
+
+// ── UI Mode ──────────────────────────────────────────────────────
+
+export type UiMode = 'casual' | 'dev' | 'learn'
+
+// ── Wiki content (modo learn) ────────────────────────────────────
+
+export interface WikiLesson {
+  id: string
+  title: string
+  level: string
+  tags: string[]
+  related_events: string[]
+  related_nodes: string[]
+  body_md: string
+}
+
+export interface ArchitectureNode {
+  id: string
+  label: string
+  description: string
+  related_lesson_id: string
+  position: { x: number; y: number }
+}
+
+export interface ArchitectureEdge {
+  from: string
+  to: string
+  label: string
+}
+
+export interface Architecture {
+  nodes: ArchitectureNode[]
+  edges: ArchitectureEdge[]
+}
+
+export interface EventCatalogEntry {
+  description_md: string
+  related_lesson_id: string
+  related_node_id: string
+}
+
+export type EventsCatalog = Record<string, EventCatalogEntry>
 
 // ── Providers & Prompts ─────────────────────────────────────────
 

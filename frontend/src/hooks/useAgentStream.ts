@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import useStore from '../store/useStore'
 import { fetchPokemonStructured } from './usePokeAPI'
 import type {
+  AgentInitEvent,
   DoneEvent,
   LlmCallEvent,
   ModelAttemptEvent,
@@ -92,7 +93,7 @@ export function useAgentStream() {
   const setPokemonData      = useStore((s) => s.setPokemonData)
   const setPreQuery         = useStore((s) => s.setPreQuery)
   const setActiveTab        = useStore((s) => s.setActiveTab)
-  const devMode             = useStore((s) => s.devMode)
+  const uiMode              = useStore((s) => s.uiMode)
   const fastForward         = useStore((s) => s.fastForward)
   const setRateLimitSeconds = useStore((s) => s.setRateLimitSeconds)
 
@@ -109,7 +110,10 @@ export function useAgentStream() {
       setInFlight(true)
       setPreQuery(false)
       resetSession()
-      setActiveTab(devMode ? 'consola' : 'dexter')
+      // En modo learn el layout tiene su propio Timeline/FlowDiagram y no usa tabs.
+      if (uiMode !== 'learn') {
+        setActiveTab(uiMode === 'dev' ? 'consola' : 'dexter')
+      }
 
       const pokemonFromQuery = extractPokemonName(query)
 
@@ -201,6 +205,9 @@ export function useAgentStream() {
                   level: 'info',
                 })
                 break
+              case 'agent_init':
+                appendTraceLog(evt as unknown as AgentInitEvent)
+                break
               case 'llm_call': {
                 if (toolCallsSinceLastLlm) {
                   appendTraceLog({
@@ -256,7 +263,7 @@ export function useAgentStream() {
                 appendText(delta)
                 if (!textStarted) {
                   textStarted = true
-                  if (devMode && fastForward) setActiveTab('dexter')
+                  if (uiMode === 'dev' && fastForward) setActiveTab('dexter')
                 }
                 break
               }
@@ -296,7 +303,7 @@ export function useAgentStream() {
       appendTraceLog,
       setPokemonData,
       setPreQuery,
-      devMode,
+      uiMode,
       fastForward,
       setActiveTab,
       setRateLimitSeconds,

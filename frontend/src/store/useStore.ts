@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { McpResource, McpTool, PokemonData, Provider, SlashPrompt, TabKey, TraceEvent } from '../types'
+import type { McpResource, McpTool, PokemonData, Provider, SlashPrompt, TabKey, TraceEvent, UiMode } from '../types'
 
 // SECURITY (Finding 5): cap trace log history to avoid unbounded memory growth.
 const MAX_TRACE_LOGS = 200
@@ -13,9 +13,9 @@ interface AppState {
   setApiKey: (key: string) => void
   clearApiKey: () => void
 
-  // Dev mode toggle (persisted): true=consola, false=pokedex/dexter
-  devMode: boolean
-  setDevMode: (v: boolean) => void
+  // UI mode (persisted): casual=pokedex tradicional, dev=consola, learn=wiki viviente
+  uiMode: UiMode
+  setUiMode: (mode: UiMode) => void
 
   // Fast-Forward (bypass UI animation)
   fastForward: boolean
@@ -111,9 +111,13 @@ const useStore = create<AppState>()(
       setApiKey: (key) => set({ apiKey: key }),
       clearApiKey: () => set({ apiKey: '' }),
 
-      // Dev mode
-      devMode: true,
-      setDevMode: (v) => set({ devMode: v, fastForward: !v }),
+      // UI mode — TODO: default 'casual' en producción; 'dev' por ahora para preservar flujo de testing
+      uiMode: 'dev',
+      setUiMode: (mode) =>
+        set({
+          uiMode: mode,
+          fastForward: mode === 'casual',
+        }),
 
       // Fast-Forward
       fastForward: false,
@@ -189,7 +193,7 @@ const useStore = create<AppState>()(
       rateLimitSeconds: 0,
       setRateLimitSeconds: (n) => set({ rateLimitSeconds: n }),
 
-      // Session reset (tab navigation handled by useAgentStream based on devMode)
+      // Session reset (tab navigation handled by useAgentStream based on uiMode)
       resetSession: () =>
         set({ agentResponse: '', animatedAgentResponse: '', traceLogs: [], visibleTraceCount: 0 }),
 
@@ -200,7 +204,20 @@ const useStore = create<AppState>()(
     {
       name: 'mcpokedex-storage',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, devMode: state.devMode, fastForward: state.fastForward }),
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        if (version < 2 && persisted && typeof persisted === 'object') {
+          const p = persisted as Record<string, unknown>
+          if (typeof p.devMode === 'boolean') {
+            const uiMode: UiMode = p.devMode ? 'dev' : 'casual'
+            const { devMode: _devMode, ...rest } = p
+            void _devMode
+            return { ...rest, uiMode }
+          }
+        }
+        return persisted as Partial<AppState>
+      },
+      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, uiMode: state.uiMode, fastForward: state.fastForward }),
     }
   )
 )

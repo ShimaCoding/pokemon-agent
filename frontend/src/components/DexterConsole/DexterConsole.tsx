@@ -17,7 +17,8 @@ export default function DexterConsole({ collapsible = false }: Props) {
   const setVisibleCount = useStore((s) => s.setVisibleTraceCount)
   const fastForward     = useStore((s) => s.fastForward)
   const setActiveTab  = useStore((s) => s.setActiveTab)
-  const devMode       = useStore((s) => s.devMode)
+  const uiMode        = useStore((s) => s.uiMode)
+  const devMode       = uiMode === 'dev'
 
   const bottomRef   = useRef<HTMLDivElement>(null)
   const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))

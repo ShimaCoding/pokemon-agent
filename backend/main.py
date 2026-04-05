@@ -38,6 +38,11 @@ from slowapi.util import get_remote_address
 
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import PROVIDERS, build_litellm_router, get_available_providers
+from backend.wiki_content import (
+    ARCHITECTURE,
+    EVENTS_CATALOG,
+    lessons_as_dicts,
+)
 
 load_dotenv()
 
@@ -281,6 +286,37 @@ async def get_resources(request: Request):
         return []
 
 
+# ---------------------------------------------------------------------------
+# Wiki Viviente — contenido educativo
+# ---------------------------------------------------------------------------
+
+_WIKI_CACHE_HEADERS = {"Cache-Control": "public, max-age=3600"}
+
+
+@app.get("/api/wiki/lessons")
+@limiter.limit("10/minute")
+async def get_wiki_lessons(request: Request):
+    """Return the full list of wiki lessons (single source of truth for learn mode)."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=lessons_as_dicts(), headers=_WIKI_CACHE_HEADERS)
+
+
+@app.get("/api/wiki/architecture")
+@limiter.limit("10/minute")
+async def get_wiki_architecture(request: Request):
+    """Return the architecture diagram (nodes + edges) for the FlowDiagram."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=ARCHITECTURE, headers=_WIKI_CACHE_HEADERS)
+
+
+@app.get("/api/wiki/events-catalog")
+@limiter.limit("10/minute")
+async def get_wiki_events_catalog(request: Request):
+    """Return the SSE events catalog (tooltips + related lesson/node per type)."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse(content=EVENTS_CATALOG, headers=_WIKI_CACHE_HEADERS)
+
+
 @app.post("/api/agent/run")
 @limiter.limit("3/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
 async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
@@ -474,6 +510,42 @@ async def _sse_generator(query: str, provider: Optional[str] = None, authenticat
             logger.info("[MCP] Conectando al servidor MCP y listando tools…")
             tools = mcp_client.list_tools_sync()
             logger.info("[MCP] %d tools disponibles", len(tools))
+
+            # --- Emit agent_init event ------------------------------------
+            # At this point the MCP tools have been discovered but the agent
+            # hasn't made its first LLM call yet. This is the "setup" moment
+            # that the frontend uses to animate the bootstrap of the agent.
+            try:
+                from backend.agent import SYSTEM_PROMPT as _SP
+                _sp_preview = (_SP or "").strip()[:200]
+            except Exception:
+                _sp_preview = None
+            _tool_names: list[str] = []
+            for _t in tools:
+                try:
+                    _tool_names.append(_t.mcp_tool.name)
+                except Exception:
+                    try:
+                        _tool_names.append(getattr(_t, "tool_name", None) or getattr(_t, "name", "unknown"))
+                    except Exception:
+                        _tool_names.append("unknown")
+            _skills_dir = os.path.join(os.path.dirname(__file__), "skills")
+            _skill_loaded: Optional[str] = None
+            try:
+                if os.path.isdir(os.path.join(_skills_dir, "dexter-pokedex-narrator")):
+                    _skill_loaded = "dexter-pokedex-narrator"
+            except Exception:
+                _skill_loaded = None
+            yield _sse(
+                {
+                    "type": "agent_init",
+                    "mcp_tools_count": len(tools),
+                    "tool_names": _tool_names,
+                    "skill_loaded": _skill_loaded,
+                    "system_prompt_preview": _sp_preview,
+                    "timestamp_ms": elapsed_ms(),
+                }
+            )
 
             # --- Check if query is a prompt call ---
             # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"

@@ -9,8 +9,8 @@ export default function TitleBar() {
   const mcpTools        = useStore((s) => s.mcpTools)
   const mcpResources    = useStore((s) => s.mcpResources)
   const prompts         = useStore((s) => s.prompts)
-  const devMode         = useStore((s) => s.devMode)
-  const setDevMode      = useStore((s) => s.setDevMode)
+  const uiMode          = useStore((s) => s.uiMode)
+  const setUiMode       = useStore((s) => s.setUiMode)
   const fastForward     = useStore((s) => s.fastForward)
   const setFastForward  = useStore((s) => s.setFastForward)
 
@@ -43,13 +43,38 @@ export default function TitleBar() {
           >
             pokemon-agent
           </a>
-          <button
-            className={`${styles.devToggle} ${devMode ? styles.devActive : ''}`}
-            title={devMode ? 'Modo DEV: muestra consola al ejecutar' : 'Modo POKÉDEX: muestra texto al ejecutar'}
-            onClick={() => setDevMode(!devMode)}
-          >
-            {devMode ? 'DEV' : 'POKé'}
-          </button>
+          <div className={styles.modeSegmented} role="tablist" aria-label="UI mode">
+            <button
+              type="button"
+              className={`${styles.modeOption} ${uiMode === 'casual' ? styles.modeActive : ''}`}
+              title="Modo CASUAL: Pokédex tradicional"
+              onClick={() => setUiMode('casual')}
+              role="tab"
+              aria-selected={uiMode === 'casual'}
+            >
+              POKé
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeOption} ${uiMode === 'dev' ? styles.modeActive : ''}`}
+              title="Modo DEV: consola con traza MCP"
+              onClick={() => setUiMode('dev')}
+              role="tab"
+              aria-selected={uiMode === 'dev'}
+            >
+              DEV
+            </button>
+            <button
+              type="button"
+              className={`${styles.modeOption} ${uiMode === 'learn' ? styles.modeActive : ''}`}
+              title="Modo LEARN: wiki viviente del agente"
+              onClick={() => setUiMode('learn')}
+              role="tab"
+              aria-selected={uiMode === 'learn'}
+            >
+              LEARN
+            </button>
+          </div>
           <button
             className={`${styles.fastForwardBtn} ${fastForward ? styles.fastActive : ''}`}
             title={fastForward ? 'Velocidad ultra-rápida (Sin animaciones)' : 'Velocidad de lectura (Con animaciones)'}

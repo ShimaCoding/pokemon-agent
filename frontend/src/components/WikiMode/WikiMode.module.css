@@ -1,0 +1,118 @@
+.wikiMode {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 2fr minmax(320px, 1fr);
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  min-height: 0;
+  background: var(--gbc-screen, #e8e8d0);
+  overflow: hidden;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--gbc-cream, #fff8e0);
+  border: 1px solid var(--gbc-border, #585858);
+  overflow: hidden;
+}
+
+.columnHeader {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: var(--gbc-dark, #101828);
+  color: var(--gbc-cream, #fff8e0);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--gbc-border, #585858);
+}
+
+.columnBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.centerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.centerDiagram {
+  flex: 0 0 auto;
+  border: 1px solid var(--gbc-border, #585858);
+  background: var(--gbc-cream, #fff8e0);
+}
+
+.centerTimeline {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--gbc-border, #585858);
+  background: var(--gbc-cream, #fff8e0);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.loading,
+.error {
+  padding: 16px;
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--gbc-mid, #585858);
+}
+
+.error {
+  color: #b03a2e;
+}
+
+/* Responsive: collapse to single column with tab nav */
+.tabNav {
+  display: none;
+  gap: 4px;
+  padding: 6px;
+  background: var(--gbc-dark, #101828);
+}
+
+.tabBtn {
+  flex: 1 1 0;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  background: none;
+  border: 1px solid var(--gbc-mid, #585858);
+  color: var(--gbc-mid, #585858);
+  padding: 5px 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.tabBtn.tabActive {
+  background: var(--gbc-mid, #585858);
+  color: var(--gbc-cream, #fff8e0);
+}
+
+@media (max-width: 900px) {
+  .wikiMode {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    padding: 8px;
+    gap: 8px;
+  }
+  .tabNav {
+    display: flex;
+  }
+  .column {
+    display: none;
+  }
+  .column.columnVisible {
+    display: flex;
+  }
+}
