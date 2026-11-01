@@ -10,6 +10,8 @@ function send(query: string) {
 export default function Composer() {
   const { inFlight, rateLimitSeconds, canSend, submit, slashMenu, inputProps } = useMessageInput({ onSend: send })
   const compact = useMediaQuery('(max-width: 640px)')
+  // On touch screens focusing the field pops the keyboard over the answer.
+  const touch = useMediaQuery('(pointer: coarse)')
 
   return (
     <div className={styles.bottomBar}>
@@ -32,7 +34,7 @@ export default function Composer() {
             className={styles.chatInput}
             placeholder={compact ? 'Pregunta o escribe /…' : 'Pregunta sobre un Pokémon o escribe / para comandos…'}
             aria-label="Mensaje para Dexter"
-            autoFocus
+            autoFocus={!touch}
           />
           {inFlight && <span className={styles.thinking}>█ pensando…</span>}
           <button className={styles.sendButton} type="submit" disabled={!canSend} aria-label="Enviar">

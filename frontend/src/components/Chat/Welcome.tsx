@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { sendChatMessage } from '../../hooks/useAgentStream'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useMessageInput } from './useMessageInput'
 import styles from './Welcome.module.css'
 
@@ -33,6 +34,8 @@ export default function Welcome() {
     keepValueOnSend: true,
     slashPlacement: 'below',
   })
+  // On touch screens the keyboard should only open when the user taps the box.
+  const touch = useMediaQuery('(pointer: coarse)')
 
   return (
     <section className={styles.welcome}>
@@ -56,7 +59,7 @@ export default function Welcome() {
             className={styles.input}
             placeholder="Escribe aquí tu pregunta…"
             aria-label="Mensaje para Dexter"
-            autoFocus
+            autoFocus={!touch}
           />
           <button className={styles.more} type="submit" disabled={!canSend} aria-label="Enviar">
             ▼
