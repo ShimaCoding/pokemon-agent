@@ -92,6 +92,4 @@ def create_agent(
         session={"id": conversation_id, "dir": SESSIONS_DIR},
         hooks=[RetryMalformedToolCalls(), *(hooks or [])],
         callback_handler=None,
-        # Groups every turn of a conversation into one session in the tracing backend.
-        trace_attributes={"gen_ai.conversation.id": conversation_id},
     )

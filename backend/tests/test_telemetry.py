@@ -1,62 +1,69 @@
-"""setup_telemetry: off without config, Datadog defaults with DD_API_KEY, OTEL_* overrides win."""
-
-import os
+"""telemetry: no-op without DD_API_KEY; with it, LLMObs is enabled agentless."""
 
 import pytest
 
 from backend import telemetry
 
-OTEL_VARS = [
-    "DD_API_KEY",
-    "DD_SITE",
-    "DD_LLMOBS_ML_APP",
-    "OTEL_SEMCONV_STABILITY_OPT_IN",
-    "OTEL_SERVICE_NAME",
-    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
-    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
-]
 
-
-@pytest.fixture
-def exporters(monkeypatch):
-    """Clear tracing env and record exporter setups instead of starting a real one."""
-    for name in OTEL_VARS:
-        # setenv first so monkeypatch restores the original state, removing
-        # whatever setup_telemetry writes with os.environ.setdefault.
+@pytest.fixture(autouse=True)
+def reset(monkeypatch):
+    monkeypatch.setattr(telemetry, "_enabled", False)
+    for name in ("DD_API_KEY", "DD_SITE", "DD_LLMOBS_ML_APP", *telemetry._DDTRACE_DEFAULTS):
+        # setenv first so monkeypatch also undoes what setup_telemetry writes.
         monkeypatch.setenv(name, "")
         monkeypatch.delenv(name)
-    calls: list[str] = []
-
-    class FakeTelemetry:
-        def setup_otlp_exporter(self):
-            calls.append("otlp")
-            return self
-
-    monkeypatch.setattr("strands.telemetry.StrandsTelemetry", FakeTelemetry)
-    return calls
 
 
-def test_disabled_without_config(exporters):
+def test_disabled_without_key():
     assert telemetry.setup_telemetry() is False
-    assert exporters == []
+    assert telemetry.is_enabled() is False
 
 
-def test_datadog_defaults(monkeypatch, exporters):
+def test_helpers_are_noops_when_disabled():
+    with telemetry.agent_span("conv-12345678") as span:
+        assert span is None
+    with telemetry.llm_span("groq/openai/gpt-oss-20b") as span:
+        assert span is None
+    tool = telemetry.start_tool_span("get_pokedex_entry")
+    assert tool is None
+    telemetry.finish_tool_span(tool, input_data={}, output_data="")
+    telemetry.annotate(None, input_data="x")
+
+
+def test_enables_llmobs_agentless(monkeypatch):
+    import os
+
+    from ddtrace.llmobs import LLMObs
+
+    calls = []
+    monkeypatch.setattr(LLMObs, "enable", lambda **kw: calls.append(kw))
     monkeypatch.setenv("DD_API_KEY", "k")
     monkeypatch.setenv("DD_SITE", "us5.datadoghq.com")
 
     assert telemetry.setup_telemetry() is True
-    assert exporters == ["otlp"]
-    assert os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == "https://otlp.us5.datadoghq.com/v1/traces"
-    assert os.environ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] == "dd-api-key=k,dd-otlp-source=llmobs"
-    assert os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] == "gen_ai_latest_experimental"
-    assert os.environ["OTEL_SERVICE_NAME"] == telemetry.DEFAULT_ML_APP
+    assert telemetry.is_enabled() is True
+    [kw] = calls
+    assert kw["agentless_enabled"] is True
+    assert kw["integrations_enabled"] is False
+    assert kw["site"] == "us5.datadoghq.com"
+    assert kw["ml_app"] == telemetry.DEFAULT_ML_APP
+    assert os.environ["DD_TRACE_ENABLED"] == "false"
 
 
-def test_custom_endpoint_wins(monkeypatch, exporters):
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "http://phoenix:6006/v1/traces")
+def test_streamed_output_collects_text_tools_and_usage():
+    from backend.providers import _StreamedOutput
 
-    assert telemetry.setup_telemetry() is True
-    assert os.environ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == "http://phoenix:6006/v1/traces"
-    assert "OTEL_EXPORTER_OTLP_TRACES_HEADERS" not in os.environ
+    assert _StreamedOutput().metrics() == {}
+
+    out = _StreamedOutput()
+    out.add({"contentBlockDelta": {"delta": {"text": "Pika"}}})
+    out.add({"contentBlockStart": {"start": {"toolUse": {"name": "get_pokedex_entry"}}}})
+    out.add({"metadata": {"usage": {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12, "cacheReadInputTokens": 8}}})
+
+    assert out.text() == "Pika\n[toolUse get_pokedex_entry]"
+    assert out.metrics() == {
+        "input_tokens": 10,
+        "output_tokens": 2,
+        "total_tokens": 12,
+        "cache_read_input_tokens": 8,
+    }

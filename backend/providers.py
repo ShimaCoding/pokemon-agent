@@ -31,6 +31,8 @@ if _litellm_version in ("1.82.7", "1.82.8"):
 from strands.models import ModelRouter  # noqa: E402
 from strands.models.litellm import LiteLLMModel  # noqa: E402
 
+from backend import telemetry  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 PROVIDER_LABEL = "Groq"
@@ -76,6 +78,36 @@ def _preview_messages(messages: list[dict[str, Any]], limit: int = 800) -> list[
     return preview
 
 
+class _StreamedOutput:
+    """Collects the text, tool calls and token usage of one streamed model call."""
+
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+        self._usage: dict[str, int] = {}
+
+    def add(self, event: dict[str, Any]) -> None:
+        if text := event.get("contentBlockDelta", {}).get("delta", {}).get("text"):
+            self._parts.append(text)
+        elif tool_use := event.get("contentBlockStart", {}).get("start", {}).get("toolUse"):
+            self._parts.append(f"\n[toolUse {tool_use.get('name')}]")
+        elif usage := event.get("metadata", {}).get("usage"):
+            self._usage = usage
+
+    def text(self) -> str:
+        return "".join(self._parts).strip()
+
+    def metrics(self) -> dict[str, int]:
+        u = self._usage
+        metrics = {
+            "input_tokens": u.get("inputTokens", 0),
+            "output_tokens": u.get("outputTokens", 0),
+            "total_tokens": u.get("totalTokens", 0),
+        }
+        if "cacheReadInputTokens" in u:
+            metrics["cache_read_input_tokens"] = u["cacheReadInputTokens"]
+        return metrics if u else {}
+
+
 class TracedLiteLLMModel(LiteLLMModel):
     """LiteLLMModel that reports every model call attempt to a per-request trace sink.
 
@@ -96,13 +128,24 @@ class TracedLiteLLMModel(LiteLLMModel):
         model_id = self.get_config()["model_id"]
         self._emit({"type": "llm_call", "model": model_id, "messages": _preview_messages(messages)})
         logger.info("[LLM] Llamando a %s", model_id)
-        try:
-            async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
-                yield event
-        except Exception as exc:
-            logger.warning("[LLM] ✗ Falló %s → %s", model_id, str(exc)[:120])
-            self._emit({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
-            raise
+        with telemetry.llm_span(model_id) as span:
+            output = _StreamedOutput()
+            try:
+                async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
+                    output.add(event)
+                    yield event
+            except Exception as exc:
+                logger.warning("[LLM] ✗ Falló %s → %s", model_id, str(exc)[:120])
+                self._emit({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
+                raise
+            finally:
+                system = [{"role": "system", "content": system_prompt}] if system_prompt else []
+                telemetry.annotate(
+                    span,
+                    input_data=system + _preview_messages(messages, limit=4000),
+                    output_data=[{"role": "assistant", "content": output.text()}],
+                    metrics=output.metrics(),
+                )
         self._emit({"type": "model_attempt", "model": model_id, "status": "success"})
 
 
