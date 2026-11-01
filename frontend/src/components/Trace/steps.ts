@@ -80,11 +80,11 @@ export function buildSteps(traces: TraceEvent[]): Step[] {
   return steps
 }
 
-/** Short human summary of a tool's arguments, e.g. `snorlax` or `snorlax, 2`. */
+/** Short human summary of a tool's arguments, e.g. `snorlax` or `snorlax, lapras`. */
 export function argSummary(args: Record<string, unknown> | undefined): string {
-  const values = Object.values(args ?? {}).filter(
-    (v): v is string | number => typeof v === 'string' || typeof v === 'number',
-  )
+  const values = Object.values(args ?? {})
+    .flat()
+    .filter((v): v is string | number => typeof v === 'string' || typeof v === 'number')
   return values.map(String).join(', ')
 }
 
