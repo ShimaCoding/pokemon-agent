@@ -13,6 +13,9 @@ export default defineConfig({
     react(),
     {
       name: 'clean-assets',
+      // Only on `vite build`: in dev, buildStart also fires and would delete the
+      // committed bundle in backend/static/assets.
+      apply: 'build',
       buildStart() {
         // Remove only the assets subfolder so stale hashed bundles don't pile up,
         // while keeping other static files (robots.txt, fonts, og-image, etc.).
