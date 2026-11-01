@@ -63,22 +63,22 @@ export default function SlashMenu({ filter, onSelect, onClose }: Props) {
   if (!filtered.length) return null
 
   return (
-    <div ref={containerRef} className={styles.menu} role="listbox" aria-label="Prompts MCP">
+    <div ref={containerRef} className={styles.slashMenu} role="listbox" aria-label="Prompts MCP">
       {filtered.map((p, i) => (
         <div key={`${p.group}-${p.name}`}>
-          {(i === 0 || filtered[i - 1].group !== p.group) && <div className={styles.group}>{p.group}</div>}
+          {(i === 0 || filtered[i - 1].group !== p.group) && <div className={styles.groupHeader}>── {p.group} ──</div>}
           <button
             role="option"
             aria-selected={i === selected}
-            className={styles.item}
+            className={`${styles.slashItem} ${i === selected ? styles.selected : ''}`}
             onMouseEnter={() => setSelected(i)}
             onClick={() => onSelect(p.template)}
           >
-            <span className={styles.name}>
+            <span className={styles.slashItemName}>
               {p.name}
-              {p.isMcp && <span className={styles.badge}>MCP</span>}
+              {p.isMcp && <span className={styles.mcpBadge}>MCP</span>}
             </span>
-            <span className={styles.desc}>{p.desc}</span>
+            <span className={styles.slashItemDesc}>{p.desc}</span>
           </button>
         </div>
       ))}

@@ -1,0 +1,119 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.badge {
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 2px solid;
+  cursor: pointer;
+  background: none;
+  font-family: var(--font-pixel);
+  transition: background 0.12s;
+  user-select: none;
+}
+.badge:hover {
+  opacity: 0.85;
+}
+.badge.tool     { border-color: var(--mcp-tool);     color: var(--mcp-tool);     }
+.badge.resource { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+.badge.prompt   { border-color: var(--mcp-prompt);   color: var(--mcp-prompt);   }
+
+.badge.active.tool     { background: var(--mcp-tool);     color: #fff; }
+.badge.active.resource { background: var(--mcp-resource); color: #fff; }
+.badge.active.prompt   { background: var(--mcp-prompt);   color: #fff; }
+
+.count {
+  font-size: 12px;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+
+.dropdown {
+  min-width: 320px;
+  max-width: 480px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #1a1a1a;
+  border: 1px solid var(--gbc-border);
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+
+.header {
+  font-size: 13px;
+  font-family: var(--font-pixel);
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--gbc-border);
+  letter-spacing: 0.05em;
+}
+.header.tool     { color: var(--mcp-tool); }
+.header.resource { color: var(--mcp-resource); }
+.header.prompt   { color: var(--mcp-prompt); }
+
+.item {
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2a2a;
+  cursor: default;
+}
+.item:last-child { border-bottom: none; }
+
+.itemName {
+  font-size: 13px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-cream);
+  word-break: break-all;
+}
+
+.itemDesc {
+  font-size: 11px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
+.empty {
+  font-size: 13px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  padding: 12px;
+  text-align: center;
+}
+
+.loading {
+  font-size: 13px;
+  font-family: var(--font-pixel);
+  color: var(--gbc-mid);
+  padding: 12px;
+  text-align: center;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .wrapper {
+    flex: 1;
+  }
+
+  .badge {
+    width: 100%;
+    text-align: center;
+    padding: 5px 4px;
+    font-size: 11px;
+  }
+
+  .dropdown {
+    min-width: unset;
+    max-width: calc(100vw - 16px);
+    max-height: 60vh;
+  }
+}
+
+.widgetTag {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  border: 1px solid var(--mcp-tool);
+  color: var(--mcp-tool);
+}

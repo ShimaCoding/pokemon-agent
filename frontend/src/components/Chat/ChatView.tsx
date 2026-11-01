@@ -31,20 +31,14 @@ export default function ChatView() {
     stickRef.current = true
   }, [lastUserId])
 
-  const empty = messages.length === 0
-
   return (
     <main className={styles.view}>
       <div ref={scrollRef} className={styles.scroll} onScroll={onScroll}>
         <div className={styles.column}>
-          {empty ? <Welcome /> : messages.map((m) => <MessageItem key={m.id} message={m} />)}
+          {messages.length === 0 ? <Welcome /> : messages.map((m) => <MessageItem key={m.id} message={m} />)}
         </div>
       </div>
-      <div className={styles.composerDock}>
-        <div className={styles.column}>
-          <Composer />
-        </div>
-      </div>
+      <Composer />
     </main>
   )
 }

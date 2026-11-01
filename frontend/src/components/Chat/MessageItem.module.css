@@ -1,62 +1,64 @@
+/* Pokémon-style dialog box: thick dark frame with an inner light rule. */
 .userRow {
   display: flex;
   justify-content: flex-end;
-  margin: 8px 0 24px;
+  margin: 4px 0 22px;
+  animation: slideIn 0.15s ease-out;
 }
 
 .user {
-  max-width: min(78%, 560px);
-  padding: 10px 16px;
-  border-radius: var(--radius-lg) var(--radius-lg) 6px var(--radius-lg);
-  background: var(--surface-2);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  max-width: min(80%, 620px);
+  padding: 10px 16px 12px;
+  background: #fff;
+  border: 3px solid var(--gbc-border);
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px var(--gbc-light), 3px 3px 0 rgba(0, 0, 0, 0.15);
 }
+
+.userLabel { display: block; font-size: 10px; color: var(--gbc-mid); margin-bottom: 4px; }
+.userText { font-size: 13px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .assistant {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 14px;
-  margin-bottom: 32px;
-  animation: enter 220ms ease-out;
+  margin-bottom: 30px;
+  padding-bottom: 22px;
+  border-bottom: 2px dashed var(--gbc-light);
+  animation: slideIn 0.15s ease-out;
 }
 
-.content {
-  min-width: 0;
-  padding-top: 4px;
+.speaker {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--gbc-red);
 }
 
-.content > :first-child { margin-top: 0; }
+.logo { width: 20px; height: 20px; image-rendering: pixelated; }
 
-/* Blinking caret at the end of the text that is still streaming. */
+.content { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* Blinking ▼ at the end of the text that is still streaming, like in-game dialog. */
 .text[data-caret='true'] > :last-child::after {
-  content: '';
-  display: inline-block;
-  width: 0.5em;
-  height: 1em;
-  margin-left: 2px;
-  vertical-align: -0.12em;
-  border-radius: 2px;
-  background: var(--accent);
-  animation: blink 1s steps(2, start) infinite;
+  content: ' ▼';
+  font-size: 10px;
+  color: var(--gbc-red);
+  animation: blink 1s step-start infinite;
 }
 
-.widgetPlaceholder { height: 220px; border-radius: var(--radius); background: var(--surface-2); }
+.widgetPlaceholder {
+  display: grid;
+  place-items: center;
+  height: 200px;
+  border: 2px dashed var(--gbc-mid);
+  font-size: 11px;
+  color: var(--gbc-mid);
+}
 
 .error {
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-size: 14px;
-}
-
-@keyframes blink { to { visibility: hidden; } }
-@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
-
-@media (max-width: 600px) {
-  .assistant { grid-template-columns: 1fr; gap: 8px; }
+  padding: 8px 12px;
+  border: 2px solid #b84a4a;
+  background: #f2e4e4;
+  color: #b84a4a;
+  font-size: 12px;
+  line-height: 1.8;
 }

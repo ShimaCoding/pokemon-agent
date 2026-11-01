@@ -55,44 +55,46 @@ export default function Composer() {
   const onSlashClose = useCallback(() => setSlashFilter(null), [])
 
   return (
-    <div className={styles.wrap}>
-      {slashFilter !== null && <SlashMenu key={slashFilter} filter={slashFilter} onSelect={onSlashSelect} onClose={onSlashClose} />}
-      <form
-        className={styles.box}
-        onSubmit={(e) => {
-          e.preventDefault()
-          submit()
-        }}
-      >
-        <textarea
-          ref={inputRef}
-          className={styles.input}
-          rows={1}
-          value={value}
-          onChange={onChange}
-          onKeyDown={onKeyDown}
-          maxLength={MAX_LENGTH}
-          placeholder="Pregúntale a Dexter, o escribe / para ver prompts MCP"
-          aria-label="Mensaje para Dexter"
-          autoFocus
-        />
-        <button className={styles.send} type="submit" disabled={!canSend} aria-label="Enviar">
-          {inFlight ? (
-            <span className={styles.stop} aria-hidden="true" />
-          ) : (
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-              <path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
-      </form>
-      <p className={styles.note} aria-live="polite">
-        {rateLimitSeconds > 0
-          ? `Límite de consultas alcanzado. Podrás preguntar de nuevo en ${rateLimitSeconds} s.`
-          : value.length > MAX_LENGTH - 80
-            ? `${value.length}/${MAX_LENGTH} caracteres`
-            : 'Dexter usa modelos gpt-oss vía Groq y herramientas MCP. Puede equivocarse; no lo admitirá.'}
-      </p>
+    <div className={styles.bottomBar}>
+      {rateLimitSeconds > 0 && (
+        <div className={styles.rateLimitBanner} role="status">
+          ⚡ límite de consultas · espera {rateLimitSeconds}s
+        </div>
+      )}
+      <div className={styles.inner}>
+        {slashFilter !== null && (
+          <SlashMenu key={slashFilter} filter={slashFilter} onSelect={onSlashSelect} onClose={onSlashClose} />
+        )}
+        <form
+          className={styles.form}
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
+          <textarea
+            ref={inputRef}
+            className={styles.chatInput}
+            rows={1}
+            value={value}
+            onChange={onChange}
+            onKeyDown={onKeyDown}
+            maxLength={MAX_LENGTH}
+            placeholder="Pregunta sobre un Pokémon o escribe / para comandos…"
+            aria-label="Mensaje para Dexter"
+            autoFocus
+          />
+          {inFlight && <span className={styles.thinking}>█ pensando…</span>}
+          <span
+            className={`${styles.statusBadge} ${inFlight ? styles.busy : rateLimitSeconds > 0 ? styles.limited : ''}`}
+          >
+            {inFlight ? 'procesando' : rateLimitSeconds > 0 ? `espera ${rateLimitSeconds}s` : 'listo'}
+          </span>
+          <button className={styles.sendButton} type="submit" disabled={!canSend}>
+            ENVIAR
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

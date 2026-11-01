@@ -3,29 +3,22 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--gbc-cream);
 }
 
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-gutter: stable both-edges;
 }
 
 .column {
   width: 100%;
   max-width: var(--chat-width);
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 24px 20px 32px;
 }
 
-.scroll .column { padding-top: 24px; padding-bottom: 32px; }
-
-.composerDock {
-  padding: 0 0 14px;
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-}
-
-@media (max-width: 600px) {
-  .column { padding: 0 12px; }
+@media (max-width: 640px) {
+  .column { padding: 16px 10px 24px; }
 }

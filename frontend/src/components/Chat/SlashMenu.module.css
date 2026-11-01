@@ -1,48 +1,66 @@
-.menu {
+.slashMenu {
   position: absolute;
+  bottom: calc(100% + 4px);
   left: 0;
   right: 0;
-  bottom: calc(100% + 8px);
-  max-height: 320px;
+  background: var(--gbc-dark);
+  border: 2px solid var(--gbc-gold);
+  max-height: 400px;
   overflow-y: auto;
-  padding: 6px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  z-index: 10;
+  z-index: 200;
+  font-family: var(--font-pixel);
+  font-size: 13px;
 }
 
-.group {
-  padding: 8px 10px 4px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-faint);
+.groupHeader {
+  padding: 6px 14px;
+  color: var(--gbc-gold);
+  font-size: 12px;
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.item {
+.slashItem {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
   width: 100%;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
   text-align: left;
+  color: var(--gbc-cream);
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.1s;
 }
-.item[aria-selected='true'] { background: var(--surface-2); }
 
-.name { font-size: 14px; font-weight: 550; font-family: var(--font-mono); }
-.desc { font-size: 12.5px; color: var(--text-muted); }
+.slashItem:hover,
+.slashItem.selected {
+  background: var(--gbc-gold);
+  color: var(--gbc-dark);
+}
 
-.badge {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #fff;
+.slashItem:hover .slashItemDesc,
+.slashItem.selected .slashItemDesc {
+  color: var(--gbc-dark);
+}
+
+.slashItemName {
+  color: var(--gbc-cream);
+}
+
+.slashItem.selected .slashItemName {
+  color: var(--gbc-dark);
+}
+
+.slashItemDesc {
+  color: var(--gbc-mid);
+  font-size: 11px;
+}
+
+.mcpBadge {
   background: var(--mcp-prompt);
+  color: white;
+  padding: 1px 4px;
+  font-size: 9px;
+  margin-left: 4px;
 }

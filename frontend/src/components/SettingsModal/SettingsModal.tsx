@@ -86,10 +86,10 @@ export default function SettingsModal() {
         onKeyDown={handleBoxKeyDown}
       >
         <h2 className={styles.title} id="settings-title">
-          Ajustes
+          AJUSTES
         </h2>
         <label className={styles.label} htmlFor="api-key-input">
-          API key
+          API KEY
         </label>
         <input
           ref={inputRef}
@@ -106,14 +106,14 @@ export default function SettingsModal() {
         </p>
         <div className={styles.actions}>
           <button className={styles.secondary} onClick={handleClear}>
-            Borrar
+            BORRAR
           </button>
           <span className={styles.spacer} />
           <button className={styles.secondary} onClick={dismiss}>
-            Cancelar
+            CANCELAR
           </button>
           <button className={styles.primary} onClick={handleSave}>
-            Guardar
+            GUARDAR
           </button>
         </div>
       </div>

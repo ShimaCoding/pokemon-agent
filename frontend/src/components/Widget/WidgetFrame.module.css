@@ -1,34 +1,32 @@
-.widget {
-  margin: 4px 0;
-  width: 100%;
-}
+.widget { margin: 2px 0; width: 100%; }
 
 .frame {
   display: block;
   width: 100%;
   border: none;
   background: transparent;
-  color-scheme: normal;
-  transition: height 160ms ease;
+  color-scheme: light;
+  transition: height 120ms steps(4);
 }
 
 .skeleton {
-  height: 220px;
-  border-radius: var(--radius);
-  background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface-3) 50%, var(--surface-2) 70%);
-  background-size: 300% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  display: grid;
+  place-items: center;
+  height: 200px;
+  border: 2px dashed var(--gbc-mid);
+  background: var(--gbc-bg);
+}
+.skeleton::after {
+  content: 'CARGANDO WIDGET...';
+  font-size: 11px;
+  color: var(--gbc-mid);
+  animation: blink 1s step-start infinite;
 }
 
 .error {
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-@keyframes shimmer {
-  from { background-position: 100% 0; }
-  to { background-position: 0 0; }
+  padding: 8px 12px;
+  border: 2px dashed var(--gbc-mid);
+  color: var(--gbc-mid);
+  font-size: 11px;
+  line-height: 1.8;
 }

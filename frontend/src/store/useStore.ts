@@ -4,7 +4,6 @@ import type {
   AssistantMessage,
   ChatMessage,
   DoneEvent,
-  McpPrompt,
   McpResource,
   McpTool,
   SlashPrompt,
@@ -44,8 +43,6 @@ interface SettingsState {
   setMcpTools: (tools: McpTool[]) => void
   mcpResources: McpResource[]
   setMcpResources: (resources: McpResource[]) => void
-  mcpPrompts: McpPrompt[]
-  setMcpPrompts: (prompts: McpPrompt[]) => void
   mcpLoaded: boolean
   setMcpLoaded: (loaded: boolean) => void
 }
@@ -68,8 +65,6 @@ export const useSettings = create<SettingsState>()(
       setMcpTools: (mcpTools) => set({ mcpTools }),
       mcpResources: [],
       setMcpResources: (mcpResources) => set({ mcpResources }),
-      mcpPrompts: [],
-      setMcpPrompts: (mcpPrompts) => set({ mcpPrompts }),
       mcpLoaded: false,
       setMcpLoaded: (mcpLoaded) => set({ mcpLoaded }),
     }),

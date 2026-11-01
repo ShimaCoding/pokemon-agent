@@ -1,192 +1,79 @@
-import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import { useLessonFor } from '../../hooks/useWikiContent'
-import type {
-  AgentInitEvent,
-  AssistantMessage,
-  LlmCallEvent,
-  ModelAttemptEvent,
-  ToolCallEvent,
-  ToolResultEvent,
-  TraceEvent,
-} from '../../types'
-import JsonViewer from './JsonViewer'
+import { useEffect, useState } from 'react'
+import type { AssistantMessage, TraceEvent } from '../../types'
+import TraceCard from '../Trace/TraceCard'
+import TraceSummary from '../Trace/TraceSummary'
 import styles from './ThinkingPanel.module.css'
 
-const shortModel = (model: string) => model.split('/').pop() ?? model
+const LOADING_PHRASES = [
+  'Conectando con el PC de Bill...',
+  'Despertando al Snorlax del servidor...',
+  'Analizando espécimen (y tus nulas habilidades)...',
+  'Alimentando a los Porygon del sistema...',
+  'Buscando algo que deberías haber estudiado...',
+  'Calculando si este Pokémon te desobedecerá...',
+  'Traduciendo antiguos textos Unown...',
+  'Sincronizando con el Profesor Oak...',
+  'Girando los engranajes de Klinklang...',
+  'Procesando... ten paciencia de Maestro Pokémon.',
+]
 
-/** One-line status for the collapsed header while the reply streams. */
-function liveStatus(traces: TraceEvent[]): string {
+/** What the agent is doing right now, from the latest trace event. */
+function liveStep(traces: TraceEvent[]): string | null {
   const last = traces[traces.length - 1]
-  if (!last) return 'Conectando con la Pokédex…'
+  if (!last) return null
   switch (last.type) {
     case 'agent_init':
-      return 'Preparando herramientas…'
+      return 'preparando herramientas'
     case 'llm_call':
-      return `Pensando con ${shortModel(last.model)}…`
+      return `pensando con ${last.model.split('/').pop()}`
     case 'model_attempt':
-      return last.status === 'success' ? 'Pensando…' : `Falló ${shortModel(last.model)}, probando otro modelo…`
+      return last.status === 'success' ? 'pensando' : `falló ${last.model.split('/').pop()}, probando de nuevo`
     case 'tool_call':
-      return last.tool === 'skills' ? 'Cargando instrucciones de Dexter…' : `Consultando ${last.tool}…`
+      return last.tool === 'skills' ? 'cargando instrucciones de Dexter' : `consultando ${last.tool}`
     case 'tool_result':
-      return 'Analizando resultados…'
+      return 'analizando resultados'
   }
 }
 
-function Lesson({ eventType }: { eventType: string }) {
-  const [open, setOpen] = useState(false)
-  const lesson = useLessonFor(eventType)
-  if (!lesson) return null
-  return (
-    <div className={styles.lesson}>
-      <button className={styles.link} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'Ocultar explicación' : `¿Cómo funciona? · ${lesson.title}`}
-      </button>
-      {open && (
-        <div className={`md ${styles.lessonBody}`}>
-          <ReactMarkdown>{lesson.body_md}</ReactMarkdown>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Details({ label, data }: { label: string; data: unknown }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button className={styles.link} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {open ? 'Ocultar' : label}
-      </button>
-      {open && <JsonViewer data={data} />}
-    </>
-  )
-}
-
-function Step({ dot, title, meta, children }: { dot: string; title: React.ReactNode; meta?: React.ReactNode; children?: React.ReactNode }) {
-  return (
-    <li className={styles.step}>
-      <span className={styles.dot} data-kind={dot} aria-hidden="true" />
-      <div className={styles.stepBody}>
-        <div className={styles.stepHead}>
-          <span className={styles.stepTitle}>{title}</span>
-          {meta && <span className={styles.stepMeta}>{meta}</span>}
-        </div>
-        {children}
-      </div>
-    </li>
-  )
-}
-
-function InitStep({ e }: { e: AgentInitEvent }) {
-  return (
-    <Step dot="init" title="Agente listo" meta={`+${e.timestamp_ms} ms`}>
-      <p className={styles.detail}>
-        {e.mcp_tools_count} herramientas · skill {e.skill_loaded ?? '—'}
-        {e.history_messages > 0 && ` · recuerda ${e.history_messages} mensajes previos`}
-      </p>
-      <Lesson eventType="agent_init" />
-    </Step>
-  )
-}
-
-function LlmStep({ e, attempt }: { e: LlmCallEvent; attempt?: ModelAttemptEvent }) {
-  const failed = attempt?.status === 'failed'
-  return (
-    <Step
-      dot={failed ? 'fail' : 'llm'}
-      title={<>Llamada al LLM #{e.call_index} · <code>{shortModel(e.model)}</code></>}
-      meta={`+${e.timestamp_ms} ms`}
-    >
-      {failed && <p className={styles.error}>{attempt?.error}</p>}
-      <Details label={`Ver los ${e.messages.length} mensajes enviados`} data={e.messages} />
-      <Lesson eventType="llm_call" />
-    </Step>
-  )
-}
-
-function ToolStep({ call, result }: { call: ToolCallEvent; result?: ToolResultEvent }) {
-  const isSkill = call.tool === 'skills'
-  let parsed: unknown = result?.result
-  if (result && !isSkill) {
-    try {
-      parsed = JSON.parse(result.result)
-    } catch {
-      /* plain text result */
-    }
-  }
-  return (
-    <Step
-      dot={isSkill ? 'skill' : 'tool'}
-      title={isSkill ? <>Skill · <code>{String(call.args.skill_name ?? 'dexter')}</code></> : <>Tool MCP · <code>{call.tool}</code></>}
-      meta={`+${call.timestamp_ms} ms`}
-    >
-      {!isSkill && Object.keys(call.args).length > 0 && (
-        <p className={styles.detail}>
-          <code>{JSON.stringify(call.args)}</code>
-        </p>
-      )}
-      {result ? (
-        isSkill ? (
-          <p className={styles.detail}>{result.result}</p>
-        ) : (
-          <Details label="Ver resultado" data={parsed} />
-        )
-      ) : (
-        <p className={styles.detail}>Esperando resultado…</p>
-      )}
-      <Lesson eventType="tool_call" />
-    </Step>
-  )
-}
-
-function Steps({ traces }: { traces: TraceEvent[] }) {
-  const results = new Map<string, ToolResultEvent>()
-  for (const t of traces) if (t.type === 'tool_result') results.set(t.tool_id, t)
-
-  const items: React.ReactNode[] = []
-  traces.forEach((t, i) => {
-    if (t.type === 'agent_init') items.push(<InitStep key={i} e={t} />)
-    if (t.type === 'llm_call') {
-      const attempt = traces.slice(i + 1).find((x): x is ModelAttemptEvent => x.type === 'model_attempt')
-      items.push(<LlmStep key={i} e={t} attempt={attempt} />)
-    }
-    if (t.type === 'tool_call') items.push(<ToolStep key={i} call={t} result={results.get(t.tool_id)} />)
-  })
-  return <ol className={styles.steps}>{items}</ol>
-}
-
-function Summary({ message }: { message: AssistantMessage }) {
-  const d = message.done
-  if (!d) return null
-  const models = d.models_tried.map(shortModel).join(' → ') || '—'
-  return (
-    <p className={styles.summary}>
-      {(d.elapsed_ms / 1000).toFixed(1)} s · {models} · {d.total_tool_calls ?? 0} tools
-      {d.total_tokens ? ` · ${d.total_tokens.toLocaleString('es')} tokens (↑${d.input_tokens?.toLocaleString('es')} ↓${d.output_tokens?.toLocaleString('es')})` : ''}
-    </p>
-  )
-}
-
-/** Collapsible "ver cómo lo pensó": LLM calls, tools, model and tokens for one reply. */
+/** Collapsible "ver cómo lo pensó": the old Dev console, one per reply. */
 export default function ThinkingPanel({ message }: { message: AssistantMessage }) {
   const [open, setOpen] = useState(false)
+  const [phraseIdx, setPhraseIdx] = useState(() => Math.floor(Math.random() * LOADING_PHRASES.length))
   const streaming = message.status === 'streaming'
-  const label = streaming ? liveStatus(message.traces) : 'Ver cómo lo pensó'
+
+  useEffect(() => {
+    if (!streaming) return
+    const id = setInterval(() => setPhraseIdx((i) => (i + 1) % LOADING_PHRASES.length), 2500)
+    return () => clearInterval(id)
+  }, [streaming])
 
   if (!streaming && message.traces.length === 0) return null
 
+  const toolCalls = message.traces.filter((t) => t.type === 'tool_call').length
+  const step = liveStep(message.traces)
+
   return (
-    <div className={styles.panel} data-open={open}>
+    <div className={styles.panel}>
       <button className={styles.toggle} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {streaming && <span className={styles.spinner} aria-hidden="true" />}
-        <span className={streaming ? styles.live : undefined}>{label}</span>
-        <span className={styles.chevron} aria-hidden="true">›</span>
+        <span className={styles.arrow}>{open ? '▼' : '▶'}</span>
+        {streaming ? (
+          <span className={styles.live}>
+            <span className={styles.cursor}>█</span> {LOADING_PHRASES[phraseIdx]}
+            {step && <span className={styles.step}> [{step}]</span>}
+          </span>
+        ) : (
+          <span>
+            Ver cómo lo pensó
+            <span className={styles.count}> ({message.traces.length} eventos)</span>
+          </span>
+        )}
       </button>
       {open && (
-        <div className={styles.body}>
-          <Steps traces={message.traces} />
-          <Summary message={message} />
+        <div className={styles.console}>
+          {message.traces.map((t, i) => (
+            <TraceCard key={i} event={t} />
+          ))}
+          {message.done && <TraceSummary event={message.done} toolCallCount={toolCalls} />}
         </div>
       )}
     </div>

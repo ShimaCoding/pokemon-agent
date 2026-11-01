@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { sendChatMessage } from '../../hooks/useAgentStream'
 import styles from './Welcome.module.css'
 
@@ -9,20 +10,33 @@ const SUGGESTIONS = [
 ]
 
 export default function Welcome() {
+  const [hover, setHover] = useState(0)
+
   return (
     <section className={styles.welcome}>
-      <h1 className={styles.greeting}>
-        <span className={styles.hello}>Hola, entrenador.</span>
-        <span className={styles.sub}>Pregunta. Dexter juzgará tu pregunta con rigor científico.</span>
-      </h1>
-      <div className={styles.grid}>
-        {SUGGESTIONS.map((s) => (
-          <button key={s.title} className={styles.card} onClick={() => void sendChatMessage(s.prompt)}>
-            <span className={styles.cardTitle}>{s.title}</span>
-            <span className={styles.cardPrompt}>{s.prompt}</span>
+      <div className={styles.dialog}>
+        <p className={styles.line}>¡Hola, entrenador! Soy DEXTER, la Pokédex del Profesor Oak.</p>
+        <p className={styles.line}>
+          Pregúntame lo que quieras. Consultaré el servidor MCP y juzgaré tu pregunta con rigor científico.
+        </p>
+        <span className={styles.more} aria-hidden="true">▼</span>
+      </div>
+      <nav className={styles.menu} aria-label="Ejemplos">
+        {SUGGESTIONS.map((s, i) => (
+          <button
+            key={s.title}
+            className={styles.option}
+            onMouseEnter={() => setHover(i)}
+            onFocus={() => setHover(i)}
+            onClick={() => void sendChatMessage(s.prompt)}
+          >
+            <span className={styles.cursor}>{hover === i ? '▶' : ''}</span>
+            <span className={styles.optionTitle}>{s.title}</span>
+            <span className={styles.optionPrompt}>{s.prompt}</span>
           </button>
         ))}
-      </div>
+      </nav>
+      <p className={styles.hint}>Escribe / en la barra para usar los prompts del servidor MCP.</p>
     </section>
   )
 }

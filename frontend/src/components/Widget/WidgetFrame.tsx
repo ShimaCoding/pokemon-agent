@@ -3,7 +3,6 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 import type { McpUiHostContext } from '@modelcontextprotocol/ext-apps/app-bridge'
 import { callServerTool, fetchUiResource } from '../../lib/api'
 import { sendChatMessage } from '../../hooks/useAgentStream'
-import { currentColorScheme, useColorScheme } from '../../hooks/useColorScheme'
 import type { UiResourceCsp, UiResourceEvent } from '../../types'
 import styles from './WidgetFrame.module.css'
 
@@ -55,11 +54,9 @@ interface Props {
  */
 export default function WidgetFrame({ event }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
-  const bridgeRef = useRef<AppBridge | null>(null)
   const [height, setHeight] = useState(0)
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorMsg, setErrorMsg] = useState('')
-  const theme = useColorScheme()
 
   useEffect(() => {
     const iframe = iframeRef.current
@@ -67,7 +64,8 @@ export default function WidgetFrame({ event }: Props) {
     let disposed = false
 
     const hostContext: McpUiHostContext = {
-      theme: currentColorScheme(),
+      // The GBC look has a single (light) theme; widgets follow it.
+      theme: 'light',
       displayMode: 'inline',
       availableDisplayModes: ['inline'],
       platform: 'web',
@@ -82,7 +80,6 @@ export default function WidgetFrame({ event }: Props) {
       { openLinks: {}, serverTools: {}, logging: {}, message: { text: {} } },
       { hostContext },
     )
-    bridgeRef.current = bridge
 
     bridge.oninitialized = () => {
       if (disposed) return
@@ -129,7 +126,6 @@ export default function WidgetFrame({ event }: Props) {
 
     return () => {
       disposed = true
-      bridgeRef.current = null
       // Give the widget a moment to clean up, then drop the channel either way.
       const timeout = new Promise((resolve) => setTimeout(resolve, TEARDOWN_TIMEOUT_MS))
       void Promise.race([bridge.teardownResource({}).catch(() => undefined), timeout]).finally(() => {
@@ -137,11 +133,6 @@ export default function WidgetFrame({ event }: Props) {
       })
     }
   }, [event])
-
-  // Keep the widget's theme in sync with the page.
-  useEffect(() => {
-    void bridgeRef.current?.sendHostContextChange({ theme })
-  }, [theme])
 
   return (
     <figure className={styles.widget} data-state={state}>

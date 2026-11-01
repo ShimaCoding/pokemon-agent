@@ -1,4 +1,4 @@
-/* ── Fonts ────────────────────────────────────────────────────── */
+/* ── Custom Fonts ─────────────────────────────────────────────── */
 @font-face {
   font-family: 'PokemonFont';
   src: url('/fonts/PKMN RBYGSC.ttf') format('truetype');
@@ -7,99 +7,116 @@
   font-display: swap;
 }
 
-/* ── Tokens ───────────────────────────────────────────────────── */
+/* ── CSS Variables (Game Boy Color greyscale) ─────────────────── */
 :root {
-  color-scheme: light dark;
+  --gbc-bg:        #d4d4d4;
+  --gbc-screen:    #a0a0a0;
+  --gbc-dark:      #1a1a1a;
+  --gbc-mid:       #666666;
+  --gbc-light:     #b8b8b8;
+  --gbc-cream:     #e8e8e8;
+  --gbc-gold:      #555555;
+  --gbc-border:    #3a3a3a;
+  --gbc-red:       #c03028;
 
-  --bg:            light-dark(#f7f7f8, #131416);
-  --surface:       light-dark(#ffffff, #1c1d21);
-  --surface-2:     light-dark(#f0f1f3, #24262b);
-  --surface-3:     light-dark(#e6e8eb, #2e3036);
-  --border:        light-dark(#e2e4e8, #2f3137);
-  --text:          light-dark(#1b1c1f, #e8e9ec);
-  --text-muted:    light-dark(#5f636b, #9a9ea6);
-  --text-faint:    light-dark(#8b8f97, #6f737b);
+  --mcp-tool:      #3b6ea5;
+  --mcp-resource:  #5a9e5a;
+  --mcp-prompt:    #c0547a;
 
-  --accent:        #e3350d;                       /* Pokédex red */
-  --accent-soft:   light-dark(#fde9e4, #3a1d17);
-  --accent-text:   light-dark(#c42c09, #ff7a5c);
-  --ok:            light-dark(#1f8a4c, #4cc287);
-  --warn:          light-dark(#a86200, #f0b44c);
-  --danger:        light-dark(#c62828, #ff6b6b);
-
-  --mcp-tool:      #3e7bfa;
-  --mcp-resource:  #30a46c;
-  --mcp-prompt:    #d6409f;
-
-  --radius-sm: 8px;
-  --radius:    14px;
-  --radius-lg: 22px;
-  --shadow:    0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.06);
-
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
   --font-pixel: 'PokemonFont', monospace;
 
-  --chat-width: 760px;
+  --chat-width: 920px;
 }
 
-/* ── Reset ────────────────────────────────────────────────────── */
+/* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body { height: 100%; }
+html { overflow-x: hidden; max-width: 100%; }
 
 body {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.6;
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
+  font-family: var(--font-pixel);
+  background: #2a2a2a;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--gbc-dark);
 }
 
 #root { height: 100dvh; display: flex; flex-direction: column; }
 
-button { font: inherit; color: inherit; cursor: pointer; background: none; border: none; }
-button:disabled { cursor: default; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font-family: inherit; color: inherit; cursor: pointer; background: none; border: none; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--gbc-gold); outline-offset: 2px; }
 
-::selection { background: var(--accent-soft); }
-
-/* ── Markdown (ReactMarkdown output is unstyled HTML) ─────────── */
-.md { overflow-wrap: anywhere; }
-.md > * + * { margin-top: 0.75em; }
-.md h1, .md h2, .md h3, .md h4 { line-height: 1.3; font-weight: 650; margin-top: 1.2em; }
-.md h1 { font-size: 1.3em; }
-.md h2 { font-size: 1.15em; }
-.md h3, .md h4 { font-size: 1em; }
-.md ul, .md ol { padding-left: 1.4em; }
-.md li + li { margin-top: 0.25em; }
-.md strong { font-weight: 650; }
-.md a { color: var(--accent-text); }
-.md code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: var(--surface-2);
-  padding: 0.1em 0.35em;
-  border-radius: 5px;
+/* ── Markdown rendered content (ReactMarkdown generates dynamic HTML) */
+.md-content { font-size: 13px; line-height: 2; color: var(--gbc-dark); overflow-wrap: anywhere; }
+.md-content p { margin-bottom: 10px; }
+.md-content p:last-child { margin-bottom: 0; }
+.md-content h1, .md-content h2, .md-content h3, .md-content h4 {
+  font-family: var(--font-pixel);
+  font-weight: normal;
+  color: var(--gbc-dark);
+  border-bottom: 2px solid var(--gbc-border);
+  padding-bottom: 4px;
+  margin: 14px 0 8px;
 }
-.md pre {
-  background: var(--surface-2);
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
+.md-content h1 { font-size: 18px; }
+.md-content h2 { font-size: 16px; }
+.md-content h3, .md-content h4 { font-size: 14px; }
+.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 3px; font-weight: normal; }
+.md-content em { font-style: normal; color: var(--gbc-mid); }
+.md-content ul, .md-content ol { margin: 6px 0 10px 20px; line-height: 2.2; }
+.md-content li { margin-bottom: 2px; }
+.md-content li::marker { color: var(--gbc-mid); }
+.md-content hr { border: none; border-top: 2px dashed var(--gbc-border); margin: 14px 0; }
+.md-content a { color: var(--mcp-tool); }
+.md-content code {
+  font-family: monospace;
+  font-size: 13px;
+  background: var(--gbc-bg);
+  border: 1px solid var(--gbc-border);
+  padding: 1px 6px;
+}
+.md-content pre {
+  background: var(--gbc-bg);
+  border: 2px solid var(--gbc-border);
+  padding: 10px 14px;
   overflow-x: auto;
-  font-size: 0.86em;
+  margin: 10px 0;
 }
-.md pre code { background: none; padding: 0; }
-.md blockquote {
-  border-left: 3px solid var(--border);
-  padding-left: 12px;
-  color: var(--text-muted);
+.md-content pre code { border: none; padding: 0; background: none; }
+.md-content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; display: block; overflow-x: auto; }
+.md-content th {
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+  padding: 6px 12px;
+  text-align: left;
+  font-weight: normal;
+  font-size: 12px;
+  border: 1px solid var(--gbc-border);
 }
-.md table { border-collapse: collapse; font-size: 0.92em; display: block; overflow-x: auto; }
-.md th, .md td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
-.md th { background: var(--surface-2); font-weight: 600; }
-.md hr { border: none; border-top: 1px solid var(--border); }
+.md-content td { border: 1px solid var(--gbc-border); padding: 6px 12px; background: var(--gbc-bg); }
+.md-content tr:nth-child(odd) td { background: var(--gbc-cream); }
+.md-content tr:nth-child(even) td { background: var(--gbc-bg); }
+.md-content blockquote {
+  border-left: 3px solid var(--gbc-border);
+  margin: 6px 0;
+  padding: 4px 14px;
+  color: var(--gbc-mid);
+  background: var(--gbc-bg);
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Scrollbars ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--gbc-bg); }
+::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
