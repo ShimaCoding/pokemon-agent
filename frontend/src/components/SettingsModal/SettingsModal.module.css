@@ -38,7 +38,7 @@
 
 .hint { margin-top: 10px; font-size: 10px; line-height: 1.9; color: var(--gbc-mid); }
 
-.actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
 .spacer { flex: 1; }
 
 .primary, .secondary {
@@ -50,3 +50,23 @@
 .primary:hover { background: var(--gbc-light); }
 .secondary { color: var(--gbc-mid); }
 .secondary:hover { color: var(--gbc-cream); border-color: var(--gbc-cream); }
+
+/* The header hides these links on mobile, so they live here too. */
+.source {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--gbc-border);
+  font-size: 10px;
+  line-height: 1.9;
+  color: var(--gbc-mid);
+}
+.source a { color: var(--gbc-screen); }
+.source a:hover { color: var(--gbc-cream); }
+
+@media (max-width: 640px) {
+  .box { padding: 14px; }
+  .spacer { display: none; }
+  .primary, .secondary { flex: 1; padding: 8px 4px; }
+  /* iOS zooms into inputs under 16px on focus. */
+  .input { font-size: 16px; }
+}

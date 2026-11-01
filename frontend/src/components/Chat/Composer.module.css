@@ -74,6 +74,11 @@
 }
 
 @media (max-width: 640px) {
-  .bottomBar { padding: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .bottomBar { padding: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .form { gap: 8px; }
   .thinking { display: none; }
+  /* 16px keeps iOS from zooming into the field on focus. */
+  .chatInput { font-size: 16px; line-height: 1.5; min-height: 44px; padding: 9px 10px; }
+  .chatInput::placeholder { font-size: 12px; }
+  .sendButton { width: 44px; height: 44px; padding: 0; font-family: var(--font-read); font-size: 18px; }
 }

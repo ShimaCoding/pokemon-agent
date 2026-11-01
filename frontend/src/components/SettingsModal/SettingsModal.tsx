@@ -116,6 +116,16 @@ export default function SettingsModal() {
             GUARDAR
           </button>
         </div>
+        <p className={styles.source}>
+          Código fuente:{' '}
+          <a href="https://github.com/ShimaCoding/mcp-pokemon-server" target="_blank" rel="noopener noreferrer">
+            mcp-pokemon-server
+          </a>
+          {' · '}
+          <a href="https://github.com/ShimaCoding/pokemon-agent" target="_blank" rel="noopener noreferrer">
+            pokemon-agent
+          </a>
+        </p>
       </div>
     </div>
   )

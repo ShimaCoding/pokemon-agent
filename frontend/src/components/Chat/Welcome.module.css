@@ -87,3 +87,14 @@
 .optionPrompt { font-size: 12px; line-height: 1.7; color: var(--gbc-dark); }
 
 .hint { font-size: 11px; color: var(--gbc-mid); text-align: center; }
+
+@media (max-width: 640px) {
+  .welcome { gap: 12px; padding: 4px 0; }
+  .dialog { padding: 14px 14px 18px; }
+  .line { font-size: 13px; line-height: 1.9; }
+  /* 16px keeps iOS from zooming into the field on focus. */
+  .input { font-size: 16px; line-height: 1.8; }
+  .input::placeholder { font-size: 12px; }
+  .menu { gap: 6px; }
+  .option { padding: 8px 10px; }
+}

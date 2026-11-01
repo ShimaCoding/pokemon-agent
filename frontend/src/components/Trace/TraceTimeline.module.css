@@ -237,3 +237,12 @@
   padding: 0;
   color: inherit;
 }
+
+/* ── Mobile ───────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .row { padding: 8px 6px 8px 30px; column-gap: 8px; }
+  .icon { left: 6px; top: 7px; }
+  .timeline::before { left: 13px; }
+  .detail { margin-left: 8px; padding: 10px; }
+}
