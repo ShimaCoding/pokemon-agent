@@ -53,6 +53,15 @@ export default function ThinkingPanel({ message }: { message: AssistantMessage }
   const stepCount = buildSteps(message.traces).length
   const done = message.done
   const tokens = done?.total_tokens ?? 0
+  const tokenDetail = done
+    ? [
+        `↑${(done.input_tokens ?? 0).toLocaleString()} entrada`,
+        done.cached_tokens ? `⚡${done.cached_tokens.toLocaleString()} desde caché` : null,
+        `↓${(done.output_tokens ?? 0).toLocaleString()} salida`,
+        done.llm_calls ? `${done.llm_calls} llamadas LLM` : null,
+        done.ttft_ms != null ? `1er token ${formatMs(done.ttft_ms)}` : null,
+      ].filter(Boolean).join(' · ')
+    : ''
 
   return (
     <div className={styles.panel}>
@@ -70,7 +79,7 @@ export default function ThinkingPanel({ message }: { message: AssistantMessage }
               {' '}· {stepCount} {stepCount === 1 ? 'paso' : 'pasos'}
               {done && <> · {formatMs(done.elapsed_ms)}</>}
               {tokens > 0 && (
-                <span title={`↑${(done?.input_tokens ?? 0).toLocaleString()} entrada · ↓${(done?.output_tokens ?? 0).toLocaleString()} salida`}>
+                <span title={tokenDetail}>
                   {' '}· {tokens.toLocaleString()} tokens
                 </span>
               )}

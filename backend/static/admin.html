@@ -34,8 +34,8 @@
 
     .grid-cols-2  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .col-span-2   { grid-column: span 2; }
-    @media (min-width: 768px)  { .md\:grid-cols-3  { grid-template-columns: repeat(3, minmax(0, 1fr)); } .md\:col-span-1 { grid-column: span 1; } }
-    @media (min-width: 1024px) { .lg\:grid-cols-6  { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+    @media (min-width: 768px)  { .md\:grid-cols-4  { grid-template-columns: repeat(4, minmax(0, 1fr)); } .md\:col-span-1 { grid-column: span 1; } }
+    @media (min-width: 1280px) { .xl\:grid-cols-8  { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 
     .w-full  { width: 100%; }
     .w-80    { width: 20rem; }
@@ -53,6 +53,7 @@
 
     .mx-auto  { margin-left: auto; margin-right: auto; }
     .mb-1  { margin-bottom: 0.25rem; }
+    .mt-1  { margin-top: 0.25rem; }
     .mb-2  { margin-bottom: 0.5rem; }
     .mb-3  { margin-bottom: 0.75rem; }
     .mb-4  { margin-bottom: 1rem; }
@@ -97,6 +98,9 @@
     .text-green-400  { color: #4ade80; }
     .text-blue-400   { color: #60a5fa; }
     .text-yellow-400 { color: #facc15; }
+    .text-cyan-400   { color: #22d3ee; }
+    .text-cyan-500   { color: #06b6d4; }
+    .text-orange-400 { color: #fb923c; }
     .text-red-400    { color: #f87171; }
     .text-red-500    { color: #ef4444; }
 
@@ -207,7 +211,7 @@
   </div>
 
   <!-- Stats -->
-  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" id="statsGrid">
+  <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 mb-6" id="statsGrid">
     <div class="bg-gray-900 rounded-xl p-4 border border-gray-800 col-span-2 md:col-span-1">
       <p class="text-xs text-gray-500 mb-1">Total consultas</p>
       <p class="text-2xl font-bold text-white" id="statTotal">—</p>
@@ -221,8 +225,18 @@
       <p class="text-2xl font-bold text-blue-400" id="statTokens">—</p>
     </div>
     <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Cache hit (input)</p>
+      <p class="text-2xl font-bold text-cyan-400" id="statCache">—</p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
       <p class="text-xs text-gray-500 mb-1">Avg latencia</p>
       <p class="text-2xl font-bold text-yellow-400" id="statLatency">—</p>
+      <p class="text-xs text-gray-500 mt-1" id="statLatencyP95"></p>
+    </div>
+    <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <p class="text-xs text-gray-500 mb-1">Avg 1er token</p>
+      <p class="text-2xl font-bold text-orange-400" id="statTtft">—</p>
+      <p class="text-xs text-gray-500 mt-1" id="statLlmCalls"></p>
     </div>
     <div class="bg-gray-900 rounded-xl p-4 border border-gray-800">
       <p class="text-xs text-gray-500 mb-1">Errores</p>
@@ -380,6 +394,13 @@
       document.getElementById('statTokens').textContent = d.avg_tokens.toLocaleString();
       document.getElementById('statLatency').textContent = d.avg_elapsed_ms > 0
         ? (d.avg_elapsed_ms / 1000).toFixed(1) + 's' : '—';
+      document.getElementById('statLatencyP95').textContent = d.p95_elapsed_ms > 0
+        ? 'p95 ' + (d.p95_elapsed_ms / 1000).toFixed(1) + 's' : '';
+      document.getElementById('statCache').textContent = d.cache_hit_pct + '%';
+      document.getElementById('statTtft').textContent = d.avg_ttft_ms > 0
+        ? (d.avg_ttft_ms / 1000).toFixed(1) + 's' : '—';
+      document.getElementById('statLlmCalls').textContent = d.avg_llm_calls > 0
+        ? d.avg_llm_calls + ' llamadas LLM/consulta' : '';
       document.getElementById('statErrors').textContent = d.error_count.toLocaleString();
       document.getElementById('statTools').innerHTML = d.top_tools.length
         ? d.top_tools.map(t => `<div class="flex justify-between"><span class="text-gray-400">${t.name}</span><span class="text-white font-medium">${t.count}</span></div>`).join('')
@@ -426,7 +447,7 @@
         <td class="px-4 py-2.5"><span class="truncate-query block text-gray-200" title="${escHtml(row.query)}">${escHtml(row.query)}</span></td>
         <td class="px-4 py-2.5 text-gray-400 whitespace-nowrap">${providerCell(row.provider)}</td>
         <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap">${escHtml(models)}</td>
-        <td class="px-4 py-2.5 text-right text-blue-400 whitespace-nowrap">${row.total_tokens ? row.total_tokens.toLocaleString() : '—'}</td>
+        <td class="px-4 py-2.5 text-right text-blue-400 whitespace-nowrap">${row.total_tokens ? row.total_tokens.toLocaleString() : '—'}${row.cached_tokens ? `<span class="text-cyan-500 text-xs"> ⚡${row.cached_tokens.toLocaleString()}</span>` : ''}</td>
         <td class="px-4 py-2.5 text-right text-yellow-400 whitespace-nowrap">${row.elapsed_ms ? (row.elapsed_ms / 1000).toFixed(1) + 's' : '—'}</td>
         <td class="px-4 py-2.5 text-gray-500 max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">${escHtml(tools)}</td>
         <td class="px-4 py-2.5 ${statusCls} whitespace-nowrap font-medium">${statusLabel}</td>
