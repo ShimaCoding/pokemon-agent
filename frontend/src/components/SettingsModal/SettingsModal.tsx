@@ -1,20 +1,18 @@
 import { useEffect, useRef } from 'react'
-import useStore from '../../store/useStore'
+import { useSettings } from '../../store/useStore'
 import styles from './SettingsModal.module.css'
 
 export default function SettingsModal() {
-  const settingsOpen        = useStore((s) => s.settingsOpen)
-  const setSettingsOpen     = useStore((s) => s.setSettingsOpen)
-  const apiKey              = useStore((s) => s.apiKey)
-  const setApiKey           = useStore((s) => s.setApiKey)
-  const clearApiKey         = useStore((s) => s.clearApiKey)
-  const providers           = useStore((s) => s.providers)
-  const setSelectedProvider = useStore((s) => s.setSelectedProvider)
-  const settingsDismissed    = useStore((s) => s.settingsDismissed)
-  const setSettingsDismissed = useStore((s) => s.setSettingsDismissed)
+  const settingsOpen = useSettings((s) => s.settingsOpen)
+  const setSettingsOpen = useSettings((s) => s.setSettingsOpen)
+  const apiKey = useSettings((s) => s.apiKey)
+  const setApiKey = useSettings((s) => s.setApiKey)
+  const clearApiKey = useSettings((s) => s.clearApiKey)
+  const settingsDismissed = useSettings((s) => s.settingsDismissed)
+  const setSettingsDismissed = useSettings((s) => s.setSettingsDismissed)
 
   const inputRef = useRef<HTMLInputElement>(null)
-  const boxRef   = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
 
   // On open: populate input with current key and move focus inside dialog
   useEffect(() => {
@@ -24,18 +22,15 @@ export default function SettingsModal() {
     }
   }, [settingsOpen, apiKey])
 
-  // Check /config on mount to open modal if API key is required but not set and user hasn't dismissed it
+  // Open on first visit when the server requires an API key and none is set.
   useEffect(() => {
-    async function checkConfig() {
-      try {
-        const cfg = await fetch('/config').then((r) => r.json()) as { require_api_key?: boolean }
-        if (cfg.require_api_key && !apiKey && !settingsDismissed) {
-          setSettingsOpen(true)
-        }
-      } catch { /* ignore */ }
-    }
-    void checkConfig()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch('/config')
+      .then((r) => r.json() as Promise<{ require_api_key?: boolean }>)
+      .then((cfg) => {
+        if (cfg.require_api_key && !apiKey && !settingsDismissed) setSettingsOpen(true)
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function dismiss() {
@@ -45,29 +40,15 @@ export default function SettingsModal() {
 
   function handleSave() {
     const val = inputRef.current?.value.trim() ?? ''
-    if (val) {
-      setApiKey(val)
-      // Switch to Groq when an API key is saved (full model list unlocked)
-      const groq = providers.find((p) => String(p.name).toLowerCase() === 'groq')
-      if (groq) setSelectedProvider(groq.name)
-    } else {
-      clearApiKey()
-      if (providers.length > 0) setSelectedProvider(providers[0].name)
-    }
+    if (val) setApiKey(val)
+    else clearApiKey()
     dismiss()
   }
 
   function handleClear() {
     clearApiKey()
     if (inputRef.current) inputRef.current.value = ''
-    if (providers.length > 0) setSelectedProvider(providers[0].name)
     dismiss()
-  }
-
-  // Enter/Escape on the input field
-  function handleInputKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') handleSave()
-    if (e.key === 'Escape') dismiss()
   }
 
   // Focus trap + Escape for the whole dialog box
@@ -77,38 +58,25 @@ export default function SettingsModal() {
       return
     }
     if (e.key !== 'Tab' || !boxRef.current) return
-
     const focusable = Array.from(
-      boxRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      ),
+      boxRef.current.querySelectorAll<HTMLElement>('button, [href], input, [tabindex]:not([tabindex="-1"])'),
     ).filter((el) => !el.hasAttribute('disabled'))
-
     const first = focusable[0]
-    const last  = focusable[focusable.length - 1]
-
-    if (e.shiftKey) {
-      if (document.activeElement === first) {
-        e.preventDefault()
-        last.focus()
-      }
-    } else {
-      if (document.activeElement === last) {
-        e.preventDefault()
-        first.focus()
-      }
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
     }
   }
 
   if (!settingsOpen) return null
 
   return (
-    <div className={styles.modal} id="settings-modal">
-      <div
-        className={styles.overlay}
-        onClick={dismiss}
-      />
-      {/* role="dialog" + aria-modal prevent screen readers from browsing outside */}
+    <div className={styles.modal}>
+      <div className={styles.overlay} onClick={dismiss} />
       <div
         ref={boxRef}
         className={styles.box}
@@ -117,36 +85,36 @@ export default function SettingsModal() {
         aria-labelledby="settings-title"
         onKeyDown={handleBoxKeyDown}
       >
-        <div className={styles.title} id="settings-title">AJUSTES</div>
-        <label className={styles.label} htmlFor="api-key-input">API KEY</label>
+        <h2 className={styles.title} id="settings-title">
+          Ajustes
+        </h2>
+        <label className={styles.label} htmlFor="api-key-input">
+          API key
+        </label>
         <input
           ref={inputRef}
           id="api-key-input"
           type="password"
           className={styles.input}
-          placeholder="dejar vacío si no se requiere"
+          placeholder="Opcional"
           autoComplete="off"
-          onKeyDown={handleInputKeyDown}
+          onKeyDown={(e) => e.key === 'Enter' && handleSave()}
         />
-        <div className={styles.hint} role="note">
-          Se guarda temporalmente en sessionStorage. Se borra al cerrar la pestaña del navegador.
-        </div>
+        <p className={styles.hint}>
+          Con una API key válida no hay límite de consultas y Dexter usa gpt-oss-120b. Se guarda en sessionStorage y
+          se borra al cerrar la pestaña.
+        </p>
         <div className={styles.actions}>
-          <button
-            className={styles.clearBtn}
-            onClick={handleClear}
-            aria-label="Borrar API Key guardada"
-          >BORRAR</button>
-          <button
-            className={styles.cancelBtn}
-            onClick={dismiss}
-            aria-label="Cancelar y cerrar ajustes"
-          >CANCELAR</button>
-          <button
-            className={styles.saveBtn}
-            onClick={handleSave}
-            aria-label="Guardar API Key"
-          >GUARDAR</button>
+          <button className={styles.secondary} onClick={handleClear}>
+            Borrar
+          </button>
+          <span className={styles.spacer} />
+          <button className={styles.secondary} onClick={dismiss}>
+            Cancelar
+          </button>
+          <button className={styles.primary} onClick={handleSave}>
+            Guardar
+          </button>
         </div>
       </div>
     </div>

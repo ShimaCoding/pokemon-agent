@@ -1,0 +1,39 @@
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 56px;
+  padding: 0 16px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+
+.logo {
+  font-family: var(--font-pixel);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.actions { display: flex; align-items: center; gap: 4px; }
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.iconBtn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.iconBtn:disabled { opacity: 0.4; }
+.iconBtn[data-active='true'] { color: var(--ok); }
+
+@media (max-width: 480px) {
+  .btnLabel { display: none; }
+}

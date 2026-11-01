@@ -1,225 +1,203 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
-import type { McpResource, McpTool, PokemonData, Provider, SlashPrompt, TabKey, TraceEvent, UiMode } from '../types'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type {
+  AssistantMessage,
+  ChatMessage,
+  DoneEvent,
+  McpPrompt,
+  McpResource,
+  McpTool,
+  SlashPrompt,
+  TraceEvent,
+  UiResourceEvent,
+} from '../types'
 
-// SECURITY (Finding 5): cap trace log history to avoid unbounded memory growth.
-const MAX_TRACE_LOGS = 200
+// Only the most recent messages survive a reload; older ones still live in the
+// backend session (the agent remembers them), they just aren't redrawn.
+const MAX_PERSISTED_MESSAGES = 40
 
-// ── Types ────────────────────────────────────────────────────────
+function newConversationId(): string {
+  return crypto.randomUUID()
+}
 
-interface AppState {
-  // API Key (persisted)
+function newId(): string {
+  return crypto.randomUUID()
+}
+
+// ── Settings store (sessionStorage) ──────────────────────────────
+
+interface SettingsState {
+  // SECURITY: the API key lives in sessionStorage (cleared on tab close)
+  // instead of localStorage, reducing exposure to XSS and extensions.
   apiKey: string
   setApiKey: (key: string) => void
   clearApiKey: () => void
 
-  // UI mode (persisted): casual=pokedex tradicional, dev=consola, learn=wiki viviente
-  uiMode: UiMode
-  setUiMode: (mode: UiMode) => void
-
-  // Fast-Forward (bypass UI animation)
-  fastForward: boolean
-  setFastForward: (v: boolean) => void
-
-  // Settings modal
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
   settingsDismissed: boolean
   setSettingsDismissed: (dismissed: boolean) => void
 
-  // Intro modal
-  introOpen: boolean
-  setIntroOpen: (open: boolean) => void
-  introDismissed: boolean
-  setIntroDismissed: (dismissed: boolean) => void
-
-  // Query draft (pre-fill input from intro modal examples)
-  queryDraft: string
-  queryDraftAutoSubmit: boolean
-  setQueryDraft: (q: string, autoSubmit?: boolean) => void
-  clearQueryDraft: () => void
-
-  // Provider list & selection
-  providers: Provider[]
-  setProviders: (providers: Provider[]) => void
-  selectedProvider: string
-  setSelectedProvider: (name: string) => void
-
-  // Prompts (slash menu)
   prompts: SlashPrompt[]
   setPrompts: (prompts: SlashPrompt[]) => void
-
-  // MCP capabilities
   mcpTools: McpTool[]
   setMcpTools: (tools: McpTool[]) => void
   mcpResources: McpResource[]
   setMcpResources: (resources: McpResource[]) => void
+  mcpPrompts: McpPrompt[]
+  setMcpPrompts: (prompts: McpPrompt[]) => void
   mcpLoaded: boolean
-  setMcpLoaded: (v: boolean) => void
-
-  // Active tab
-  activeTab: TabKey
-  setActiveTab: (tab: TabKey) => void
-
-  // Pokémon data panel
-  pokemonData: PokemonData | null
-  setPokemonData: (data: PokemonData | null) => void
-
-  // Agent stream response (markdown)
-  agentResponse: string
-  animatedAgentResponse: string
-  appendText: (delta: string) => void
-  setAnimatedAgentResponse: (text: string) => void
-
-  // Trace logs
-  traceLogs: TraceEvent[]
-  visibleTraceCount: number
-  appendTraceLog: (event: TraceEvent) => void
-  setVisibleTraceCount: (count: number | ((c: number) => number)) => void
-
-  // In-flight status (for disabling UI inputs)
-  inFlight: boolean
-  setInFlight: (v: boolean) => void
-
-  // Rate-limit countdown (seconds remaining, 0 = no limit)
-  rateLimitSeconds: number
-  setRateLimitSeconds: (n: number) => void
-
-  // Session reset (between queries)
-  resetSession: () => void
-
-  // Pre-query mobile state
-  preQuery: boolean
-  setPreQuery: (v: boolean) => void
+  setMcpLoaded: (loaded: boolean) => void
 }
 
-// ── Store ────────────────────────────────────────────────────────
-
-// SECURITY (Finding 1): API key is persisted in sessionStorage (cleared on tab
-// close) instead of localStorage, reducing the window of exposure to XSS and
-// browser-extension theft. For full protection, migrate to httpOnly cookies.
-
-// One-time migration: remove the old localStorage entry left from before the
-// switch to sessionStorage so stale API keys don't linger in the browser.
-localStorage.removeItem('mcpokedex-storage')
-
-const useStore = create<AppState>()(
+export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
-      // API Key
       apiKey: '',
-      setApiKey: (key) => set({ apiKey: key }),
+      setApiKey: (apiKey) => set({ apiKey }),
       clearApiKey: () => set({ apiKey: '' }),
 
-      // UI mode — TODO: default 'casual' en producción; 'dev' por ahora para preservar flujo de testing
-      uiMode: 'dev',
-      setUiMode: (mode) =>
-        set({
-          uiMode: mode,
-          fastForward: mode === 'casual',
-        }),
-
-      // Fast-Forward
-      fastForward: false,
-      setFastForward: (v) => set({ fastForward: v }),
-
-      // Settings modal
       settingsOpen: false,
-      setSettingsOpen: (open) => set({ settingsOpen: open }),
+      setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
       settingsDismissed: false,
-      setSettingsDismissed: (dismissed) => set({ settingsDismissed: dismissed }),
+      setSettingsDismissed: (settingsDismissed) => set({ settingsDismissed }),
 
-      // Intro modal
-      introOpen: false,
-      setIntroOpen: (open) => set({ introOpen: open }),
-      introDismissed: false,
-      setIntroDismissed: (dismissed) => set({ introDismissed: dismissed }),
-
-      // Query draft
-      queryDraft: '',
-      queryDraftAutoSubmit: false,
-      setQueryDraft: (q, autoSubmit = false) => set({ queryDraft: q, queryDraftAutoSubmit: autoSubmit }),
-      clearQueryDraft: () => set({ queryDraft: '', queryDraftAutoSubmit: false }),
-
-      // Providers
-      providers: [],
-      setProviders: (providers) => set({ providers }),
-      selectedProvider: '',
-      setSelectedProvider: (name) => set({ selectedProvider: name }),
-
-      // Prompts
       prompts: [],
       setPrompts: (prompts) => set({ prompts }),
-
-      // MCP capabilities
       mcpTools: [],
       setMcpTools: (mcpTools) => set({ mcpTools }),
       mcpResources: [],
       setMcpResources: (mcpResources) => set({ mcpResources }),
+      mcpPrompts: [],
+      setMcpPrompts: (mcpPrompts) => set({ mcpPrompts }),
       mcpLoaded: false,
-      setMcpLoaded: (v) => set({ mcpLoaded: v }),
-
-      // Active tab
-      activeTab: 'info',
-      setActiveTab: (tab) => set({ activeTab: tab }),
-
-      // Pokémon data
-      pokemonData: null,
-      setPokemonData: (data) => set({ pokemonData: data }),
-
-      // Agent response text (streaming markdown)
-      agentResponse: '',
-      animatedAgentResponse: '',
-      appendText: (delta) =>
-        set((s) => ({ agentResponse: s.agentResponse + delta })),
-      setAnimatedAgentResponse: (text: string) => set({ animatedAgentResponse: text }),
-
-      // Trace logs
-      traceLogs: [],
-      visibleTraceCount: 0,
-      appendTraceLog: (event) =>
-        set((s) => {
-          const updated = [...s.traceLogs, event]
-          return { traceLogs: updated.length > MAX_TRACE_LOGS ? updated.slice(-MAX_TRACE_LOGS) : updated }
-        }),
-      setVisibleTraceCount: (count) => 
-        set((s) => ({ visibleTraceCount: typeof count === 'function' ? count(s.visibleTraceCount) : count })),
-
-      // In-flight
-      inFlight: false,
-      setInFlight: (v) => set({ inFlight: v }),
-
-      // Rate-limit countdown
-      rateLimitSeconds: 0,
-      setRateLimitSeconds: (n) => set({ rateLimitSeconds: n }),
-
-      // Session reset (tab navigation handled by useAgentStream based on uiMode)
-      resetSession: () =>
-        set({ agentResponse: '', animatedAgentResponse: '', traceLogs: [], visibleTraceCount: 0 }),
-
-      // Pre-query (mobile)
-      preQuery: true,
-      setPreQuery: (v) => set({ preQuery: v }),
+      setMcpLoaded: (mcpLoaded) => set({ mcpLoaded }),
     }),
     {
-      name: 'mcpokedex-storage',
+      name: 'mcpokedex-settings',
       storage: createJSONStorage(() => sessionStorage),
-      version: 2,
-      migrate: (persisted: unknown, version: number) => {
-        if (version < 2 && persisted && typeof persisted === 'object') {
-          const p = persisted as Record<string, unknown>
-          if (typeof p.devMode === 'boolean') {
-            const uiMode: UiMode = p.devMode ? 'dev' : 'casual'
-            const { devMode: _devMode, ...rest } = p
-            void _devMode
-            return { ...rest, uiMode }
-          }
-        }
-        return persisted as Partial<AppState>
+      version: 3,
+      partialize: (s) => ({ apiKey: s.apiKey, settingsDismissed: s.settingsDismissed }),
+      // Earlier versions stored UI mode/provider state; only the key carries over.
+      migrate: (persisted) => {
+        const old = (persisted ?? {}) as Partial<SettingsState>
+        return { apiKey: old.apiKey ?? '', settingsDismissed: old.settingsDismissed ?? false }
       },
-      partialize: (state) => ({ apiKey: state.apiKey, introDismissed: state.introDismissed, settingsDismissed: state.settingsDismissed, uiMode: state.uiMode, fastForward: state.fastForward }),
-    }
-  )
+    },
+  ),
 )
 
-export default useStore
+// ── Chat store (localStorage) ────────────────────────────────────
+
+interface ChatState {
+  /** Keys the backend session; regenerated by "Nueva conversación". */
+  conversationId: string
+  messages: ChatMessage[]
+  inFlight: boolean
+  rateLimitSeconds: number
+
+  newConversation: () => void
+  addUserMessage: (text: string) => void
+  /** Starts an assistant reply and returns its id. */
+  startAssistant: () => string
+  appendText: (id: string, delta: string) => void
+  addWidget: (id: string, event: UiResourceEvent) => void
+  addTrace: (id: string, event: TraceEvent) => void
+  finishAssistant: (id: string, done: DoneEvent | undefined) => void
+  failAssistant: (id: string, error: string) => void
+  setInFlight: (v: boolean) => void
+  setRateLimitSeconds: (v: number | ((prev: number) => number)) => void
+}
+
+function updateAssistant(
+  messages: ChatMessage[],
+  id: string,
+  fn: (m: AssistantMessage) => AssistantMessage,
+): ChatMessage[] {
+  return messages.map((m) => (m.id === id && m.role === 'assistant' ? fn(m) : m))
+}
+
+export const useChat = create<ChatState>()(
+  persist(
+    (set) => ({
+      conversationId: newConversationId(),
+      messages: [],
+      inFlight: false,
+      rateLimitSeconds: 0,
+
+      newConversation: () => set({ conversationId: newConversationId(), messages: [] }),
+
+      addUserMessage: (text) =>
+        set((s) => ({ messages: [...s.messages, { id: newId(), role: 'user', text }] })),
+
+      startAssistant: () => {
+        const id = newId()
+        set((s) => ({
+          messages: [...s.messages, { id, role: 'assistant', parts: [], traces: [], status: 'streaming' }],
+        }))
+        return id
+      },
+
+      appendText: (id, delta) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => {
+            const last = m.parts[m.parts.length - 1]
+            const parts =
+              last?.kind === 'text'
+                ? [...m.parts.slice(0, -1), { kind: 'text' as const, text: last.text + delta }]
+                : [...m.parts, { kind: 'text' as const, text: delta }]
+            return { ...m, parts }
+          }),
+        })),
+
+      addWidget: (id, event) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => ({
+            ...m,
+            parts: [...m.parts, { kind: 'widget', event }],
+          })),
+        })),
+
+      addTrace: (id, event) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => ({ ...m, traces: [...m.traces, event] })),
+        })),
+
+      finishAssistant: (id, done) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => ({
+            ...m,
+            status: m.status === 'error' ? 'error' : 'done',
+            done: done ?? m.done,
+          })),
+        })),
+
+      failAssistant: (id, error) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => ({ ...m, status: 'error', error })),
+        })),
+
+      setInFlight: (inFlight) => set({ inFlight }),
+      setRateLimitSeconds: (v) =>
+        set((s) => ({ rateLimitSeconds: typeof v === 'function' ? v(s.rateLimitSeconds) : v })),
+    }),
+    {
+      name: 'mcpokedex-chat',
+      storage: createJSONStorage(() => localStorage),
+      version: 1,
+      partialize: (s) => ({
+        conversationId: s.conversationId,
+        // A reply interrupted by a reload can't resume; keep it as an error.
+        messages: s.messages.slice(-MAX_PERSISTED_MESSAGES).map((m) =>
+          m.role === 'assistant' && m.status === 'streaming'
+            ? { ...m, status: 'error' as const, error: 'Respuesta interrumpida.' }
+            : m,
+        ),
+      }),
+    },
+  ),
+)
+
+// Old single store (UI modes, provider selector) — drop it.
+localStorage.removeItem('mcpokedex-storage')
+sessionStorage.removeItem('mcpokedex-storage')

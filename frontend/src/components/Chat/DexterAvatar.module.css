@@ -1,0 +1,13 @@
+.avatar { display: block; width: 32px; height: 32px; }
+
+.shell { fill: var(--accent); }
+.ring { fill: #fff; }
+.lens { fill: #3aa0ff; transition: fill 200ms ease; }
+.glint { fill: rgb(255 255 255 / 0.85); }
+
+.avatar[data-active='true'] .lens { animation: pulse 1.1s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { fill: #3aa0ff; }
+  50% { fill: #9fe0ff; }
+}

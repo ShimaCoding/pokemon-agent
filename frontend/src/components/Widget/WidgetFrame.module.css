@@ -1,0 +1,34 @@
+.widget {
+  margin: 4px 0;
+  width: 100%;
+}
+
+.frame {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color-scheme: normal;
+  transition: height 160ms ease;
+}
+
+.skeleton {
+  height: 220px;
+  border-radius: var(--radius);
+  background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface-3) 50%, var(--surface-2) 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.error {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}

@@ -1,0 +1,62 @@
+.userRow {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 24px;
+}
+
+.user {
+  max-width: min(78%, 560px);
+  padding: 10px 16px;
+  border-radius: var(--radius-lg) var(--radius-lg) 6px var(--radius-lg);
+  background: var(--surface-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.assistant {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 32px;
+  animation: enter 220ms ease-out;
+}
+
+.content {
+  min-width: 0;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.content > :first-child { margin-top: 0; }
+
+/* Blinking caret at the end of the text that is still streaming. */
+.text[data-caret='true'] > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+.widgetPlaceholder { height: 220px; border-radius: var(--radius); background: var(--surface-2); }
+
+.error {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 14px;
+}
+
+@keyframes blink { to { visibility: hidden; } }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+
+@media (max-width: 600px) {
+  .assistant { grid-template-columns: 1fr; gap: 8px; }
+}
