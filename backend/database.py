@@ -44,11 +44,28 @@ def init_db() -> None:
                 error_message   TEXT
             )
         """)
+        _migrate(conn)
         conn.commit()
     purged = purge_old_queries()
     if purged:
         logger.info("Purged %d query log entries older than 30 days", purged)
     logger.info("Database ready at %s", _DB_PATH)
+
+
+# Columns added after the initial schema. ALTER TABLE ADD COLUMN keeps existing
+# DBs (e.g. the production volume) readable without a migration tool.
+_ADDED_COLUMNS = {
+    "cached_tokens": "INTEGER DEFAULT 0",
+    "llm_calls": "INTEGER DEFAULT 0",
+    "ttft_ms": "INTEGER",
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(query_logs)")}
+    for name, ddl in _ADDED_COLUMNS.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE query_logs ADD COLUMN {name} {ddl}")
 
 
 def purge_old_queries(days: int = 30) -> int:
@@ -75,6 +92,9 @@ def log_query(
     input_tokens: int = 0,
     output_tokens: int = 0,
     total_tokens: int = 0,
+    cached_tokens: int = 0,
+    llm_calls: int = 0,
+    ttft_ms: int | None = None,
     tool_calls_count: int = 0,
     tool_names: list[str],
     status: str,
@@ -87,8 +107,9 @@ def log_query(
                 INSERT INTO query_logs
                     (timestamp, query, provider, models_tried, elapsed_ms,
                      input_tokens, output_tokens, total_tokens,
+                     cached_tokens, llm_calls, ttft_ms,
                      tool_calls_count, tool_names, status, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
@@ -99,6 +120,9 @@ def log_query(
                     input_tokens,
                     output_tokens,
                     total_tokens,
+                    cached_tokens,
+                    llm_calls,
+                    ttft_ms,
                     tool_calls_count,
                     json.dumps(tool_names),
                     status,
@@ -163,6 +187,25 @@ def get_stats() -> dict:
             ).fetchone()[0]
             or 0
         )
+        input_sum, cached_sum = conn.execute(
+            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(cached_tokens), 0) "
+            "FROM query_logs WHERE status = 'done'"
+        ).fetchone()
+        avg_ttft = (
+            conn.execute(
+                "SELECT AVG(ttft_ms) FROM query_logs WHERE status = 'done' AND ttft_ms IS NOT NULL"
+            ).fetchone()[0]
+            or 0
+        )
+        avg_llm_calls = (
+            conn.execute(
+                "SELECT AVG(llm_calls) FROM query_logs WHERE status = 'done' AND llm_calls > 0"
+            ).fetchone()[0]
+            or 0
+        )
+        elapsed_rows = conn.execute(
+            "SELECT elapsed_ms FROM query_logs WHERE status = 'done' ORDER BY elapsed_ms"
+        ).fetchall()
         error_count = conn.execute(
             "SELECT COUNT(*) FROM query_logs WHERE status = 'error'"
         ).fetchone()[0]
@@ -176,11 +219,21 @@ def get_stats() -> dict:
             tool_counts[name] = tool_counts.get(name, 0) + 1
     top_tools = sorted(tool_counts.items(), key=lambda x: -x[1])[:5]
 
+    # Nearest-rank p95; SQLite has no percentile function.
+    p95_elapsed = (
+        elapsed_rows[max(0, -(-95 * len(elapsed_rows) // 100) - 1)][0] if elapsed_rows else 0
+    )
+
     return {
         "total_queries": total,
         "today_queries": today,
         "avg_tokens": round(avg_tokens),
         "avg_elapsed_ms": round(avg_elapsed),
+        "p95_elapsed_ms": p95_elapsed,
+        "avg_ttft_ms": round(avg_ttft),
+        "avg_llm_calls": round(avg_llm_calls, 1),
+        # Share of input tokens served from the provider's prompt cache.
+        "cache_hit_pct": round(100 * cached_sum / input_sum, 1) if input_sum else 0,
         "error_count": error_count,
         "top_tools": [{"name": n, "count": c} for n, c in top_tools],
     }

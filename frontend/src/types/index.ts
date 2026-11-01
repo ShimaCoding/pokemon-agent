@@ -81,6 +81,9 @@ export interface DoneEvent {
   input_tokens?: number
   output_tokens?: number
   total_tokens?: number
+  cached_tokens?: number
+  llm_calls?: number
+  ttft_ms?: number | null
 }
 
 export interface ErrorEvent {

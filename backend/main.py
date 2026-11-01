@@ -422,7 +422,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "ui_resource",   "index": int, "tool_id": str, "tool": str, "resource_uri": str,
                                 "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
       {"type": "text",          "delta": str}
-      {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…}
+      {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
+                                "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None}
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
     from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent
@@ -440,6 +441,9 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
         "input_tokens": 0,
         "output_tokens": 0,
         "total_tokens": 0,
+        "cached_tokens": 0,
+        "llm_calls": 0,
+        "ttft_ms": None,
         "tool_calls_count": 0,
         "tool_names": [],
         "status": "error",
@@ -450,6 +454,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     pending: list[dict] = []
     models_tried: list[str] = []
     llm_calls = 0
+    # Time to first streamed text delta, i.e. what the user perceives as latency.
+    ttft_ms: int | None = None
 
     def on_model_event(evt: dict) -> None:
         nonlocal llm_calls
@@ -482,6 +488,10 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
             "input_tokens": usage.get("inputTokens", 0),
             "output_tokens": usage.get("outputTokens", 0),
             "total_tokens": usage.get("totalTokens", 0),
+            # Populated by Strands from usage.prompt_tokens_details.cached_tokens.
+            "cached_tokens": usage.get("cacheReadInputTokens", 0),
+            "llm_calls": llm_calls,
+            "ttft_ms": ttft_ms,
         }
 
     agent = None
@@ -516,6 +526,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
                 text_delta = event.get("data")
                 if text_delta:
+                    if ttft_ms is None:
+                        ttft_ms = elapsed_ms()
                     yield _sse({"type": "text", "delta": text_delta})
 
                 if event.get("result") is not None:
@@ -526,10 +538,13 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                         usage = event["result"].metrics.accumulated_usage or {}
                     done = done_event(usage)
                     logger.info(
-                        "[DONE] %dms | tools: %d | tokens: %d | modelos: %s",
+                        "[DONE] %dms (TTFT %sms) | llamadas LLM: %d | tools: %d | tokens: %d (cache: %d) | modelos: %s",
                         done["elapsed_ms"],
+                        done["ttft_ms"] if done["ttft_ms"] is not None else "—",
+                        done["llm_calls"],
                         done["total_tool_calls"],
                         done["total_tokens"],
+                        done["cached_tokens"],
                         ", ".join(done["models_tried"]) or "—",
                     )
                     _log.update(
@@ -538,6 +553,9 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                         input_tokens=done["input_tokens"],
                         output_tokens=done["output_tokens"],
                         total_tokens=done["total_tokens"],
+                        cached_tokens=done["cached_tokens"],
+                        llm_calls=done["llm_calls"],
+                        ttft_ms=done["ttft_ms"],
                         tool_calls_count=done["total_tool_calls"],
                         tool_names=tool_trace.names,
                         status="done",
@@ -551,6 +569,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
             _log.update(
                 models_tried=list(dict.fromkeys(models_tried)),
                 elapsed_ms=elapsed_ms(),
+                llm_calls=llm_calls,
+                ttft_ms=ttft_ms,
                 tool_calls_count=tool_trace.count,
                 tool_names=tool_trace.names,
                 status="error",
