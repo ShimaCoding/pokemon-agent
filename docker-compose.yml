@@ -6,6 +6,10 @@ services:
     ports:
       - "8001:8000"
     env_file: .env
+    environment:
+      # Docker-only hostname on the mcp-backend network. Pinned here (overrides
+      # env_file) so .env can stay pointed at a host-reachable MCP server.
+      MCP_SERVER_URL: http://mcp-pokemon-server:8000/mcp
     restart: unless-stopped
 
     healthcheck:
