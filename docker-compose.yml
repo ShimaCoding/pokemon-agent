@@ -42,10 +42,14 @@ services:
 
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.mcpokedex.rule=Host(`mcpokedex.shimadev.xyz`)"
+      - "traefik.http.routers.mcpokedex.rule=Host(`mcpokedex.shimadev.xyz`) || Host(`mcpokedex.com`) || Host(`www.mcpokedex.com`)"
       - "traefik.http.routers.mcpokedex.entrypoints=websecure"
       - "traefik.http.routers.mcpokedex.tls.certresolver=letsencrypt"
       - "traefik.http.services.mcpokedex.loadbalancer.server.port=8000"
+      - "traefik.http.routers.mcpokedex-http.rule=Host(`mcpokedex.com`) || Host(`www.mcpokedex.com`)"
+      - "traefik.http.routers.mcpokedex-http.entrypoints=web"
+      - "traefik.http.routers.mcpokedex-http.middlewares=redirect-to-https@file"
+      - "traefik.http.routers.mcpokedex-http.service=mcpokedex"
 
 networks:
   dokploy-network:
