@@ -124,27 +124,26 @@ En MCPokedex, los hooks son cómo capturamos cada `tool_call` con sus argumentos
     ),
     Lesson(
         id="litellm_router",
-        title="¿Qué es LiteLLM y por qué usar Router?",
+        title="LiteLLM y el ModelRouter de Strands",
         level="intermediate",
         tags=["litellm", "router", "fallback"],
         related_events=["llm_call", "model_attempt"],
         related_nodes=["llm_router"],
-        body_md="""### ¿Qué es LiteLLM y por qué usar Router?
+        body_md="""### LiteLLM y el ModelRouter de Strands
 
-**LiteLLM** es una capa de abstracción que te permite llamar a 100+ proveedores de LLMs (OpenAI, Anthropic, Groq, Gemini, OpenRouter, Bedrock…) con la misma firma estilo OpenAI. En vez de aprender 10 SDKs distintos, importas `litellm` y llamás `litellm.completion(model="groq/openai/gpt-oss-20b", messages=[...])`.
+**LiteLLM** es una capa de abstracción que te permite llamar a 100+ proveedores de LLMs (OpenAI, Anthropic, Groq, Gemini, Bedrock…) con la misma firma estilo OpenAI. Strands lo envuelve en `LiteLLMModel`, así que el agente habla con Groq usando un id como `groq/openai/gpt-oss-20b`.
 
-Encima de eso, **LiteLLM Router** agrega lógica de orquestación: load-balancing entre modelos, rate-limit handling, y —la feature que usamos nosotros— **fallback automático**. Declarás una lista priorizada de model groups y el Router va probando uno por uno hasta que alguno responda:
+Encima de eso, **`ModelRouter`** (nativo de Strands) agrega **fallback automático**: recibe una lista priorizada de modelos y, si una llamada falla, el agente reintenta con el siguiente candidato sin que tengas que tocar nada:
 
 ```python
-router = Router(model_list=[
-    {"model_name": "agent-model", "litellm_params": {"model": "groq/openai/gpt-oss-20b", ...}},
-    {"model_name": "agent-model", "litellm_params": {"model": "gemini/gemini-2.5-flash", ...}},
-], fallbacks=[{"agent-model": ["agent-model"]}])
+model = ModelRouter([
+    LiteLLMModel(model_id="groq/openai/gpt-oss-120b"),
+    LiteLLMModel(model_id="groq/openai/gpt-oss-20b"),
+])
+agent = Agent(model=model, ...)
 ```
 
-En MCPokedex esto se traduce en resiliencia real: si Groq está caído o te quedaste sin rate limit, el request reintenta transparentemente en el siguiente modelo o proveedor configurado. El frontend **sí** lo ve —cada intento emite un evento `model_attempt` con `status: "success" | "failed"`— pero el usuario recibe la respuesta igual.
-
-La integración con Strands tiene un truco: `LiteLLMModel` de Strands llama `litellm.completion()` directamente, sin conocer al Router. Resolvemos eso parcheando monkeypatch `litellm.completion`/`litellm.acompletion` con las versiones del Router antes de instanciar el modelo. Un ContextVar evita el bucle infinito cuando el Router internamente llama a litellm otra vez.
+En MCPokédex las consultas anónimas usan solo `gpt-oss-20b`; las autenticadas prueban primero `gpt-oss-120b` y caen a `gpt-oss-20b` si falla. Cada intento emite un `llm_call` y luego un `model_attempt` con `status: "success" | "failed"`, así que en las trazas ves exactamente qué modelo respondió.
 """,
     ),
     Lesson(
@@ -367,6 +366,15 @@ EVENTS_CATALOG: dict = {
         "description_md": (
             "**tool_result** — la tool terminó y el resultado ya se le entregó "
             "al LLM. Mismo `index` que el tool_call correspondiente."
+        ),
+        "related_lesson_id": "tool_call_anatomy",
+        "related_node_id": "mcp_server",
+    },
+    "ui_resource": {
+        "description_md": (
+            "**ui_resource** — la tool que acaba de correr declara un widget "
+            "(`_meta.ui.resourceUri`, MCP Apps). El frontend descarga su HTML y lo "
+            "monta en un iframe aislado dentro del chat, pasándole el resultado."
         ),
         "related_lesson_id": "tool_call_anatomy",
         "related_node_id": "mcp_server",

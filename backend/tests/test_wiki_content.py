@@ -16,6 +16,7 @@ SSE_EVENT_TYPES: set[str] = {
     "model_attempt",
     "tool_call",
     "tool_result",
+    "ui_resource",
     "text",
     "done",
     "error",

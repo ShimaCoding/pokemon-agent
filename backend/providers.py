@@ -1,7 +1,18 @@
+"""
+LLM configuration: Groq only, routed with strands' native ModelRouter.
+
+Anonymous requests get the cheapest model; requests authenticated with API_KEY
+get the larger model first and fall back to the small one. Failover is handled
+by ``strands.models.ModelRouter`` (``FallbackStrategy``), so nothing in litellm
+is patched.
+"""
+
 import importlib.metadata as _meta
+import logging
 import os
 import sys
-from typing import Optional
+from collections.abc import Callable
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -17,159 +28,98 @@ if _litellm_version in ("1.82.7", "1.82.8"):
         "any keys that may have been exposed."
     )
 
-PROVIDERS: dict[str, dict] = {
-    "groq": {
-        # model_ids_public: used when the request is NOT authenticated with API_KEY.
-        # Only the cheapest model is exposed to avoid burning quota for anonymous users.
-        "model_ids_public": [
-            "groq/openai/gpt-oss-20b",
-        ],
-        # model_ids: full list available to authenticated requests.
-        "model_ids": [
-            "groq/openai/gpt-oss-20b",
-            "groq/openai/gpt-oss-120b",
-        ],
-        "env_var": "GROQ_API_KEY",
-        "label": "Groq",
-        "order": 1,
-    },
-    "gemini": {
-        "model_id": "gemini/gemini-2.5-flash",
-        "env_var": "GEMINI_API_KEY",
-        "label": "Gemini (gemini-2.5-flash)",
-        "order": 2,
-    },
-    "openai": {
-        "model_id": "openai/gpt-4o-mini",
-        "env_var": "OPENAI_API_KEY",
-        "label": "OpenAI (gpt-4o-mini)",
-        "order": 3,
-    },
-}
+from strands.models import ModelRouter  # noqa: E402
+from strands.models.litellm import LiteLLMModel  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+PROVIDER_LABEL = "Groq"
+API_KEY_ENV = "GROQ_API_KEY"
+
+# Only the cheapest model is exposed to anonymous users to avoid burning quota.
+MODELS_PUBLIC = ["groq/openai/gpt-oss-20b"]
+# Authenticated requests: preferred model first, then fallbacks in order.
+MODELS_AUTHENTICATED = ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
+# Both gpt-oss models have a 131k-token window on Groq; the harness context
+# manager uses it to decide when to compress the conversation.
+CONTEXT_WINDOW = 131_072
+
+TraceSink = Callable[[dict[str, Any]], None]
 
 
-def get_available_providers() -> list[dict]:
-    """Return providers sorted by order whose API key env var is set."""
-    available = []
-    for name, config in PROVIDERS.items():
-        api_key = os.environ.get(config["env_var"], "").strip()
-        if api_key:
-            available.append({"name": name, **config, "_api_key": api_key})
-    return sorted(available, key=lambda p: p["order"])
+def groq_configured() -> bool:
+    return bool(os.environ.get(API_KEY_ENV, "").strip())
 
 
-def _build_router_model_list(providers: list[dict], authenticated: bool = False) -> tuple[list[dict], list[str]]:
-    """
-    Expand providers into LiteLLM Router deployment entries.
+def model_ids(authenticated: bool) -> list[str]:
+    return list(MODELS_AUTHENTICATED if authenticated else MODELS_PUBLIC)
 
-    Each provider gets its own model group name (e.g. "groq-models") so that
-    LiteLLM Router's ``fallbacks`` parameter can trigger cross-provider failover.
-    All models within a provider share that provider's group name so the Router
-    can load-balance across them before giving up and moving to the next group.
 
-    Args:
-        authenticated: If True, use the full model list for each provider.
-                       If False, use ``model_ids_public`` when available (e.g. Groq
-                       only exposes its cheapest model to unauthenticated requests).
+def _preview_messages(messages: list[dict[str, Any]], limit: int = 800) -> list[dict[str, str]]:
+    """Flatten Strands messages to ``{role, content}`` strings for the trace panel."""
+    preview = []
+    for msg in messages:
+        parts = []
+        for block in msg.get("content", []):
+            if "text" in block:
+                parts.append(block["text"])
+            elif "toolUse" in block:
+                tu = block["toolUse"]
+                parts.append(f"[toolUse {tu.get('name')}({tu.get('input')})]")
+            elif "toolResult" in block:
+                texts = " ".join(c.get("text", "") for c in block["toolResult"].get("content", []))
+                parts.append(f"[toolResult {texts}]")
+        content = "\n".join(parts)
+        if len(content) > limit:
+            content = content[:limit] + "…[truncated]"
+        preview.append({"role": msg.get("role", "?"), "content": content})
+    return preview
 
-    Returns:
-        (model_list, group_names) — group_names preserves provider order.
+
+class TracedLiteLLMModel(LiteLLMModel):
+    """LiteLLMModel that reports every model call attempt to a per-request trace sink.
+
+    Emits ``llm_call`` before the request and ``model_attempt`` (success/failed)
+    after it. Under a ModelRouter, a failover shows up as one failed attempt
+    followed by another ``llm_call`` on the next candidate.
     """
 
-    model_list: list[dict] = []
-    group_names: list[str] = []
-    for p in providers:
-        group_name = f"{p['name']}-models"
-        group_names.append(group_name)
-        if not authenticated and "model_ids_public" in p:
-            model_ids: list[str] = p["model_ids_public"]
-        else:
-            model_ids = p.get("model_ids") or [p["model_id"]]
-        for model_id in model_ids:
-            litellm_params: dict = {
-                "model": model_id,
-                "api_key": p["_api_key"],
-            }
-            model_list.append(
-                {"model_name": group_name, "litellm_params": litellm_params}
-            )
-    return model_list, group_names
+    def __init__(self, *, trace: TraceSink | None = None, **config: Any) -> None:
+        super().__init__(**config)
+        self._trace = trace
+
+    def _emit(self, event: dict[str, Any]) -> None:
+        if self._trace is not None:
+            self._trace(event)
+
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):  # type: ignore[override]
+        model_id = self.get_config()["model_id"]
+        self._emit({"type": "llm_call", "model": model_id, "messages": _preview_messages(messages)})
+        logger.info("[LLM] Llamando a %s", model_id)
+        try:
+            async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
+                yield event
+        except Exception as exc:
+            logger.warning("[LLM] ✗ Falló %s → %s", model_id, str(exc)[:120])
+            self._emit({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
+            raise
+        self._emit({"type": "model_attempt", "model": model_id, "status": "success"})
 
 
-def build_litellm_router(provider_name: Optional[str] = None, authenticated: bool = False):
+def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRouter:
+    """Build a ModelRouter over the Groq models allowed for this request.
+
+    A fresh router and fresh model instances per request keep the trace sink
+    request-scoped.
+
+    Raises:
+        RuntimeError: If GROQ_API_KEY is not set.
     """
-    Build and return a LiteLLM Router.
-
-    If provider_name is given and available, returns a single-provider Router
-    (no cross-provider fallback) with model group name ``"agent-model"``.
-
-    If provider_name is None or unavailable, returns a Router with all available
-    providers using per-provider model group names and explicit ``fallbacks`` so
-    that when one provider exhausts its retries the Router automatically moves to
-    the next provider instead of raising.
-
-    Args:
-        provider_name: Pin to a specific provider key (e.g. "groq"), or None
-                       for all providers with automatic fallback.
-        authenticated: If True, the full model list is used for each provider.
-                       If False (anonymous request), providers expose only their
-                       public/cheap models (e.g. Groq → gpt-oss-20b only) and
-                       fallback across providers is disabled.
-
-    Returns:
-        (Router, primary_model_group, provider_label)
-        primary_model_group is the model group name the caller must pass to
-        router.acompletion() / router.completion().
-
-    Raises RuntimeError if no providers are configured.
-    """
-    from litellm import Router
-
-    available = get_available_providers()
-    if not available:
-        raise RuntimeError(
-            "No LLM providers configured. Set at least one of: "
-            + ", ".join(p["env_var"] for p in PROVIDERS.values())
-        )
-
-    # Pin to a specific provider if requested and available
-    if provider_name and provider_name in PROVIDERS:
-        pinned = next((p for p in available if p["name"] == provider_name), None)
-        if pinned:
-            model_list, _ = _build_router_model_list([pinned], authenticated=authenticated)
-            # Rename the single group to the generic alias so callers are uniform
-            for entry in model_list:
-                entry["model_name"] = "agent-model"
-            router = Router(
-                model_list=model_list,
-                num_retries=3,
-                retry_after=2,
-                allowed_fails=1,
-                cooldown_time=3600,
-                routing_strategy="least-busy",
-            )
-            return router, "agent-model", pinned["label"]
-
-    # Full router with all available providers and explicit cross-provider fallbacks.
-    # Each provider gets its own model group; the first group is the primary target
-    # and the rest are listed as fallbacks so LiteLLM Router actually switches
-    # providers once the primary group exhausts its retries.
-    # Cross-provider fallback is only enabled for authenticated requests.
-    model_list, group_names = _build_router_model_list(available, authenticated=authenticated)
-    primary = group_names[0]
-    if authenticated and len(group_names) > 1:
-        fallbacks = [{primary: group_names[1:]}]
-    else:
-        fallbacks = []
-    router = Router(
-        model_list=model_list,
-        fallbacks=fallbacks,
-        num_retries=3,
-        retry_after=2,
-        allowed_fails=1,
-        cooldown_time=3600,
-        routing_strategy="least-busy",
+    if not groq_configured():
+        raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    return ModelRouter(
+        [
+            TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW)
+            for m in model_ids(authenticated)
+        ]
     )
-    primary_label = available[0]["label"]
-    suffix = " (auto-fallback)" if authenticated and len(group_names) > 1 else ""
-    return router, primary, f"{primary_label}{suffix}"

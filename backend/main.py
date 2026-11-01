@@ -1,48 +1,50 @@
 """
-FastAPI application for the Pokemon MCP Agent.
+FastAPI application for MCPokédex.
 
 Routes:
-  GET  /health             — health check + active providers
-  GET  /providers          — list all providers with availability
-  GET  /config             — public frontend config (e.g. require_api_key flag)
-  POST /api/agent/run      — SSE stream: agent response + tool call trace
-  GET  /                   — serves index.html (via StaticFiles mount)
+  GET  /health               — health check
+  GET  /config               — public frontend config (e.g. require_api_key flag)
+  POST /api/agent/run        — SSE stream: agent response, traces and widgets
+  GET  /api/ui-resource      — widget HTML (`ui://` MCP Apps resource) + its CSP
+  POST /api/mcp/call-tool    — widget → MCP server tool calls (UI-bound tools only)
+  GET  /api/prompts|tools|resources — MCP server capabilities
+  GET  /                     — serves the frontend (StaticFiles mount)
 
 Security:
-  - API key auth: set API_KEY env var; clients must send X-API-Key header.
-    If API_KEY is unset, auth is disabled (suitable for local dev).
+  - API key auth: set API_KEY env var; clients send the X-API-Key header.
+    Authenticated requests skip the agent rate limit and get the larger model.
   - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
   - CORS: controlled by ALLOWED_ORIGINS env var (comma-separated).
     Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
 
+import asyncio
 import hmac
 import json
 import logging
 import os
+import re
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from backend import mcp_gateway
 from backend.database import get_queries, get_stats, init_db, log_query
-from backend.providers import PROVIDERS, build_litellm_router, get_available_providers
-from backend.wiki_content import (
-    ARCHITECTURE,
-    EVENTS_CATALOG,
-    lessons_as_dicts,
-)
+from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
+from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
+from backend.wiki_content import EVENTS_CATALOG, lessons_as_dicts
 
 load_dotenv()
 
@@ -74,6 +76,10 @@ def _is_valid_api_key(api_key: str | None) -> bool:
     return hmac.compare_digest(api_key, expected)
 
 
+def _is_authenticated_request() -> bool:
+    return _is_valid_api_key(_req_api_key.get())
+
+
 async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
     """Dependency: require a valid API key (used for admin endpoints)."""
     if not _is_valid_api_key(api_key):
@@ -82,35 +88,30 @@ async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Validate at startup that at least one provider is configured.
-    # This will raise RuntimeError if all providers are missing.
-    try:
-        _router, _primary_model, label = build_litellm_router()
-        available = get_available_providers()
-        logger.info(
-            "Active LLM providers: %s",
-            ", ".join(p["label"] for p in available),
+    if not groq_configured():
+        raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    logger.info("LLM provider: %s", PROVIDER_LABEL)
+    if _cors_origins == ["*"]:
+        logger.warning(
+            "CORS configured with wildcard '*'. "
+            "Set ALLOWED_ORIGINS in .env for production."
         )
-        logger.info("Primary provider (auto-fallback): %s", label)
-        if _cors_origins == ["*"]:
-            logger.warning(
-                "CORS configured with wildcard '*'. "
-                "Set ALLOWED_ORIGINS in .env for production."
-            )
-    except RuntimeError as exc:
-        logger.error("Startup error: %s", exc)
-        raise
     init_db()
-    yield
+    prune_task = asyncio.create_task(prune_periodically())
+    try:
+        yield
+    finally:
+        prune_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await prune_task
 
 
-app = FastAPI(title="Pokemon MCP Agent", lifespan=lifespan)
+app = FastAPI(title="MCPokédex", lifespan=lifespan)
 
 app.state.limiter = limiter
 
 
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    from fastapi.responses import JSONResponse
     return JSONResponse(
         status_code=429,
         content={"detail": "Demasiadas consultas. Espera un momento antes de volver a intentarlo."},
@@ -160,7 +161,13 @@ async def _capture_api_key(request: Request, call_next):
 
 class RunRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
-    provider: Optional[str] = None
+    # Generated by the browser (localStorage); keys the harness session snapshot.
+    conversation_id: str = Field(..., pattern=CONVERSATION_ID_RE.pattern)
+
+
+class CallToolRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -176,56 +183,15 @@ async def config():
 
 @app.get("/health")
 async def health():
-    available = get_available_providers()
-    return {"status": "ok", "providers": [p["label"] for p in available]}
-
-
-@app.get("/providers")
-async def providers():
-    result = []
-    for name, config in PROVIDERS.items():
-        api_key = os.environ.get(config["env_var"], "").strip()
-        result.append(
-            {
-                "name": name,
-                "label": config["label"],
-                "available": bool(api_key),
-            }
-        )
-    # Sort by order so the frontend renders them in priority order
-    result.sort(key=lambda p: PROVIDERS[p["name"]]["order"])
-    return result
+    return {"status": "ok", "provider": PROVIDER_LABEL}
 
 
 @app.get("/api/prompts")
 @limiter.limit("10/minute")
 async def get_prompts(request: Request):
     """Fetch the list of prompts from the MCP server."""
-    import asyncio
-    from backend.agent import build_agent
-
-    def _fetch_sync():
-        _model, mcp_client, _label = build_agent()
-        with mcp_client:
-            prompts_result = mcp_client.list_prompts_sync()
-            return [
-                {
-                    "name": p.name,
-                    "description": p.description or "",
-                    "arguments": [
-                        {
-                            "name": arg.name,
-                            "description": arg.description or "",
-                            "required": bool(arg.required),
-                        }
-                        for arg in (p.arguments or [])
-                    ],
-                }
-                for p in prompts_result.prompts
-            ]
-
     try:
-        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
+        return await asyncio.to_thread(mcp_gateway.list_prompts)
     except Exception as exc:
         logger.error("Error fetching prompts: %s", exc)
         return []
@@ -235,24 +201,8 @@ async def get_prompts(request: Request):
 @limiter.limit("10/minute")
 async def get_tools(request: Request):
     """Fetch the list of tools from the MCP server."""
-    import asyncio
-    from backend.agent import build_agent
-
-    def _fetch_sync():
-        _model, mcp_client, _label = build_agent()
-        with mcp_client:
-            tools_result = mcp_client.list_tools_sync()
-            return [
-                {
-                    "name": t.mcp_tool.name,
-                    "description": t.mcp_tool.description or "",
-                    "input_schema": t.mcp_tool.inputSchema if hasattr(t.mcp_tool, "inputSchema") else {},
-                }
-                for t in tools_result
-            ]
-
     try:
-        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
+        return await asyncio.to_thread(mcp_gateway.list_tools)
     except Exception as exc:
         logger.error("Error fetching tools: %s", exc)
         return []
@@ -262,32 +212,50 @@ async def get_tools(request: Request):
 @limiter.limit("10/minute")
 async def get_resources(request: Request):
     """Fetch the list of resources from the MCP server."""
-    import asyncio
-    from backend.agent import build_agent
-
-    def _fetch_sync():
-        _model, mcp_client, _label = build_agent()
-        with mcp_client:
-            resources_result = mcp_client.list_resources_sync()
-            return [
-                {
-                    "uri": r.uri,
-                    "name": r.name or "",
-                    "description": r.description or "",
-                    "mime_type": r.mimeType or "",
-                }
-                for r in resources_result.resources
-            ]
-
     try:
-        return await asyncio.get_event_loop().run_in_executor(None, _fetch_sync)
+        return await asyncio.to_thread(mcp_gateway.list_resources)
     except Exception as exc:
         logger.error("Error fetching resources: %s", exc)
         return []
 
 
 # ---------------------------------------------------------------------------
-# Wiki Viviente — contenido educativo
+# MCP Apps — widget resources and widget → server tool calls
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/ui-resource")
+@limiter.limit("30/minute")
+async def get_ui_resource(request: Request, uri: str = Query(..., max_length=200)):
+    """Return a widget's HTML and `_meta.ui` (csp, permissions) for the iframe host."""
+    if not uri.startswith("ui://"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan URIs ui://")
+    try:
+        resource = await asyncio.to_thread(mcp_gateway.read_ui_resource, uri)
+    except Exception as exc:
+        logger.error("Error reading UI resource %s: %s", uri, exc)
+        raise HTTPException(status_code=502, detail="No se pudo leer el recurso del servidor MCP")
+    if resource is None:
+        raise HTTPException(status_code=404, detail="Recurso UI desconocido")
+    return JSONResponse(content=resource, headers={"Cache-Control": "public, max-age=300"})
+
+
+@app.post("/api/mcp/call-tool")
+@limiter.limit("20/minute", exempt_when=_is_authenticated_request)
+async def call_tool(request: Request, body: CallToolRequest):
+    """Forward a widget's `callServerTool` to the MCP server (UI-bound tools only)."""
+    try:
+        result = await asyncio.to_thread(mcp_gateway.call_ui_tool, body.name, body.arguments)
+    except Exception as exc:
+        logger.error("Error calling tool %s for widget: %s", body.name, exc)
+        raise HTTPException(status_code=502, detail="Error al llamar al servidor MCP")
+    if result is None:
+        raise HTTPException(status_code=403, detail="Tool no disponible para widgets")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Wiki content — lessons shown in the "ver cómo lo pensó" trace panel
 # ---------------------------------------------------------------------------
 
 _WIKI_CACHE_HEADERS = {"Cache-Control": "public, max-age=3600"}
@@ -296,44 +264,34 @@ _WIKI_CACHE_HEADERS = {"Cache-Control": "public, max-age=3600"}
 @app.get("/api/wiki/lessons")
 @limiter.limit("10/minute")
 async def get_wiki_lessons(request: Request):
-    """Return the full list of wiki lessons (single source of truth for learn mode)."""
-    from fastapi.responses import JSONResponse
+    """Return the full list of wiki lessons."""
     return JSONResponse(content=lessons_as_dicts(), headers=_WIKI_CACHE_HEADERS)
-
-
-@app.get("/api/wiki/architecture")
-@limiter.limit("10/minute")
-async def get_wiki_architecture(request: Request):
-    """Return the architecture diagram (nodes + edges) for the FlowDiagram."""
-    from fastapi.responses import JSONResponse
-    return JSONResponse(content=ARCHITECTURE, headers=_WIKI_CACHE_HEADERS)
 
 
 @app.get("/api/wiki/events-catalog")
 @limiter.limit("10/minute")
 async def get_wiki_events_catalog(request: Request):
-    """Return the SSE events catalog (tooltips + related lesson/node per type)."""
-    from fastapi.responses import JSONResponse
+    """Return the SSE events catalog (tooltips + related lesson per type)."""
     return JSONResponse(content=EVENTS_CATALOG, headers=_WIKI_CACHE_HEADERS)
 
 
+# ---------------------------------------------------------------------------
+# Agent run (SSE)
+# ---------------------------------------------------------------------------
+
+
 @app.post("/api/agent/run")
-@limiter.limit("3/minute", exempt_when=lambda: _is_valid_api_key(_req_api_key.get()))
+@limiter.limit("3/minute", exempt_when=_is_authenticated_request)
 async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
     authenticated = _is_valid_api_key(api_key)
     return StreamingResponse(
-        _sse_generator(body.query, body.provider, authenticated=authenticated),
+        _sse_generator(body.query, body.conversation_id, authenticated=authenticated),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # Disable Nginx buffering
         },
     )
-
-
-# ---------------------------------------------------------------------------
-# SSE generator
-# ---------------------------------------------------------------------------
 
 
 def _sse(payload: dict) -> str:
@@ -349,76 +307,134 @@ def _extract_result_text(tool_result: dict) -> str:
     return str(content)
 
 
-class _ToolHook:
+class _ToolTrace:
     """
-    Strands HookProvider that captures tool calls and results via hooks.
+    Strands HookProvider that turns tool calls into SSE events.
 
-    BeforeToolCallEvent / AfterToolCallEvent are used instead of streaming
-    current_tool_use detection because the streaming approach is unreliable:
-    current_tool_use["input"] is a string during streaming and only becomes a
-    dict after the contentBlockStop mutation, which happens after the consumer
-    has already processed those events.  Hooks fire with the fully-parsed ToolUse
-    at the correct moment and are the reliable way to capture this data.
+    BeforeToolCallEvent / AfterToolCallEvent fire with the fully-parsed ToolUse
+    (streamed tool input is still a partial string), so they're the reliable
+    place to capture calls and results. Events go to ``emit`` in the order the
+    hooks fire; the SSE generator drains them between stream events.
+
+    After a UI-bound MCP tool (``_meta.ui.resourceUri``) runs, a ``ui_resource``
+    event carries everything the frontend needs to mount its widget.
     """
 
-    def register_hooks(self, registry) -> None:
+    def __init__(self, emit) -> None:
+        self._emit = emit
+        self._next_index = 0
+        self._index_by_id: dict[str, int] = {}
+        self.names: list[str] = []
+
+    def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
 
-        registry.add_callback(BeforeToolCallEvent, self._capture_call)
-        registry.add_callback(AfterToolCallEvent, self._capture_result)
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+        registry.add_callback(AfterToolCallEvent, self._on_result)
 
-    def __init__(self) -> None:
-        # toolUseId → (name, input_dict), populated before each tool runs
-        self._pending_calls: dict[str, tuple[str, dict]] = {}
-        # toolUseId → result text, populated after each tool runs
-        self._pending_results: dict[str, str] = {}
-
-    def _capture_call(self, event) -> None:
+    def _on_call(self, event) -> None:
         uid = event.tool_use.get("toolUseId", "")
-        if uid:
-            self._pending_calls[uid] = (
-                event.tool_use.get("name", "unknown"),
-                dict(event.tool_use.get("input") or {}),
+        name = event.tool_use.get("name", "unknown")
+        index = self._next_index
+        self._next_index += 1
+        self._index_by_id[uid] = index
+        self.names.append(name)
+        args = dict(event.tool_use.get("input") or {})
+        logger.info("[TOOL] Llamando tool #%d: %s | args: %s", index, name, str(args)[:120])
+        self._emit({"type": "tool_call", "index": index, "tool_id": uid, "tool": name, "args": args})
+
+    def _on_result(self, event) -> None:
+        uid = event.tool_use.get("toolUseId", "")
+        name = event.tool_use.get("name", "unknown")
+        index = self._index_by_id.get(uid, -1)
+        text = _extract_result_text(event.result)
+        logger.info("[TOOL] Resultado de %s: %.120s%s", name, text, "…" if len(text) > 120 else "")
+        # Skill instructions are internal scaffolding — show a brief summary
+        # instead of the full SKILL.md text in the trace panel.
+        display = (
+            f"[Skill activado: instrucciones de narración cargadas ({len(text)} chars)]"
+            if name == "skills"
+            else text
+        )
+        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display})
+
+        uri = mcp_gateway.ui_resource_uri(getattr(event.selected_tool, "mcp_tool", None))
+        if uri and event.result.get("status") != "error":
+            self._emit(
+                {
+                    "type": "ui_resource",
+                    "index": index,
+                    "tool_id": uid,
+                    "tool": name,
+                    "resource_uri": uri,
+                    "tool_input": dict(event.tool_use.get("input") or {}),
+                    "tool_result": mcp_gateway.to_call_tool_result(event.result),
+                }
             )
 
-    def _capture_result(self, event) -> None:
-        uid = event.tool_use.get("toolUseId", "")
-        if uid:
-            self._pending_results[uid] = _extract_result_text(event.result)
-
-    def pending_call_ids(self) -> list[str]:
-        return list(self._pending_calls.keys())
-
-    def pop_call(self, uid: str) -> Optional[tuple[str, dict]]:
-        return self._pending_calls.pop(uid, None)
-
-    def pop_result(self, uid: str) -> Optional[str]:
-        return self._pending_results.pop(uid, None)
+    @property
+    def count(self) -> int:
+        return self._next_index
 
 
-async def _sse_generator(query: str, provider: Optional[str] = None, authenticated: bool = False):
+# "Usa el prompt <name> [con <arg>=<val>...]" — sent by the slash menu.
+_PROMPT_RE = re.compile(
+    r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_./-]+)(?:\s+con\s+(.+))?",
+    re.I,
+)
+
+
+async def _expand_prompt(query: str) -> str:
+    """Replace a slash-menu prompt invocation with the MCP prompt's text."""
+    m = _PROMPT_RE.match(query)
+    if not m:
+        return query
+    prompt_name, args_str = m.group(1), m.group(2) or ""
+    # Accept both comma-separated and space-separated key=value pairs
+    args = {
+        k.strip(): v.strip()
+        for pair in re.split(r"[,\s]+", args_str)
+        if "=" in pair
+        for k, v in [pair.split("=", 1)]
+    }
+    try:
+        prompt_text = (await asyncio.to_thread(mcp_gateway.get_prompt_text, prompt_name, args))[:2000]
+    except Exception as exc:
+        logger.warning("Could not fetch prompt %s: %s", prompt_name, exc)
+        return query
+    return (
+        f"Using MCP prompt '{prompt_name}':\n\n{prompt_text}\n\n"
+        "Please follow these instructions and provide the complete answer using the available tools."
+    )
+
+
+async def _sse_generator(query: str, conversation_id: str, authenticated: bool = False):
     """
     Async generator that yields SSE events for one agent run.
 
     Event sequence:
-      {"type": "start",         "provider": str}
-      {"type": "llm_call",      "call_index": int, "messages": list, "timestamp_ms": int}
+      {"type": "start",         "provider": str, "conversation_id": str}
+      {"type": "agent_init",    "mcp_tools_count": int, "tool_names": list, "skill_loaded": str, ...}
+      {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int}
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
-      {"type": "tool_call",     "index": int, "tool": str, "args": dict, "timestamp_ms": int}
-      {"type": "tool_result",   "index": int, "tool": str, "result": str, "timestamp_ms": int}
+      {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
+      {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int}
+      {"type": "ui_resource",   "index": int, "tool_id": str, "tool": str, "resource_uri": str,
+                                "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
       {"type": "text",          "delta": str}
-      {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str]}
-      {"type": "error",         "message": str, "fallback_available": bool}  # on exception
+      {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…}
+      {"type": "error",         "message": str}  # on exception, always followed by done
     """
-    from backend.agent import _llm_prompts as _cv_llm_prompts
-    from backend.agent import _model_events as _cv_model_events
-    from backend.agent import build_agent, create_agent
+    from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent
 
     start_time = time.time()
 
+    def elapsed_ms() -> int:
+        return int((time.time() - start_time) * 1000)
+
     # --- Accumulated data for query log ---
     _log: dict = {
-        "provider": None,
+        "provider": PROVIDER_LABEL,
         "models_tried": [],
         "elapsed_ms": 0,
         "input_tokens": 0,
@@ -430,280 +446,123 @@ async def _sse_generator(query: str, provider: Optional[str] = None, authenticat
         "error_message": None,
     }
 
-    def elapsed_ms() -> int:
-        return int((time.time() - start_time) * 1000)
+    # Trace events from the model wrapper and the tool hooks, in the order they happen.
+    pending: list[dict] = []
+    models_tried: list[str] = []
+    llm_calls = 0
 
-    logger.info("[REQUEST] ─── Nueva consulta recibida ───────────────────────")
+    def on_model_event(evt: dict) -> None:
+        nonlocal llm_calls
+        if evt["type"] == "llm_call":
+            llm_calls += 1
+            evt = {**evt, "call_index": llm_calls}
+        else:
+            models_tried.append(evt["model"])
+        pending.append(evt)
+
+    def drain():
+        while pending:
+            evt = pending.pop(0)
+            evt["timestamp_ms"] = elapsed_ms()
+            yield _sse(evt)
+
+    tool_trace = _ToolTrace(pending.append)
+
+    logger.info("[REQUEST] ─── Nueva consulta (conversación %s) ───", conversation_id)
     logger.info("[REQUEST] Query: %.120s%s", query, "…" if len(query) > 120 else "")
 
-    try:
-        model, mcp_client, provider_label = build_agent(provider, authenticated=authenticated)
-    except RuntimeError as exc:
-        logger.error("[PROVIDER] Sin providers disponibles: %s", exc)
-        yield _sse({"type": "error", "message": str(exc), "fallback_available": False})
-        return
+    yield _sse({"type": "start", "provider": PROVIDER_LABEL, "conversation_id": conversation_id})
 
-    logger.info("[PROVIDER] Provider seleccionado: %s", provider_label)
-    _log["provider"] = provider_label
+    def done_event(usage: dict) -> dict:
+        return {
+            "type": "done",
+            "total_tool_calls": tool_trace.count,
+            "elapsed_ms": elapsed_ms(),
+            "models_tried": list(dict.fromkeys(models_tried)),
+            "input_tokens": usage.get("inputTokens", 0),
+            "output_tokens": usage.get("outputTokens", 0),
+            "total_tokens": usage.get("totalTokens", 0),
+        }
 
-    # Per-request queues populated by agent.py's monkey-patched litellm calls.
-    _me_queue: list = []  # model_attempt events
-    _lp_queue: list = []  # llm_call events
-    _all_model_attempts: list[str] = []  # accumulates all model IDs tried (for done event)
-    _me_token = _cv_model_events.set(_me_queue)
-    _lp_token = _cv_llm_prompts.set(_lp_queue)
-
-    yield _sse({"type": "start", "provider": provider_label})
-
-    tool_index = 0
-    # Maps toolUseId → stream index so results can be matched back to calls.
-    tool_use_id_to_index: dict[str, int] = {}
-    # Maps stream index → tool_name for result events.
-    tool_names: dict[int, str] = {}
-    # Track which indices have had their result emitted.
-    emitted_results: set[int] = set()
-
-    tool_hook = _ToolHook()
-
-    async def _drain_results():
-        """Yield SSE frames for any tool results collected by AfterToolCallEvent."""
-        for uid, idx in list(tool_use_id_to_index.items()):
-            if idx in emitted_results:
-                continue
-            result_text = tool_hook.pop_result(uid)
-            if result_text is None:
-                continue
-            emitted_results.add(idx)
-            t_name = tool_names.get(idx, "unknown")
-            logger.info("[TOOL] Resultado de %s: %.120s%s", t_name, result_text, "…" if len(result_text) > 120 else "")
-            # Skill instructions are internal scaffolding — show a brief summary
-            # instead of the full SKILL.md text in the trace panel.
-            display_result = (
-                f"[Skill activado: instrucciones de narración cargadas ({len(result_text)} chars)]"
-                if t_name == "skills"
-                else result_text
+    agent = None
+    async with conversation_lock(conversation_id):
+        try:
+            logger.info("[MCP] Conectando al servidor MCP y restaurando la sesión…")
+            agent = await asyncio.to_thread(
+                create_agent,
+                conversation_id,
+                authenticated=authenticated,
+                trace=on_model_event,
+                hooks=[tool_trace],
             )
-            yield _sse(
-                {
-                    "type": "tool_result",
-                    "index": idx,
-                    "tool": t_name,
-                    "result": display_result,
-                    "timestamp_ms": elapsed_ms(),
-                }
-            )
-
-    async def _drain_llm_events():
-        """Yield SSE frames for llm_call and model_attempt events collected by the monkey-patch."""
-        while _lp_queue:
-            evt = _lp_queue.pop(0)
-            evt["timestamp_ms"] = elapsed_ms()
-            yield _sse(evt)
-        while _me_queue:
-            evt = _me_queue.pop(0)
-            evt["timestamp_ms"] = elapsed_ms()
-            _all_model_attempts.append(evt["model"])
-            yield _sse(evt)
-
-    try:
-        with mcp_client:
-            logger.info("[MCP] Conectando al servidor MCP y listando tools…")
-            tools = mcp_client.list_tools_sync()
-            logger.info("[MCP] %d tools disponibles", len(tools))
-
-            # --- Emit agent_init event ------------------------------------
-            # At this point the MCP tools have been discovered but the agent
-            # hasn't made its first LLM call yet. This is the "setup" moment
-            # that the frontend uses to animate the bootstrap of the agent.
-            try:
-                from backend.agent import SYSTEM_PROMPT as _SP
-                _sp_preview = (_SP or "").strip()[:200]
-            except Exception:
-                _sp_preview = None
-            _tool_names: list[str] = []
-            for _t in tools:
-                try:
-                    _tool_names.append(_t.mcp_tool.name)
-                except Exception:
-                    try:
-                        _tool_names.append(getattr(_t, "tool_name", None) or getattr(_t, "name", "unknown"))
-                    except Exception:
-                        _tool_names.append("unknown")
-            _skills_dir = os.path.join(os.path.dirname(__file__), "skills")
-            _skill_loaded: Optional[str] = None
-            try:
-                if os.path.isdir(os.path.join(_skills_dir, "dexter-pokedex-narrator")):
-                    _skill_loaded = "dexter-pokedex-narrator"
-            except Exception:
-                _skill_loaded = None
+            tool_names = list(agent.tool_names)
             yield _sse(
                 {
                     "type": "agent_init",
-                    "mcp_tools_count": len(tools),
-                    "tool_names": _tool_names,
-                    "skill_loaded": _skill_loaded,
-                    "system_prompt_preview": _sp_preview,
+                    "mcp_tools_count": len(tool_names),
+                    "tool_names": tool_names,
+                    "skill_loaded": SKILL_NAME,
+                    "system_prompt_preview": SYSTEM_PROMPT.strip()[:200],
+                    "history_messages": len(agent.messages),
                     "timestamp_ms": elapsed_ms(),
                 }
             )
 
-            # --- Check if query is a prompt call ---
-            # Pattern: "Usa el prompt <name> [con <arg>=<val>...]"
-            import re, json as _json
-            m = re.match(r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_./-]+)(?:\s+con\s+(.+))?", query, re.I)
-            if m:
-                prompt_name = m.group(1)
-                args_str = m.group(2) or ""
-                args = {}
-                if args_str:
-                    # Accept both comma-separated and space-separated key=value pairs
-                    for pair in re.split(r"[,\s]+", args_str):
-                        if "=" in pair:
-                            k, v = pair.split("=", 1)
-                            args[k.strip()] = v.strip()
+            prompt = await _expand_prompt(query)
 
-                try:
-                    prompt_res = mcp_client.get_prompt_sync(prompt_name, args)
-                    # Extract the actual prompt text.
-                    # This MCP server wraps its instructions in a nested JSON object
-                    # inside msg.content.text, so we unwrap it when possible.
-                    parts: list[str] = []
-                    for msg in prompt_res.messages:
-                        raw = msg.content.text if hasattr(msg.content, "text") else str(msg.content)
-                        try:
-                            blob = _json.loads(raw)
-                            for inner in blob.get("messages", []):
-                                txt = inner.get("content", {}).get("text", "")
-                                if txt:
-                                    parts.append(txt)
-                        except Exception:
-                            parts.append(raw)
-                    prompt_text = "\n".join(parts)
-                    prompt_text = prompt_text[:2000]
-                    query = f"Using MCP prompt '{prompt_name}':\n\n{prompt_text}\n\nPlease follow these instructions and provide the complete answer using the available tools."
-                except Exception as p_exc:
-                    logger.warning(f"Could not fetch prompt {prompt_name}: {p_exc}")
-
-            agent = create_agent(model, tools, hooks=[tool_hook])
-
-            async for event in agent.stream_async(query):
-                # --- Drain LLM prompt + model attempt events ---
-                async for frame in _drain_llm_events():
+            async for event in agent.stream_async(prompt):
+                for frame in drain():
                     yield frame
 
-                # --- Drain tool calls captured by BeforeToolCallEvent hook ---
-                for uid in tool_hook.pending_call_ids():
-                    call = tool_hook.pop_call(uid)
-                    if call is None:
-                        continue
-                    t_name, t_args = call
-                    tool_use_id_to_index[uid] = tool_index
-                    tool_names[tool_index] = t_name
-                    logger.info("[TOOL] Llamando tool #%d: %s | args: %s", tool_index, t_name, str(t_args)[:120])
-                    yield _sse(
-                        {
-                            "type": "tool_call",
-                            "index": tool_index,
-                            "tool": t_name,
-                            "args": t_args,
-                            "timestamp_ms": elapsed_ms(),
-                        }
-                    )
-                    tool_index += 1
-
-                # --- Drain tool results captured by AfterToolCallEvent hook ---
-                async for frame in _drain_results():
-                    yield frame
-
-                # --- Text delta events ---
                 text_delta = event.get("data")
                 if text_delta:
                     yield _sse({"type": "text", "delta": text_delta})
 
-                # --- Completion event ---
                 if event.get("result") is not None:
-                    # Final drain before done
-                    async for frame in _drain_llm_events():
+                    for frame in drain():
                         yield frame
-                    async for frame in _drain_results():
-                        yield frame
-
-                    # Extract token usage from Strands AgentResult metrics
-                    _result = event["result"]
-                    _usage: dict = {}
-                    try:
-                        _usage = _result.metrics.accumulated_usage or {}
-                    except Exception:
-                        pass
-
-                    _elapsed = elapsed_ms()
-                    _models_tried = list(dict.fromkeys(_all_model_attempts))
+                    usage: dict = {}
+                    with suppress(Exception):
+                        usage = event["result"].metrics.accumulated_usage or {}
+                    done = done_event(usage)
                     logger.info(
-                        "[DONE] Completado en %dms | tools usadas: %d | tokens: %d | modelos: %s",
-                        _elapsed,
-                        tool_index,
-                        _usage.get("totalTokens", 0),
-                        ", ".join(_models_tried) or "—",
+                        "[DONE] %dms | tools: %d | tokens: %d | modelos: %s",
+                        done["elapsed_ms"],
+                        done["total_tool_calls"],
+                        done["total_tokens"],
+                        ", ".join(done["models_tried"]) or "—",
                     )
                     _log.update(
-                        models_tried=_models_tried,
-                        elapsed_ms=_elapsed,
-                        input_tokens=_usage.get("inputTokens", 0),
-                        output_tokens=_usage.get("outputTokens", 0),
-                        total_tokens=_usage.get("totalTokens", 0),
-                        tool_calls_count=tool_index,
-                        tool_names=[tool_names[i] for i in sorted(tool_names)],
+                        models_tried=done["models_tried"],
+                        elapsed_ms=done["elapsed_ms"],
+                        input_tokens=done["input_tokens"],
+                        output_tokens=done["output_tokens"],
+                        total_tokens=done["total_tokens"],
+                        tool_calls_count=done["total_tool_calls"],
+                        tool_names=tool_trace.names,
                         status="done",
                     )
-                    yield _sse(
-                        {
-                            "type": "done",
-                            "total_tool_calls": tool_index,
-                            "elapsed_ms": _elapsed,
-                            "models_tried": _models_tried,
-                            "input_tokens": _usage.get("inputTokens", 0),
-                            "output_tokens": _usage.get("outputTokens", 0),
-                            "total_tokens": _usage.get("totalTokens", 0),
-                        }
-                    )
+                    yield _sse(done)
 
-    except Exception as exc:
-        logger.exception("Agent run failed: %s", exc)
-        available = get_available_providers()
-        fallback_available = len(available) > 1 or (
-            provider is not None and len(available) >= 1
-        )
-        _log.update(
-            models_tried=list(dict.fromkeys(_all_model_attempts)),
-            elapsed_ms=elapsed_ms(),
-            tool_calls_count=tool_index,
-            tool_names=[tool_names[i] for i in sorted(tool_names)],
-            status="error",
-            error_message=str(exc),
-        )
-        yield _sse(
-            {
-                "type": "error",
-                "message": "Error interno del agente. Intenta de nuevo más tarde.",
-                "fallback_available": fallback_available,
-            }
-        )
-        # Ensure done is always sent so the frontend can re-enable input
-        yield _sse(
-            {
-                "type": "done",
-                "total_tool_calls": tool_index,
-                "elapsed_ms": elapsed_ms(),
-                "models_tried": list(dict.fromkeys(_all_model_attempts)),
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
-            }
-        )
-    finally:
-        _cv_model_events.reset(_me_token)
-        _cv_llm_prompts.reset(_lp_token)
-        log_query(query=query, **_log)
+        except Exception as exc:
+            logger.exception("Agent run failed: %s", exc)
+            for frame in drain():
+                yield frame
+            _log.update(
+                models_tried=list(dict.fromkeys(models_tried)),
+                elapsed_ms=elapsed_ms(),
+                tool_calls_count=tool_trace.count,
+                tool_names=tool_trace.names,
+                status="error",
+                error_message=str(exc),
+            )
+            yield _sse({"type": "error", "message": "Error interno del agente. Intenta de nuevo más tarde."})
+            # Ensure done is always sent so the frontend can re-enable input
+            yield _sse(done_event({}))
+        finally:
+            if agent is not None:
+                await asyncio.to_thread(agent.cleanup)
+            log_query(query=query, **_log)
 
 
 # ---------------------------------------------------------------------------
