@@ -40,11 +40,10 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import mcp_gateway
+from backend import mcp_gateway, telemetry
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
-from backend.telemetry import setup_telemetry
 from backend.wiki_content import EVENTS_CATALOG, lessons_as_dicts
 
 load_dotenv()
@@ -52,8 +51,8 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Before any agent exists: Strands configures its tracer on the first Agent.
-setup_telemetry()
+# Datadog LLM Observability (no-op without DD_API_KEY).
+telemetry.setup_telemetry()
 
 # ---------------------------------------------------------------------------
 # Rate limiter
@@ -328,6 +327,7 @@ class _ToolTrace:
         self._emit = emit
         self._next_index = 0
         self._index_by_id: dict[str, int] = {}
+        self._spans: dict[str, Any] = {}
         self.names: list[str] = []
 
     def register_hooks(self, registry, **_: Any) -> None:
@@ -342,6 +342,7 @@ class _ToolTrace:
         index = self._next_index
         self._next_index += 1
         self._index_by_id[uid] = index
+        self._spans[uid] = telemetry.start_tool_span(name)
         self.names.append(name)
         args = dict(event.tool_use.get("input") or {})
         logger.info("[TOOL] Llamando tool #%d: %s | args: %s", index, name, str(args)[:120])
@@ -361,6 +362,12 @@ class _ToolTrace:
             else text
         )
         self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display})
+        telemetry.finish_tool_span(
+            self._spans.pop(uid, None),
+            input_data=dict(event.tool_use.get("input") or {}),
+            output_data=display,
+            error=event.result.get("status") == "error",
+        )
 
         uri = mcp_gateway.ui_resource_uri(getattr(event.selected_tool, "mcp_tool", None))
         if uri and event.result.get("status") != "error":
@@ -522,49 +529,71 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                 }
             )
 
-            prompt = await _expand_prompt(query)
+            reply: list[str] = []
+            with telemetry.agent_span(conversation_id) as agent_obs:
+                prompt = await _expand_prompt(query)
 
-            async for event in agent.stream_async(prompt):
-                for frame in drain():
-                    yield frame
-
-                text_delta = event.get("data")
-                if text_delta:
-                    if ttft_ms is None:
-                        ttft_ms = elapsed_ms()
-                    yield _sse({"type": "text", "delta": text_delta})
-
-                if event.get("result") is not None:
+                async for event in agent.stream_async(prompt):
                     for frame in drain():
                         yield frame
-                    usage: dict = {}
-                    with suppress(Exception):
-                        usage = event["result"].metrics.accumulated_usage or {}
-                    done = done_event(usage)
-                    logger.info(
-                        "[DONE] %dms (TTFT %sms) | llamadas LLM: %d | tools: %d | tokens: %d (cache: %d) | modelos: %s",
-                        done["elapsed_ms"],
-                        done["ttft_ms"] if done["ttft_ms"] is not None else "—",
-                        done["llm_calls"],
-                        done["total_tool_calls"],
-                        done["total_tokens"],
-                        done["cached_tokens"],
-                        ", ".join(done["models_tried"]) or "—",
-                    )
-                    _log.update(
-                        models_tried=done["models_tried"],
-                        elapsed_ms=done["elapsed_ms"],
-                        input_tokens=done["input_tokens"],
-                        output_tokens=done["output_tokens"],
-                        total_tokens=done["total_tokens"],
-                        cached_tokens=done["cached_tokens"],
-                        llm_calls=done["llm_calls"],
-                        ttft_ms=done["ttft_ms"],
-                        tool_calls_count=done["total_tool_calls"],
-                        tool_names=tool_trace.names,
-                        status="done",
-                    )
-                    yield _sse(done)
+
+                    text_delta = event.get("data")
+                    if text_delta:
+                        if ttft_ms is None:
+                            ttft_ms = elapsed_ms()
+                        reply.append(text_delta)
+                        yield _sse({"type": "text", "delta": text_delta})
+
+                    if event.get("result") is not None:
+                        for frame in drain():
+                            yield frame
+                        usage: dict = {}
+                        with suppress(Exception):
+                            usage = event["result"].metrics.accumulated_usage or {}
+                        done = done_event(usage)
+                        logger.info(
+                            "[DONE] %dms (TTFT %sms) | llamadas LLM: %d | tools: %d | tokens: %d (cache: %d) | modelos: %s",
+                            done["elapsed_ms"],
+                            done["ttft_ms"] if done["ttft_ms"] is not None else "—",
+                            done["llm_calls"],
+                            done["total_tool_calls"],
+                            done["total_tokens"],
+                            done["cached_tokens"],
+                            ", ".join(done["models_tried"]) or "—",
+                        )
+                        _log.update(
+                            models_tried=done["models_tried"],
+                            elapsed_ms=done["elapsed_ms"],
+                            input_tokens=done["input_tokens"],
+                            output_tokens=done["output_tokens"],
+                            total_tokens=done["total_tokens"],
+                            cached_tokens=done["cached_tokens"],
+                            llm_calls=done["llm_calls"],
+                            ttft_ms=done["ttft_ms"],
+                            tool_calls_count=done["total_tool_calls"],
+                            tool_names=tool_trace.names,
+                            status="done",
+                        )
+                        telemetry.annotate(
+                            agent_obs,
+                            input_data=query,
+                            output_data="".join(reply),
+                            # Timed from request arrival (MCP connect included), not from span start.
+                            metadata={
+                                "request_elapsed_ms": done["elapsed_ms"],
+                                "request_ttft_ms": done["ttft_ms"],
+                                "llm_calls": done["llm_calls"],
+                                "models_tried": done["models_tried"],
+                            },
+                            metrics={
+                                "input_tokens": done["input_tokens"],
+                                "output_tokens": done["output_tokens"],
+                                "total_tokens": done["total_tokens"],
+                                "cache_read_input_tokens": done["cached_tokens"],
+                            },
+                            tags={"authenticated": str(authenticated).lower()},
+                        )
+                        yield _sse(done)
 
         except Exception as exc:
             logger.exception("Agent run failed: %s", exc)
