@@ -118,6 +118,29 @@ button:disabled { cursor: not-allowed; }
 ::-webkit-scrollbar-track { background: var(--gbc-bg); }
 ::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
+/* ── Welcome dialog → bottom bar (View Transitions, Welcome.tsx) ── */
+/* Chunky 8-bit movement: the box jumps in frames instead of gliding. */
+::view-transition-group(dexter-input) {
+  animation-duration: 480ms;
+  animation-timing-function: steps(8, end);
+}
+::view-transition-old(dexter-input),
+::view-transition-new(dexter-input) {
+  animation-duration: 480ms;
+  animation-timing-function: steps(4, end);
+  height: 100%;
+}
+::view-transition-new(dexter-bar) {
+  animation: bar-in 480ms steps(4, end) both;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 240ms;
+  animation-timing-function: steps(3, end);
+}
+@keyframes bar-in { from { transform: translateY(100%); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }

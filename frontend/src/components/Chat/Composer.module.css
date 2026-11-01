@@ -5,6 +5,8 @@
   border-top: 2px solid var(--gbc-border);
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Slides in when the welcome dialog turns into this bar (global.css). */
+  view-transition-name: dexter-bar;
 }
 
 .inner {
@@ -28,6 +30,8 @@
   color: #000;
   border: 2px solid var(--gbc-border);
   padding: 9px 14px;
+  /* Same name as the welcome dialog: the dialog morphs into this input. */
+  view-transition-name: dexter-input;
 }
 .chatInput::placeholder { color: var(--gbc-mid); font-size: 13px; }
 .chatInput:focus { outline: 2px solid var(--gbc-gold); outline-offset: 2px; border-color: var(--gbc-gold); }
@@ -41,17 +45,6 @@
   flex-shrink: 0;
 }
 
-.statusBadge {
-  align-self: center;
-  font-size: 12px;
-  color: var(--gbc-mid);
-  border: 1px solid var(--gbc-border);
-  padding: 3px 8px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.statusBadge.busy { color: var(--gbc-screen); border-color: var(--gbc-screen); }
-.statusBadge.limited { color: #ff6b6b; border-color: #ff6b6b; }
 
 .sendButton {
   font-size: 13px;
@@ -82,5 +75,5 @@
 
 @media (max-width: 640px) {
   .bottomBar { padding: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
-  .thinking, .statusBadge { display: none; }
+  .thinking { display: none; }
 }

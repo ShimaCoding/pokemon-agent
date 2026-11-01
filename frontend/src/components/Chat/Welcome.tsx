@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { sendChatMessage } from '../../hooks/useAgentStream'
+import { useMessageInput } from './useMessageInput'
 import styles from './Welcome.module.css'
 
 const SUGGESTIONS = [
@@ -9,17 +11,62 @@ const SUGGESTIONS = [
   { title: 'Tipos', prompt: '¿Contra qué tipos es fuerte el tipo Agua?' },
 ]
 
+/**
+ * Send the first message and let the dialog box fly down into the bottom bar:
+ * both share `view-transition-name: dexter-input`, and the 8-bit `steps()`
+ * timing lives in global.css.
+ */
+function sendWithTransition(query: string) {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (typeof document.startViewTransition !== 'function' || reduceMotion) {
+    void sendChatMessage(query)
+    return
+  }
+  // The new snapshot must already show the chat, so render synchronously.
+  document.startViewTransition(() => flushSync(() => void sendChatMessage(query)))
+}
+
 export default function Welcome() {
   const [hover, setHover] = useState(0)
+  const { inFlight, rateLimitSeconds, canSend, submit, slashMenu, inputRef, inputProps } = useMessageInput({
+    onSend: sendWithTransition,
+    keepValueOnSend: true,
+    slashPlacement: 'below',
+  })
 
   return (
     <section className={styles.welcome}>
-      <div className={styles.dialog}>
+      {/* The whole box is the input: a click anywhere puts the cursor in it. */}
+      <div className={styles.dialog} onClick={() => inputRef.current?.focus()}>
+        {slashMenu}
         <p className={styles.line}>¡Hola, entrenador! Soy DEXTER, la Pokédex del Profesor Oak.</p>
         <p className={styles.line}>
           Pregúntame lo que quieras. Consultaré el servidor MCP y juzgaré tu pregunta con rigor científico.
         </p>
-        <span className={styles.more} aria-hidden="true">▼</span>
+        <form
+          className={styles.inputRow}
+          onSubmit={(e) => {
+            e.preventDefault()
+            submit()
+          }}
+        >
+          <span className={styles.prompt} aria-hidden="true">▶</span>
+          <textarea
+            {...inputProps}
+            className={styles.input}
+            placeholder="Escribe aquí tu pregunta…"
+            aria-label="Mensaje para Dexter"
+            autoFocus
+          />
+          <button className={styles.more} type="submit" disabled={!canSend} aria-label="Enviar">
+            ▼
+          </button>
+        </form>
+        {rateLimitSeconds > 0 ? (
+          <p className={styles.status} role="status">⚡ Límite de consultas · espera {rateLimitSeconds}s</p>
+        ) : (
+          inFlight && <p className={styles.status}>█ pensando…</p>
+        )}
       </div>
       <nav className={styles.menu} aria-label="Ejemplos">
         {SUGGESTIONS.map((s, i) => (
@@ -28,7 +75,7 @@ export default function Welcome() {
             className={styles.option}
             onMouseEnter={() => setHover(i)}
             onFocus={() => setHover(i)}
-            onClick={() => void sendChatMessage(s.prompt)}
+            onClick={() => sendWithTransition(s.prompt)}
           >
             <span className={styles.cursor}>{hover === i ? '▶' : ''}</span>
             <span className={styles.optionTitle}>{s.title}</span>
@@ -36,7 +83,7 @@ export default function Welcome() {
           </button>
         ))}
       </nav>
-      <p className={styles.hint}>Escribe / en la barra para usar los prompts del servidor MCP.</p>
+      <p className={styles.hint}>Escribe / en el cuadro para usar los prompts del servidor MCP.</p>
     </section>
   )
 }

@@ -11,6 +11,7 @@
   font-family: var(--font-pixel);
   font-size: 13px;
 }
+.slashMenu.below { top: calc(100% + 4px); bottom: auto; max-height: 300px; }
 
 .groupHeader {
   padding: 6px 14px;

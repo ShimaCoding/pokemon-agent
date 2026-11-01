@@ -31,14 +31,17 @@ export default function ChatView() {
     stickRef.current = true
   }, [lastUserId])
 
+  const empty = messages.length === 0
+
+  // While the chat is empty the welcome dialog is the input, so the bottom bar stays hidden.
   return (
     <main className={styles.view}>
       <div ref={scrollRef} className={styles.scroll} onScroll={onScroll}>
-        <div className={styles.column}>
-          {messages.length === 0 ? <Welcome /> : messages.map((m) => <MessageItem key={m.id} message={m} />)}
+        <div className={`${styles.column} ${empty ? styles.empty : ''}`}>
+          {empty ? <Welcome /> : messages.map((m) => <MessageItem key={m.id} message={m} />)}
         </div>
       </div>
-      <Composer />
+      {!empty && <Composer />}
     </main>
   )
 }

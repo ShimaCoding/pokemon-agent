@@ -5,12 +5,14 @@ import styles from './SlashMenu.module.css'
 
 interface Props {
   filter: string
+  /** Open above the input (bottom bar) or below it (welcome dialog). */
+  placement?: 'above' | 'below'
   onSelect: (template: string) => void
   onClose: () => void
 }
 
 /** Remount with `key={filter}` to reset the selection when the filter changes. */
-export default function SlashMenu({ filter, onSelect, onClose }: Props) {
+export default function SlashMenu({ filter, placement = 'above', onSelect, onClose }: Props) {
   const prompts = useSettings((s) => s.prompts)
   const [selected, setSelected] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,7 +65,7 @@ export default function SlashMenu({ filter, onSelect, onClose }: Props) {
   if (!filtered.length) return null
 
   return (
-    <div ref={containerRef} className={styles.slashMenu} role="listbox" aria-label="Prompts MCP">
+    <div ref={containerRef} className={`${styles.slashMenu} ${placement === 'below' ? styles.below : ''}`} role="listbox" aria-label="Prompts MCP">
       {filtered.map((p, i) => (
         <div key={`${p.group}-${p.name}`}>
           {(i === 0 || filtered[i - 1].group !== p.group) && <div className={styles.groupHeader}>── {p.group} ──</div>}
