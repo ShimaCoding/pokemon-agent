@@ -1005,7 +1005,7 @@ dependencies = [
     { name = "mcp" },
     { name = "python-dotenv" },
     { name = "slowapi" },
-    { name = "strands-agents", extra = ["litellm"] },
+    { name = "strands-agents", extra = ["litellm", "otel"] },
     { name = "strands-harness", extra = ["litellm"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1023,7 +1023,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.3.0,<3" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "slowapi", specifier = ">=0.1.10" },
-    { name = "strands-agents", extras = ["litellm"], specifier = ">=1.63.0,<2" },
+    { name = "strands-agents", extras = ["litellm", "otel"], specifier = ">=1.63.0,<2" },
     { name = "strands-harness", extras = ["litellm"], specifier = "~=0.3.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
