@@ -48,11 +48,14 @@ Abre **http://localhost:8000** en el navegador.
 ### Desarrollo local
 
 ```bash
-# Backend
-python -m uvicorn backend.main:app --reload
+# Una vez: crea .venv (Python 3.11) e instala dependencias de backend y frontend
+make setup
+
+# Backend (http://localhost:8000; otro puerto: make backend PORT=8010)
+make backend
 
 # Frontend (en otra terminal)
-cd frontend && npm install && npm run dev
+make frontend
 ```
 
 ### Desarrollo con Conductor
