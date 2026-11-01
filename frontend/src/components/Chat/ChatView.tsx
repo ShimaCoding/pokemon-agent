@@ -19,10 +19,13 @@ export default function ChatView() {
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX
   }
 
-  // Any store change (text delta, widget, trace) may grow the page.
+  const empty = messages.length === 0
+
+  // Any store change (text delta, widget, trace) may grow the page. The welcome
+  // screen is read from the top, so it is never pinned to the bottom.
   useEffect(() => {
     const el = scrollRef.current
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight
+    if (el && stickRef.current && !empty) el.scrollTop = el.scrollHeight
   })
 
   // A new user message always jumps to the bottom.
@@ -30,8 +33,6 @@ export default function ChatView() {
   useEffect(() => {
     stickRef.current = true
   }, [lastUserId])
-
-  const empty = messages.length === 0
 
   // While the chat is empty the welcome dialog is the input, so the bottom bar stays hidden.
   return (

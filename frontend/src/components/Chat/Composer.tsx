@@ -1,4 +1,5 @@
 import { sendChatMessage } from '../../hooks/useAgentStream'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useMessageInput } from './useMessageInput'
 import styles from './Composer.module.css'
 
@@ -8,6 +9,7 @@ function send(query: string) {
 
 export default function Composer() {
   const { inFlight, rateLimitSeconds, canSend, submit, slashMenu, inputProps } = useMessageInput({ onSend: send })
+  const compact = useMediaQuery('(max-width: 640px)')
 
   return (
     <div className={styles.bottomBar}>
@@ -28,13 +30,13 @@ export default function Composer() {
           <textarea
             {...inputProps}
             className={styles.chatInput}
-            placeholder="Pregunta sobre un Pokémon o escribe / para comandos…"
+            placeholder={compact ? 'Pregunta o escribe /…' : 'Pregunta sobre un Pokémon o escribe / para comandos…'}
             aria-label="Mensaje para Dexter"
             autoFocus
           />
           {inFlight && <span className={styles.thinking}>█ pensando…</span>}
-          <button className={styles.sendButton} type="submit" disabled={!canSend}>
-            ENVIAR
+          <button className={styles.sendButton} type="submit" disabled={!canSend} aria-label="Enviar">
+            {compact ? '▶' : 'ENVIAR'}
           </button>
         </form>
       </div>

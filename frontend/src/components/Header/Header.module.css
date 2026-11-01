@@ -111,37 +111,30 @@
 .newBtn:hover:not(:disabled) { border-color: var(--mcp-tool); color: var(--mcp-tool); }
 .newBtn:disabled { opacity: 0.35; }
 
-/* ── Mobile ───────────────────────────────── */
+/* ── Mobile ─────────────────────────────────
+   One compact row (logo · title · actions) plus the MCP badges. The GitHub
+   links move to the settings dialog to save vertical space. */
 @media (max-width: 640px) {
-  .topRow {
-    flex-wrap: wrap;
-    gap: 12px;
+  .titlebar {
+    padding: 6px 10px 6px;
+    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+    gap: 6px;
   }
 
-  .githubLinks {
-    flex-wrap: wrap;
-    white-space: normal;
-    width: 100%;
-    align-items: center;
-  }
+  .topRow { gap: 8px; }
 
-  .githubLink {
-    font-size: 11px;
-    white-space: normal;
-    word-break: break-word;
-  }
+  .titleLogo { height: 22px; width: 22px; }
+  .mainTitle { font-size: 14px; }
 
-  .githubSep {
-    display: none;
-  }
+  .githubLinks { display: none; }
 
+  .newBtn,
   .settingsBtn {
-    margin-left: auto;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
   }
-
-  .bottomRow {
-    justify-content: stretch;
-  }
+  .settingsBtn { font-size: 13px; }
 
   .mcpBadges {
     width: 100%;
