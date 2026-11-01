@@ -58,7 +58,7 @@ from backend.providers import build_litellm_router
 
 MCP_SERVER_URL = os.environ.get(
     "MCP_SERVER_URL",
-    "http://mcppokemonserver-mcpserver-0xj423-904a0e-157-254-174-124.traefik.me/mcp",
+    "https://mcp.mcpokedex.com/mcp",
 )
 
 _SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")

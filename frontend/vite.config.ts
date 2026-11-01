@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import { rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+// Backend the dev server proxies to. Conductor workspaces set BACKEND_URL to their
+// own backend port; `make frontend` keeps using the default.
+const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:8000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -22,10 +26,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/providers': 'http://localhost:8000',
-      '/config': 'http://localhost:8000',
-      '/health': 'http://localhost:8000',
+      '/api': backendUrl,
+      '/providers': backendUrl,
+      '/config': backendUrl,
+      '/health': backendUrl,
     },
   },
 })
