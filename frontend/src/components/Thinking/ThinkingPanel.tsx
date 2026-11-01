@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AssistantMessage, TraceEvent } from '../../types'
-import TraceCard from '../Trace/TraceCard'
-import TraceSummary from '../Trace/TraceSummary'
+import { buildSteps, formatMs } from '../Trace/steps'
+import TraceTimeline from '../Trace/TraceTimeline'
 import styles from './ThinkingPanel.module.css'
 
 const LOADING_PHRASES = [
@@ -49,8 +49,10 @@ export default function ThinkingPanel({ message }: { message: AssistantMessage }
 
   if (!streaming && message.traces.length === 0) return null
 
-  const toolCalls = message.traces.filter((t) => t.type === 'tool_call').length
   const step = liveStep(message.traces)
+  const stepCount = buildSteps(message.traces).length
+  const done = message.done
+  const tokens = done?.total_tokens ?? 0
 
   return (
     <div className={styles.panel}>
@@ -64,16 +66,21 @@ export default function ThinkingPanel({ message }: { message: AssistantMessage }
         ) : (
           <span>
             Ver cómo lo pensó
-            <span className={styles.count}> ({message.traces.length} eventos)</span>
+            <span className={styles.count}>
+              {' '}· {stepCount} {stepCount === 1 ? 'paso' : 'pasos'}
+              {done && <> · {formatMs(done.elapsed_ms)}</>}
+              {tokens > 0 && (
+                <span title={`↑${(done?.input_tokens ?? 0).toLocaleString()} entrada · ↓${(done?.output_tokens ?? 0).toLocaleString()} salida`}>
+                  {' '}· {tokens.toLocaleString()} tokens
+                </span>
+              )}
+            </span>
           </span>
         )}
       </button>
       {open && (
         <div className={styles.console}>
-          {message.traces.map((t, i) => (
-            <TraceCard key={i} event={t} />
-          ))}
-          {message.done && <TraceSummary event={message.done} toolCallCount={toolCalls} />}
+          <TraceTimeline traces={message.traces} finished={message.status === 'done'} />
         </div>
       )}
     </div>

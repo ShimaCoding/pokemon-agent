@@ -24,6 +24,9 @@
   --mcp-prompt:    #c0547a;
 
   --font-pixel: 'PokemonFont', monospace;
+  /* Pixel font is for labels; long text and data read better in these. */
+  --font-read:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --chat-width: 920px;
 }
