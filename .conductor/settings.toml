@@ -1,0 +1,37 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+# Each local workspace gets ports $CONDUCTOR_PORT..$CONDUCTOR_PORT+9:
+#   $CONDUCTOR_PORT     -> FastAPI backend
+#   $CONDUCTOR_PORT + 1 -> Vite dev server (proxies /api, /providers, /config, /health to the backend)
+
+[[preview_urls]]
+name = "Frontend (Vite)"
+url = "http://localhost:$((CONDUCTOR_PORT + 1))"
+
+[[preview_urls]]
+name = "Backend (FastAPI)"
+url = "http://localhost:$CONDUCTOR_PORT/health"
+
+[scripts]
+# No pyproject.toml: deps live in requirements.txt (same as the Dockerfile).
+# --python .venv/bin/python pins everything to the workspace venv even if VIRTUAL_ENV
+# points somewhere else in the inherited shell environment.
+setup = "uv venv --python 3.11 --allow-existing && uv pip install --python .venv/bin/python -r requirements.txt && npm ci --prefix frontend"
+run_mode = "concurrent"
+
+[scripts.run.dev]
+available_in = [ "local" ]
+command = 'npx -y concurrently -k -n api,web -c blue,magenta "uv run --no-project --python .venv/bin/python uvicorn backend.main:app --reload --reload-dir backend --port $CONDUCTOR_PORT" "BACKEND_URL=http://localhost:$CONDUCTOR_PORT npm run dev --prefix frontend -- --port $((CONDUCTOR_PORT+1)) --strictPort"'
+default = true
+icon = "play"
+
+# Same as dev, but the backend talks to an MCP server running elsewhere (e.g. another
+# workspace). LOCAL_MCP_URL must be exported in your shell env, e.g. http://127.0.0.1:55300/mcp
+[scripts.run.dev-local-mcp]
+available_in = [ "local" ]
+command = 'npx -y concurrently -k -n api,web -c blue,magenta "MCP_SERVER_URL=${LOCAL_MCP_URL:?define LOCAL_MCP_URL} uv run --no-project --python .venv/bin/python uvicorn backend.main:app --reload --reload-dir backend --port $CONDUCTOR_PORT" "BACKEND_URL=http://localhost:$CONDUCTOR_PORT npm run dev --prefix frontend -- --port $((CONDUCTOR_PORT+1)) --strictPort"'
+icon = "plug"
+
+[scripts.run.test]
+command = "uv run --no-project --python .venv/bin/python --with pytest python -m pytest backend/tests"
+icon = "test-tube"

@@ -67,6 +67,30 @@ python -m uvicorn backend.main:app --reload
 cd frontend && npm install && npm run dev
 ```
 
+### Desarrollo con Conductor
+
+El repo trae `.conductor/settings.toml`, así que cada workspace de [Conductor](https://conductor.build) arranca su propio backend y frontend sin chocar puertos (`run_mode = "concurrent"`). El `.env` se copia solo a cada workspace.
+
+| Puerto | Servicio |
+|--------|----------|
+| `$CONDUCTOR_PORT` | Backend FastAPI (`uvicorn --reload`) |
+| `$CONDUCTOR_PORT + 1` | Vite dev server (proxy de `/api`, `/providers`, `/config`, `/health` al backend vía `BACKEND_URL`) |
+
+Scripts:
+
+- **setup**: crea `.venv` (Python 3.11) con `uv`, instala `requirements.txt` y corre `npm ci` en `frontend/`.
+- **dev** (por defecto, solo local): backend + Vite en el mismo grupo de procesos con `concurrently`.
+- **dev-local-mcp**: igual que `dev`, pero fuerza `MCP_SERVER_URL=$LOCAL_MCP_URL` (exporta `LOCAL_MCP_URL` en tu shell).
+- **test**: `pytest backend/tests` (pytest se trae con `uv run --with`, no es dependencia del proyecto).
+
+Para apuntar a un MCP server local (por ejemplo, el de otro workspace), pon en el `.env` del workspace:
+
+```bash
+MCP_SERVER_URL=http://127.0.0.1:<puerto>/mcp
+```
+
+El `settings.toml` compartido solo surte efecto en Conductor una vez mergeado a `main`.
+
 ---
 
 ## API Keys

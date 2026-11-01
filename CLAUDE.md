@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Pokémon MCP Agent — a FastAPI web app that uses the Strands Agents SDK to answer Pokémon questions. The agent combines:
 - A **local Strands tool** (`get_pokedex_entry` in `backend/tools.py`) that fetches Pokédex entries directly from the PokeAPI (types, stats, abilities, flavor text in Spanish).
-- An **MCP server** (`mcpokedex.com/mcp`) for additional Pokémon data.
+- An **MCP server** (`mcp.mcpokedex.com/mcp`, override with `MCP_SERVER_URL`) for additional Pokémon data.
 
 LLM requests are routed through LiteLLM with automatic provider fallback (Groq → Gemini → OpenAI). The browser receives both tool traces and final answers in real time via SSE.
 
@@ -24,6 +24,16 @@ Requires at least one API key in `.env` (see `.env.example`):
 - `GROQ_API_KEY`
 - `GEMINI_API_KEY`
 - `OPENAI_API_KEY`
+
+## Desarrollo con Conductor
+
+`.conductor/settings.toml` makes each Conductor workspace self-contained (`run_mode = "concurrent"`):
+
+- Ports: backend on `$CONDUCTOR_PORT`, Vite on `$CONDUCTOR_PORT+1`. Vite proxies `/api`, `/providers`, `/config`, `/health` to `BACKEND_URL` (defaults to `http://localhost:8000`, so `make frontend` is unchanged).
+- `setup`: `uv venv` (Python 3.11) + `uv pip install -r requirements.txt` into the workspace `.venv`, then `npm ci --prefix frontend`. Commands pass `--python .venv/bin/python` because an inherited `VIRTUAL_ENV` may point at another checkout's venv.
+- Run scripts: `dev` (default, local only; backend + Vite via `concurrently -k`), `dev-local-mcp` (same, with `MCP_SERVER_URL=$LOCAL_MCP_URL`), `test` (`pytest backend/tests` via `uv run --with pytest`).
+- To use a local MCP server (e.g. one running in another workspace), set `MCP_SERVER_URL=http://127.0.0.1:<port>/mcp` in the workspace `.env`.
+- SQLite (`DB_PATH=data/queries.db`) is relative, so each workspace has its own DB.
 
 ## Architecture
 
