@@ -75,7 +75,6 @@ Solo necesitas **una** para que el agente funcione. El Router hace fallback auto
 
 | Proveedor | Tier gratuito | Obtener key |
 |-----------|---------------|-------------|
-| **OpenRouter** | Sí — multiples modeles completamente gratis | https://platform.openai.com/api-keys |
 | **Groq** | Sí — muy generoso | https://console.groq.com/keys |
 | **Gemini** | Sí — cuota de Google AI Studio | https://aistudio.google.com/app/apikey |
 | **OpenAI** | No — pay-as-you-go | https://platform.openai.com/api-keys |

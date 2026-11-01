@@ -130,10 +130,6 @@ export default function IntroModal() {
             <div className={styles.sectionTitle}>PROVEEDOR DE IA Y FALLBACK</div>
             <div className={styles.toolList}>
               <div className={styles.toolItem}>
-                <span className={`${styles.badge} ${styles.badgeResource}`}>GRATIS</span>
-                <span className={styles.toolName}>OpenRouter — modelos gratuitos, <strong>sin API key</strong></span>
-              </div>
-              <div className={styles.toolItem}>
                 <span className={`${styles.badge} ${styles.badgeLocal}`}>KEY</span>
                 <span className={styles.toolName}>Groq — modelos ultra-rápidos</span>
               </div>

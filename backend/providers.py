@@ -27,8 +27,7 @@ PROVIDERS: dict[str, dict] = {
         # model_ids: full list available to authenticated requests.
         "model_ids": [
             "groq/openai/gpt-oss-20b",
-            "groq/llama-3.1-8b-instant",
-            "groq/meta-llama/llama-4-scout-17b-16e-instruct",
+            "groq/openai/gpt-oss-120b",
         ],
         "env_var": "GROQ_API_KEY",
         "label": "Groq",
@@ -45,22 +44,6 @@ PROVIDERS: dict[str, dict] = {
         "env_var": "OPENAI_API_KEY",
         "label": "OpenAI (gpt-4o-mini)",
         "order": 3,
-    },
-    "openrouter": {
-        "model_ids": [
-            "openrouter/stepfun/step-3.5-flash:free",
-            "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-            "openrouter/z-ai/glm-4.5-air:free",
-            "openrouter/arcee-ai/trinity-mini:free",
-            "openrouter/minimax/minimax-m2.5:free",
-            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
-            "openrouter/openai/gpt-oss-120b:free",
-            "openrouter/openai/gpt-oss-20b:free",
-            "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
-        ],
-        "env_var": "OPENROUTER_API_KEY",
-        "label": "OpenRouter (free tier)",
-        "order": 4,
     },
 }
 
@@ -92,8 +75,6 @@ def _build_router_model_list(providers: list[dict], authenticated: bool = False)
     Returns:
         (model_list, group_names) — group_names preserves provider order.
     """
-    site_url = os.environ.get("OR_SITE_URL", "")
-    app_name = os.environ.get("OR_APP_NAME", "pokemon-agent")
 
     model_list: list[dict] = []
     group_names: list[str] = []
@@ -109,11 +90,6 @@ def _build_router_model_list(providers: list[dict], authenticated: bool = False)
                 "model": model_id,
                 "api_key": p["_api_key"],
             }
-            if p["name"] == "openrouter":
-                extra_headers: dict = {"X-Title": app_name}
-                if site_url:
-                    extra_headers["HTTP-Referer"] = site_url
-                litellm_params["extra_headers"] = extra_headers
             model_list.append(
                 {"model_name": group_name, "litellm_params": litellm_params}
             )
