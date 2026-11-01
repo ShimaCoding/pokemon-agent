@@ -1,0 +1,19 @@
+[project]
+name = "pokemon-agent"
+version = "0.1.0"
+description = "MCPokédex — Pokémon agent built with Strands Agents SDK + MCP"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "strands-agents[litellm]>=1.63.0,<2",
+    # 1.82.7 and 1.82.8 were a supply chain compromise; providers.py refuses to start on them.
+    "litellm>=1.106.6,<1.107",
+    "mcp>=2.3.0,<3",
+    "fastapi>=0.162.0",
+    "uvicorn[standard]>=0.54.0",
+    "python-dotenv>=1.2.4",
+    "httpx>=0.28.1",
+    "slowapi>=0.1.10",
+]
+
+[tool.uv]
+package = false

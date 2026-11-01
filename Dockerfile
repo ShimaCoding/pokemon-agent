@@ -21,14 +21,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 
 # Bring in uv — no pip needed
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install dependencies into an isolated virtual environment
-COPY requirements.txt .
-RUN uv venv .venv && \
-    uv pip install --python .venv/bin/python -r requirements.txt
+# Install the exact versions from uv.lock into an isolated virtual environment
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
