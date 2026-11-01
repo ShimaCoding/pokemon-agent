@@ -106,6 +106,43 @@ class TracedLiteLLMModel(LiteLLMModel):
         self._emit({"type": "model_attempt", "model": model_id, "status": "success"})
 
 
+class RetryMalformedToolCalls:
+    """Retry a model call that Groq rejected because the model mangled a tool call.
+
+    gpt-oss on Groq sometimes leaks its channel tokens into the tool name (e.g.
+    ``compare_pokemon<|channel|>analysis``); Groq then fails the request with
+    ``tool_use_failed``. A fresh sample almost always succeeds, so retry it a
+    couple of times per invocation instead of failing the whole reply.
+    """
+
+    MAX_RETRIES = 2
+    _STATE_KEY = "mcpokedex:tool_call_retries"
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import AfterModelCallEvent
+
+        registry.add_callback(AfterModelCallEvent, self._on_model_result)
+
+    @staticmethod
+    def is_malformed_tool_call(exc: BaseException | None) -> bool:
+        while exc is not None:
+            text = str(exc)
+            if "tool_use_failed" in text or "Tool call validation failed" in text:
+                return True
+            exc = exc.__cause__ or exc.__context__
+        return False
+
+    def _on_model_result(self, event) -> None:
+        if event.retry or not self.is_malformed_tool_call(event.exception):
+            return
+        retries = event.invocation_state.get(self._STATE_KEY, 0)
+        if retries >= self.MAX_RETRIES:
+            return
+        event.invocation_state[self._STATE_KEY] = retries + 1
+        logger.warning("[LLM] Tool call malformado por el modelo; reintentando (%d/%d)", retries + 1, self.MAX_RETRIES)
+        event.retry = True
+
+
 def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRouter:
     """Build a ModelRouter over the Groq models allowed for this request.
 

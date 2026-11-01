@@ -20,7 +20,7 @@ from typing import Any
 from strands import Agent
 from strands_harness import create_harness
 
-from backend.providers import TraceSink, build_model
+from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or "https://mcp.mcpokedex.com/mcp"
@@ -88,6 +88,6 @@ def create_agent(
         background_tasks=False,
         skills=SKILLS_DIR,
         session={"id": conversation_id, "dir": SESSIONS_DIR},
-        hooks=hooks or [],
+        hooks=[RetryMalformedToolCalls(), *(hooks or [])],
         callback_handler=None,
     )

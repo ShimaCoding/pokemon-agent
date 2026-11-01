@@ -77,3 +77,43 @@ def test_traced_model_reports_failure(monkeypatch):
         "status": "failed",
         "error": "rate limited",
     }
+
+
+def _model_event(exception, state=None):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(exception=exception, retry=False, invocation_state=state if state is not None else {})
+
+
+def test_malformed_tool_calls_are_retried_twice():
+    from backend.providers import RetryMalformedToolCalls
+
+    hook = RetryMalformedToolCalls()
+    groq_error = ValueError("invalid literal for int() with base 10: 'tool_use_failed'")
+    state: dict = {}
+    retries = []
+    for _ in range(3):
+        event = _model_event(groq_error, state)
+        hook._on_model_result(event)
+        retries.append(event.retry)
+    assert retries == [True, True, False]
+
+
+def test_malformed_tool_call_detected_through_cause():
+    from backend.providers import RetryMalformedToolCalls
+
+    try:
+        try:
+            raise RuntimeError("Tool call validation failed: attempted to call tool 'x<|channel|>y'")
+        except RuntimeError as inner:
+            raise ValueError("wrapped") from inner
+    except ValueError as outer:
+        assert RetryMalformedToolCalls.is_malformed_tool_call(outer)
+
+
+def test_other_errors_are_not_retried():
+    from backend.providers import RetryMalformedToolCalls
+
+    event = _model_event(RuntimeError("rate limit"))
+    RetryMalformedToolCalls()._on_model_result(event)
+    assert event.retry is False
