@@ -44,12 +44,16 @@ from backend import mcp_gateway
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
+from backend.telemetry import setup_telemetry
 from backend.wiki_content import EVENTS_CATALOG, lessons_as_dicts
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Before any agent exists: Strands configures its tracer on the first Agent.
+setup_telemetry()
 
 # ---------------------------------------------------------------------------
 # Rate limiter
