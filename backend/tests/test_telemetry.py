@@ -1,14 +1,29 @@
 """telemetry: no-op without DD_API_KEY; with it, LLMObs is enabled agentless."""
 
+import os
+
+import ddtrace
 import pytest
 
-from backend import telemetry
+from backend import build_info, telemetry
+
+SHA = "f4bf26b0123456789abcdef0123456789abcdef0"
 
 
 @pytest.fixture(autouse=True)
 def reset(monkeypatch):
     monkeypatch.setattr(telemetry, "_enabled", False)
-    for name in ("DD_API_KEY", "DD_SITE", "DD_LLMOBS_ML_APP", *telemetry._DDTRACE_DEFAULTS):
+    monkeypatch.setattr(ddtrace.config, "version", ddtrace.config.version)
+    for name in (
+        "DD_API_KEY",
+        "DD_SITE",
+        "DD_LLMOBS_ML_APP",
+        "DD_ENV",
+        "DD_VERSION",
+        "DD_GIT_COMMIT_SHA",
+        "DD_GIT_REPOSITORY_URL",
+        *telemetry._DDTRACE_DEFAULTS,
+    ):
         # setenv first so monkeypatch also undoes what setup_telemetry writes.
         monkeypatch.setenv(name, "")
         monkeypatch.delenv(name)
@@ -48,6 +63,47 @@ def test_enables_llmobs_agentless(monkeypatch):
     assert kw["site"] == "us5.datadoghq.com"
     assert kw["ml_app"] == telemetry.DEFAULT_ML_APP
     assert os.environ["DD_TRACE_ENABLED"] == "false"
+
+
+@pytest.fixture
+def enable_calls(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    calls = []
+    monkeypatch.setattr(LLMObs, "enable", lambda **kw: calls.append(kw))
+    monkeypatch.setenv("DD_API_KEY", "k")
+    return calls
+
+
+def test_sets_version_and_default_env(monkeypatch, enable_calls):
+    monkeypatch.setattr(build_info, "commit_sha", lambda: SHA)
+
+    assert telemetry.setup_telemetry() is True
+    [kw] = enable_calls
+    assert kw["env"] == telemetry.DEFAULT_ENV == "local"
+    assert ddtrace.config.version == SHA[:7]
+    assert os.environ["DD_GIT_COMMIT_SHA"] == SHA
+    assert os.environ["DD_GIT_REPOSITORY_URL"] == build_info.REPOSITORY_URL
+
+
+def test_env_and_version_from_environment(monkeypatch, enable_calls):
+    monkeypatch.setattr(build_info, "commit_sha", lambda: SHA)
+    monkeypatch.setenv("DD_ENV", "prod")
+    monkeypatch.setenv("DD_VERSION", "v1")
+
+    telemetry.setup_telemetry()
+    [kw] = enable_calls
+    assert kw["env"] == "prod"
+    assert ddtrace.config.version == "v1"
+
+
+def test_no_version_leaves_config_untouched(monkeypatch, enable_calls):
+    monkeypatch.setattr(build_info, "commit_sha", lambda: None)
+    monkeypatch.setattr(ddtrace.config, "version", "untouched")
+
+    telemetry.setup_telemetry()
+    assert ddtrace.config.version == "untouched"
+    assert "DD_GIT_COMMIT_SHA" not in os.environ
 
 
 def test_streamed_output_collects_text_tools_and_usage():

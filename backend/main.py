@@ -2,7 +2,7 @@
 FastAPI application for MCPokédex.
 
 Routes:
-  GET  /health               — health check
+  GET  /health               — health check (+ deployed version)
   GET  /config               — public frontend config (e.g. require_api_key flag)
   POST /api/agent/run        — SSE stream: agent response, traces and widgets
   GET  /api/ui-resource      — widget HTML (`ui://` MCP Apps resource) + its CSP
@@ -40,7 +40,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import mcp_gateway, telemetry, tool_cache
+from backend import build_info, mcp_gateway, telemetry, tool_cache
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
@@ -186,7 +186,7 @@ async def config():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "provider": PROVIDER_LABEL}
+    return {"status": "ok", "provider": PROVIDER_LABEL, "version": build_info.version()}
 
 
 @app.get("/api/prompts")
