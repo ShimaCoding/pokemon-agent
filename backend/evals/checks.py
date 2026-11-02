@@ -43,12 +43,16 @@ POKEMON_DATA_TOOLS = frozenset(
 )
 SCAFFOLDING_TOOLS = frozenset({"skills", "retrieve_context"})
 
-# Species names that are also everyday Spanish words ("abra la puerta").
-_SPECIES_STOPLIST = frozenset({"abra"})
+# Species names that are also everyday Spanish words ("abra la puerta", "¿por qué no paras?",
+# "un golem sin alma", "un anillo de ónix"). Not detected in the question: a reply that
+# narrates their Pokédex opening still triggers pokemon_tool_used.
+_SPECIES_STOPLIST = frozenset({"abra", "paras", "golem", "onix"})
 
-# SKILL.md 2.1: "BULBASAUR. El Pokémon Semilla." (the "El" is optional in practice).
+# SKILL.md 2.1: "BULBASAUR. El Pokémon Semilla." (the "El" is optional in practice). Markdown
+# emphasis may wrap the name and the genus separately: "**BULBASAUR**. *El Pokémon Semilla.*".
+_EMPHASIS = r"(?:\*\*?|__?)?"
 OPENING_RE = re.compile(
-    r"^\W*?(?P<name>[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 .'’:♀♂-]*?)\.(?:\*\*|_)?\s+(?:\*\*|_)?"
+    rf"^[\W_]*?(?P<name>[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 .'’:♀♂-]*?){_EMPHASIS}\.{_EMPHASIS}\s+{_EMPHASIS}"
     r"(?:El\s+)?Pok[eé]mon\s+(?P<genus>[^.\n*_]+)"
 )
 

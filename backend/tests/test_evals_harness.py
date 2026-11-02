@@ -106,6 +106,11 @@ def test_grade_unknown_pokemon():
     assert m["tool_expectation"]["passed"]  # attempted lookup counts for any_of
     invented = _record(query="háblame de pikachuzard", reply="PIKACHUZARD. El Pokémon Fusión. Ataque 130.", tools=error)
     assert not harness.grade_turn(spec, invented, [])["no_invented_entry"]["passed"]
+    # Bold name, no numbers: the opening alone must fail the gate.
+    bold = _record(query="háblame de pikachuzard", reply="**PIKACHUZARD**. El Pokémon Ratón Llama. Tipo Eléctrico.", tools=error)
+    m = harness.grade_turn(spec, bold, [])
+    assert not m["no_invented_entry"]["passed"]
+    assert not m["grounded_facts"]["passed"]
 
 
 def test_grade_failed_request_only_counts_completed():

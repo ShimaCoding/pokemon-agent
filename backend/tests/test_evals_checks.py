@@ -71,6 +71,10 @@ def _by_label(turn: Turn) -> dict[str, checks.EvalResult]:
         ("nidoran♀ contra Porygon-Z", ["nidoran f", "nidoran", "porygon z", "porygon"]),
         ("¿qué opinas del clima de hoy?", []),
         ("abra la pokédex", []),  # stoplist: everyday Spanish word
+        ("¿por qué no paras de insultarme?", []),
+        ("eres un golem sin alma", []),
+        ("me regalaron un anillo de ónix", []),
+        ("háblame de parasect", ["parasect"]),
         ("háblame de pikachuzard", []),
     ],
 )
@@ -79,7 +83,7 @@ def test_species_in(text, expected):
 
 
 def test_species_list_is_complete():
-    assert len(checks._species()) >= 1025
+    assert len(checks._species() | checks._SPECIES_STOPLIST) >= 1025
 
 
 # --- recorded baseline: every real turn passes ---------------------------------------
@@ -120,6 +124,10 @@ def test_tool_use_fails_with_only_skills():
 
 def test_tool_use_not_applicable_off_topic():
     assert checks.check_tool_use(Turn("¿qué opinas del clima de hoy?", "Irrelevante.", [])) is None
+
+
+def test_tool_use_not_applicable_to_spanish_word_species():
+    assert checks.check_tool_use(Turn("¿por qué no paras de insultarme?", "Mi diagnóstico permanece inalterado.", [])) is None
 
 
 def test_narrated_opening_without_tool_or_name_fails():
@@ -181,6 +189,28 @@ def test_invented_entry_for_unknown_pokemon_fails():
     assert "pikachuzard" in r.metadata["opening_mismatch"]
 
 
+@pytest.mark.parametrize(
+    "opening",
+    [
+        "**BULBASAUR**. El Pokémon Semilla.",
+        "BULBASAUR. *El Pokémon Semilla.*",
+        "**BULBASAUR.** El Pokémon Semilla.",
+        "_BULBASAUR_. _El Pokémon Semilla._",
+    ],
+)
+def test_opening_with_markdown_emphasis(opening):
+    m = checks.pokedex_opening(opening + " Escaneo completado.")
+    assert (m.group("name"), m.group("genus")) == ("BULBASAUR", "Semilla")
+
+
+def test_invented_entry_with_bold_name_fails():
+    error = ToolObservation("get_pokedex_entry", {"pokemon": "pikachuzard"}, "❌ Pokémon 'pikachuzard' not found.", True)
+    reply = "**PIKACHUZARD**. El Pokémon Ratón Llama. Escaneo completado. Tipo Eléctrico y Fuego."
+    r = checks.check_grounding(Turn("háblame de pikachuzard", reply, [error]))
+    assert not r.passed
+    assert "pikachuzard" in r.metadata["opening_mismatch"]
+
+
 def test_grounding_not_applicable_without_numbers_or_opening():
     assert checks.check_grounding(Turn("hola", "Tu saludo carece de propósito.", [])) is None
 
@@ -239,6 +269,7 @@ def test_persona_fails_headings():
 
 def test_persona_allows_bold_opening_line():
     assert _persona("**BULBASAUR. El Pokémon Semilla.**\n\nEscaneo completado.", [POKEDEX]).passed
+    assert _persona("**BULBASAUR**. El Pokémon Semilla.\n\nEscaneo completado.", [POKEDEX]).passed
 
 
 def test_persona_fails_emoji_but_not_gender_symbols():
