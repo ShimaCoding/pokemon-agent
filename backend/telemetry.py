@@ -23,10 +23,11 @@ Spans carry ``env`` (``DD_ENV``, default ``local``; docker-compose.yml pins
 deploys can be compared side by side.
 """
 
+import asyncio
 import logging
 import os
-from contextlib import nullcontext
-from typing import Any, ContextManager
+from contextlib import contextmanager, nullcontext
+from typing import Any, ContextManager, Iterator
 
 from backend import build_info
 
@@ -46,6 +47,9 @@ _DDTRACE_DEFAULTS = {
 }
 
 _enabled = False
+
+# The browser going away mid-stream is not an agent failure.
+_CLIENT_GONE = (GeneratorExit, asyncio.CancelledError)
 
 
 def setup_telemetry() -> bool:
@@ -94,13 +98,47 @@ def is_enabled() -> bool:
     return _enabled
 
 
-def agent_span(session_id: str) -> ContextManager[Any]:
-    """Root span for one user turn; nullcontext (yields None) when disabled."""
-    if not _enabled:
-        return nullcontext()
+@contextmanager
+def _agent_span(session_id: str) -> Iterator[Any]:
     from ddtrace.llmobs import LLMObs
 
-    return LLMObs.agent(name="dexter", session_id=session_id)
+    span = LLMObs.agent(name="dexter", session_id=session_id)
+    try:
+        yield span
+    except _CLIENT_GONE:
+        annotate(span, tags={"client_disconnected": "true"})
+        raise
+    except BaseException as exc:
+        span.set_exc_info(type(exc), exc, exc.__traceback__)
+        raise
+    finally:
+        span.finish()
+
+
+def agent_span(session_id: str) -> ContextManager[Any]:
+    """Root span for one user turn; nullcontext (yields None) when disabled.
+
+    Errors mark the span (status:error, what the error-rate monitor counts);
+    a client disconnect does not.
+    """
+    if not _enabled:
+        return nullcontext()
+    return _agent_span(session_id)
+
+
+def record_failed_request(session_id: str, exc: BaseException, *, input_data: Any = None) -> None:
+    """Error agent span for a turn that failed before the agent ran (e.g. MCP server down).
+
+    Without it those failures have no span and the error-rate monitor reads 0%.
+    """
+    if not _enabled:
+        return
+    try:
+        with agent_span(session_id) as span:
+            annotate(span, input_data=input_data, tags={"failure_stage": "setup"})
+            span.set_exc_info(type(exc), exc, exc.__traceback__)
+    except Exception as err:  # noqa: BLE001 — telemetry must never break a request
+        logger.warning("[TELEMETRY] record_failed_request falló: %s", err)
 
 
 def llm_span(model_id: str) -> ContextManager[Any]:
