@@ -53,6 +53,9 @@ export interface ToolResultEvent {
   tool: string
   result: string
   timestamp_ms: number
+  /** Served from the agent's tool cache, without calling the MCP server. */
+  cached?: boolean
+  duration_ms?: number | null
 }
 
 /** MCP `CallToolResult` wire shape, as handed to widgets. */

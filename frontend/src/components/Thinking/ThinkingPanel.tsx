@@ -31,7 +31,7 @@ function liveStep(traces: TraceEvent[]): string | null {
     case 'tool_call':
       return last.tool === 'skills' ? 'cargando instrucciones de Dexter' : `consultando ${last.tool}`
     case 'tool_result':
-      return 'analizando resultados'
+      return last.cached ? 'analizando resultados (caché)' : 'analizando resultados'
   }
 }
 

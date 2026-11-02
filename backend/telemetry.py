@@ -100,10 +100,15 @@ def start_tool_span(name: str) -> Any:
     return LLMObs.tool(name=name)
 
 
-def finish_tool_span(span: Any, *, input_data: Any, output_data: Any, error: bool = False) -> None:
+def finish_tool_span(
+    span: Any, *, input_data: Any, output_data: Any, error: bool = False, tags: dict[str, str] | None = None
+) -> None:
     if span is None:
         return
-    annotate(span, input_data=input_data, output_data=output_data)
+    if tags:
+        annotate(span, input_data=input_data, output_data=output_data, tags=tags)
+    else:
+        annotate(span, input_data=input_data, output_data=output_data)
     if error:
         span.error = 1
     span.finish()

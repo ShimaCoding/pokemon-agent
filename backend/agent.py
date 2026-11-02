@@ -15,6 +15,9 @@ The prompt asks for the name the user wrote, never a look-alike; turning it into
 a PokeAPI slug ("Mr. Mime" → "mr-mime", "giratina" → "giratina-altered") is
 done in code by ``NormalizePokemonNames``.
 
+``get_pokedex_entry`` results are served from a process-level cache
+(``backend/tool_cache.py``) plugged in as tool middleware.
+
 ``builtin_tools=[]`` pins the list, so tools added by future harness releases
 don't slip in; ``tests/test_agent.py`` asserts the exact tool set.
 """
@@ -25,8 +28,10 @@ import unicodedata
 from typing import Any
 
 from strands import Agent
+from strands.middleware import ExecuteToolStage
 from strands_harness import create_harness
 
+from backend import tool_cache
 from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
@@ -204,4 +209,7 @@ def create_agent(
     # which would pin old conversations to the prompt they started with. The
     # code is the source of truth: re-apply it after the restore.
     agent.system_prompt = SYSTEM_PROMPT
+
+    # Process-level cache for get_pokedex_entry (#20): hits skip the MCP round trip.
+    agent.add_middleware(ExecuteToolStage, tool_cache.middleware)
     return agent
