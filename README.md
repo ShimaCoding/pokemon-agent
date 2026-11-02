@@ -32,7 +32,7 @@ El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SP
 | **Streaming agéntico con SSE** | El frontend consume un flujo `start → tool_call → tool_result → text → done`, mostrando el razonamiento antes de que la respuesta final esté lista. |
 | **Fallback multi-proveedor** | LiteLLM Router con monkey-patch: Groq → Gemini → OpenAI de forma transparente, sin modificar el SDK de Strands. |
 | **Panel de trazas en vivo** | Cada tool call aparece con spinner → resultado crudo + tiempo transcurrido. Didáctico para entender el ciclo de vida agéntico. |
-| **Dexter narration skill** | Skill de narración que convierte las respuestas del agente en el estilo formal y sarcástico de la Pokédex del Dr. Dexter. |
+| **Protocolo de narración de Dexter** | Incluido en el system prompt (sin llamada extra al LLM): convierte las respuestas del agente en el estilo formal y sarcástico de la Pokédex del Dr. Dexter. |
 | **Admin dashboard** | Panel en `/admin` que registra cada consulta en SQLite: modelos intentados, tokens, latencia, tools usadas y estado del fallback. |
 
 ---

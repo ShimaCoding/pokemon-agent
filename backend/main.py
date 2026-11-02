@@ -354,13 +354,7 @@ class _ToolTrace:
         index = self._index_by_id.get(uid, -1)
         text = _extract_result_text(event.result)
         logger.info("[TOOL] Resultado de %s: %.120s%s", name, text, "…" if len(text) > 120 else "")
-        # Skill instructions are internal scaffolding — show a brief summary
-        # instead of the full SKILL.md text in the trace panel.
-        display = (
-            f"[Skill activado: instrucciones de narración cargadas ({len(text)} chars)]"
-            if name == "skills"
-            else text
-        )
+        display = text
         self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display})
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
@@ -426,6 +420,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     Event sequence:
       {"type": "start",         "provider": str, "conversation_id": str}
       {"type": "agent_init",    "mcp_tools_count": int, "tool_names": list, "skill_loaded": str, ...}
+                                # skill_loaded: the narration protocol, always inline in SYSTEM_PROMPT
       {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int}
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
       {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}

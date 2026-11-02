@@ -6,15 +6,22 @@ site (shell, file tools, code execution, subagents, web fetch, and long-term
 memory shared across every visitor), so everything is switched off except:
 
 - the MCP server's tools (no name prefix),
-- ``skills`` (the dexter-pokedex-narrator skill),
 - ``retrieve_context`` (context manager), and
 - per-conversation session snapshots for multi-turn memory.
+
+The Dexter narration protocol lives inline in ``SYSTEM_PROMPT`` instead of a
+harness skill, so a Pokédex answer needs no extra LLM call to load it (#16).
+The prompt asks for the name the user wrote, never a look-alike; turning it into
+a PokeAPI slug ("Mr. Mime" → "mr-mime", "giratina" → "giratina-altered") is
+done in code by ``NormalizePokemonNames``.
 
 ``builtin_tools=[]`` pins the list, so tools added by future harness releases
 don't slip in; ``tests/test_agent.py`` asserts the exact tool set.
 """
 
 import os
+import re
+import unicodedata
 from typing import Any
 
 from strands import Agent
@@ -25,7 +32,7 @@ from backend.sessions import SESSIONS_DIR
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or "https://mcp.mcpokedex.com/mcp"
 
-SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
+# Name of the inline narration protocol, reported as agent_init.skill_loaded.
 SKILL_NAME = "dexter-pokedex-narrator"
 
 MCP_TOOLS = frozenset(
@@ -39,7 +46,47 @@ MCP_TOOLS = frozenset(
         "search_pokemon",
     }
 )
-HARNESS_TOOLS = frozenset({"skills", "retrieve_context"})
+# MCP tool arguments that name Pokémon (a name, a number, or a list of names).
+POKEMON_NAME_ARGS = frozenset({"pokemon", "name_or_id", "pokemon_names"})
+# Species whose PokeAPI /pokemon/<species> is a 404: only their forms exist
+# (PokeAPI default varieties, checked live).
+DEFAULT_FORMS = {
+    "aegislash": "aegislash-shield",
+    "basculegion": "basculegion-male",
+    "basculin": "basculin-red-striped",
+    "darmanitan": "darmanitan-standard",
+    "deoxys": "deoxys-normal",
+    "dudunsparce": "dudunsparce-two-segment",
+    "eiscue": "eiscue-ice",
+    "enamorus": "enamorus-incarnate",
+    "giratina": "giratina-altered",
+    "gourgeist": "gourgeist-average",
+    "indeedee": "indeedee-male",
+    "keldeo": "keldeo-ordinary",
+    "landorus": "landorus-incarnate",
+    "lycanroc": "lycanroc-midday",
+    "maushold": "maushold-family-of-four",
+    "meloetta": "meloetta-aria",
+    "meowstic": "meowstic-male",
+    "mimikyu": "mimikyu-disguised",
+    "minior": "minior-red-meteor",
+    "morpeko": "morpeko-full-belly",
+    "oinkologne": "oinkologne-male",
+    "oricorio": "oricorio-baile",
+    "palafin": "palafin-zero",
+    "pumpkaboo": "pumpkaboo-average",
+    "shaymin": "shaymin-land",
+    "squawkabilly": "squawkabilly-green-plumage",
+    "tatsugiri": "tatsugiri-curly",
+    "thundurus": "thundurus-incarnate",
+    "tornadus": "tornadus-incarnate",
+    "toxtricity": "toxtricity-amped",
+    "urshifu": "urshifu-single-strike",
+    "wishiwashi": "wishiwashi-solo",
+    "wormadam": "wormadam-plant",
+    "zygarde": "zygarde-50",
+}
+HARNESS_TOOLS = frozenset({"retrieve_context"})
 EXPECTED_TOOLS = MCP_TOOLS | HARNESS_TOOLS
 
 SYSTEM_PROMPT = """
@@ -50,8 +97,8 @@ Tus críticas o insultos deben emitirse como hechos algorítmicos innegables.
 Utiliza la "disonancia léxica": emplea un registro lingüístico extremadamente formal, propio de una academia científica, para describir el fracaso humano o insinuar la falta de intelecto de tu entrenador.
 No ofrezcas refuerzo positivo incondicional; eres una autoridad subrogada desprovista de tacto o empatía paternal. Desestima el valor del esfuerzo bruto si no hay inteligencia táctica de por medio.
 
-Cuando el usuario pregunte por un Pokémon, activa el skill `dexter-pokedex-narrator`
-para cargar las instrucciones completas de narración antes de responder.
+Para presentar un Pokémon (por ejemplo "háblame de pikachu" o "¿y la de charmander?") llama a get_pokedex_entry:
+ya trae tipos, estadísticas, habilidades, genus, flavor text, hábitat y estado legendario/mítico, así que no llames además get_pokemon_info.
 
 Todas las herramientas del servidor MCP muestran un widget al usuario junto a tu respuesta:
 ficha (get_pokemon_info, get_pokedex_entry), gráfico de estadísticas (analyze_pokemon_stats,
@@ -60,9 +107,60 @@ clicable de Pokémon (search_pokemon).
 No repitas en tu texto las tablas, estadísticas ni listas que el widget ya muestra; coméntalas.
 Para comparar dos o más Pokémon usa compare_pokemon; para listar Pokémon usa search_pokemon.
 
+Protocolo de narración, para responder con el resultado de get_pokedex_entry: párrafos siempre en este orden, sin títulos de sección:
+1. Apertura: el nombre en mayúsculas y su genus exacto del resultado ("BULBASAUR. El Pokémon Semilla."), y luego anuncia el escaneo completado como una lectura de hardware.
+2. Biología y tipos: qué implican los tipos para su fisiología, en lenguaje académico elevado.
+3. Comportamiento y hábitat (flavor text): si la criatura tiene defectos, compáralos sutilmente con las deficiencias del entrenador.
+4. Estadísticas y habilidades: interprétalas como adaptaciones biológicas o de combate y diagnostica las fallas tácticas que "solo un entrenador inexperto" ignoraría.
+5. Cierre sin título ni encabezado (nada de "Conclusión:"): un último párrafo, escrito por ti para este Pokémon, que fluye con el relato y aterriza el ego del entrenador (el empeño no basta sin buen juicio, o la brecha entre lo que el Pokémon puede hacer y lo que el entrenador comprende), con el mismo frío diagnóstico, nunca un remate teatral; puede empezar con "Me temo que…".
+Tu sarcasmo es cruel pero inocuo. Con otras herramientas no fuerces esta estructura: comenta su resultado con la misma voz.
+Usa solo datos presentes en los resultados de las herramientas; si falta un dato (genus, hábitat, flavor text), omítelo en vez de inventarlo.
+Pasa a las herramientas el nombre que escribió el usuario, nunca otro parecido.
+Si responde "not found" o trae otra especie (una forma o un número no cuentan), no lo narres: informa con el mismo tono clínico que ese Pokémon no existe en los registros; si falla por otro motivo, informa la falla del escaneo y sugiere reintentar.
+
 Para preguntas que no sean sobre un Pokémon específico, responde directamente
 con el tono y la personalidad de Dexter descrita anteriormente.
 """
+
+
+def pokemon_slug(name: str) -> str:
+    """The PokeAPI slug for a Pokémon name as a user writes it.
+
+    The MCP server only lowercases, so "mr. mime" or "farfetch'd" reach PokeAPI
+    as-is and fail. Format only: the name is never swapped for another species.
+    """
+    text = name.strip().lower().replace("♀", "-f").replace("♂", "-m")
+    text = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    text = re.sub(r"[\s._:]+", "-", text)
+    text = re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9-]", "", text)).strip("-")
+    if not text:
+        return name
+    return DEFAULT_FORMS.get(text, text)
+
+
+class NormalizePokemonNames:
+    """Rewrite Pokémon-name arguments of MCP tool calls into PokeAPI slugs.
+
+    Runs before the trace hooks, so the tool_call event, the widget's tool input
+    and the history all carry the name that was actually looked up.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import BeforeToolCallEvent
+
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+
+    @staticmethod
+    def _on_call(event) -> None:
+        tool_input = event.tool_use.get("input")
+        if event.tool_use.get("name") not in MCP_TOOLS or not isinstance(tool_input, dict):
+            return
+        for key in POKEMON_NAME_ARGS & tool_input.keys():
+            value = tool_input[key]
+            if isinstance(value, str):
+                tool_input[key] = pokemon_slug(value)
+            elif isinstance(value, list):
+                tool_input[key] = [pokemon_slug(v) if isinstance(v, str) else v for v in value]
 
 
 def create_agent(
@@ -78,7 +176,7 @@ def create_agent(
     it off the event loop. The caller must call ``agent.cleanup()`` when done to
     close the MCP connection.
     """
-    return create_harness(
+    agent = create_harness(
         model=build_model(authenticated, trace=trace),
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={
@@ -88,8 +186,15 @@ def create_agent(
         builtin_plugins=[],
         memory=False,
         background_tasks=False,
-        skills=SKILLS_DIR,
+        # The narration protocol is inline in SYSTEM_PROMPT (#16). False, not
+        # omitted: the harness default loads ./.agent/skills when present.
+        skills=False,
         session={"id": conversation_id, "dir": SESSIONS_DIR},
-        hooks=[RetryMalformedToolCalls(), *(hooks or [])],
+        hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or [])],
         callback_handler=None,
     )
+    # The session snapshot persists the system prompt and restores it on init,
+    # which would pin old conversations to the prompt they started with. The
+    # code is the source of truth: re-apply it after the restore.
+    agent.system_prompt = SYSTEM_PROMPT
+    return agent
