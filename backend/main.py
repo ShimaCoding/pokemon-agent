@@ -41,6 +41,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from backend import build_info, mcp_gateway, telemetry, tool_cache
+from backend.evals import checks
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
@@ -330,6 +331,8 @@ class _ToolTrace:
         self._index_by_id: dict[str, int] = {}
         self._spans: dict[str, Any] = {}
         self.names: list[str] = []
+        # Raw results (not the summarized display) for the quality checks.
+        self.observations: list[checks.ToolObservation] = []
 
     def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
@@ -369,6 +372,14 @@ class _ToolTrace:
             error=event.result.get("status") == "error",
             tags={"cache": cache} if cache else None,
         )
+        self.observations.append(
+            checks.ToolObservation(
+                name=name,
+                args=dict(event.tool_use.get("input") or {}),
+                text=text,
+                error=event.result.get("status") == "error",
+            )
+        )
 
         uri = mcp_gateway.ui_resource_uri(getattr(event.selected_tool, "mcp_tool", None))
         if uri and event.result.get("status") != "error":
@@ -387,6 +398,25 @@ class _ToolTrace:
     @property
     def count(self) -> int:
         return self._next_index
+
+
+def _submit_rule_evals(ids: dict[str, str], query: str, reply: str, tool_trace: _ToolTrace, messages: list) -> None:
+    """Rule-based quality checks on the finished turn → Datadog evals. Pure CPU, never raises."""
+    try:
+        results = checks.evaluate_turn(
+            checks.Turn(
+                query=query,
+                reply=reply,
+                tools=tool_trace.observations,
+                evidence=checks.evidence_from_messages(messages),
+            )
+        )
+        for r in results:
+            if not r.passed:
+                logger.info("[EVAL] %s=fail %s", r.label, r.reasoning)
+        telemetry.submit_evaluations(ids, results)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[EVAL] Las evaluaciones fallaron: %s", exc)
 
 
 # "Usa el prompt <name> [con <arg>=<val>...]" — sent by the slash menu.
@@ -440,7 +470,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
       {"type": "text",          "delta": str}
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
-                                "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None}
+                                "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
+                                "trace_id": str?, "span_id": str?}  # ids only when LLM Observability is on
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
     from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent
@@ -611,7 +642,15 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                             },
                             tags={"authenticated": str(authenticated).lower()},
                         )
+                        ids = telemetry.export_ids(agent_obs)
+                        if ids:
+                            done.update(ids)  # lets the frontend tie 👍/👎 to this trace
                         yield _sse(done)
+                        # Rule evals run after `done` (no effect on elapsed/TTFT) and only
+                        # enqueue. If the client disconnected, GeneratorExit is raised at
+                        # the yield above and they are skipped.
+                        if ids:
+                            _submit_rule_evals(ids, query, "".join(reply), tool_trace, agent.messages)
 
         except Exception as exc:
             logger.exception("Agent run failed: %s", exc)

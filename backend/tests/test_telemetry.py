@@ -239,3 +239,54 @@ def test_finish_tool_span_forwards_cache_tag(monkeypatch):
 
     assert calls[0]["tags"] == {"cache": "hit"}
     assert "tags" not in calls[1]
+
+def test_eval_helpers_are_noops_when_disabled(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    monkeypatch.setattr(LLMObs, "export_span", lambda **kw: pytest.fail("must not export"))
+    monkeypatch.setattr(LLMObs, "submit_evaluation", lambda **kw: pytest.fail("must not submit"))
+    assert telemetry.export_ids(object()) is None
+    assert telemetry.export_ids(None) is None
+    telemetry.submit_evaluations({"trace_id": "t", "span_id": "1"}, [object()])
+
+
+def test_export_ids_and_submit_evaluations(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    from backend.evals.checks import CHECKS_VERSION, EvalResult
+
+    monkeypatch.setattr(telemetry, "_enabled", True)
+    monkeypatch.setattr(LLMObs, "export_span", lambda span: {"span_id": "123", "trace_id": "ab" * 16, "extra": 1})
+    ids = telemetry.export_ids(object())
+    assert ids == {"span_id": "123", "trace_id": "ab" * 16}
+
+    calls = []
+    monkeypatch.setattr(LLMObs, "submit_evaluation", lambda **kw: calls.append(kw))
+    results = [
+        EvalResult("pokemon_tool_used", True, "ok", {"tools": ["get_pokedex_entry"]}),
+        EvalResult("grounded_facts", False, "x" * 600, {"ungrounded": [99]}),
+    ]
+    telemetry.submit_evaluations(ids, results)
+    assert [c["label"] for c in calls] == ["pokemon_tool_used", "grounded_facts"]
+    ok, bad = calls
+    assert ok["metric_type"] == "boolean" and ok["value"] is True and ok["assessment"] == "pass"
+    assert bad["value"] is False and bad["assessment"] == "fail"
+    assert ok["span"] == {"span_id": "123", "trace_id": "ab" * 16}
+    assert len(bad["reasoning"]) == 500
+    assert bad["metadata"] == {"ungrounded": [99]}
+    assert ok["tags"] == {"eval_source": "rules", "checks_version": CHECKS_VERSION}
+
+
+def test_eval_helpers_swallow_errors(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    from backend.evals.checks import EvalResult
+
+    def boom(**kw):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(telemetry, "_enabled", True)
+    monkeypatch.setattr(LLMObs, "export_span", boom)
+    monkeypatch.setattr(LLMObs, "submit_evaluation", boom)
+    assert telemetry.export_ids(object()) is None
+    telemetry.submit_evaluations({"trace_id": "t", "span_id": "1"}, [EvalResult("dexter_persona", True, "ok", {})])
