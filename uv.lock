@@ -873,6 +873,15 @@ wheels = [
 ]
 
 [[package]]
+name = "openinference-semantic-conventions"
+version = "0.1.43"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/dc/b3def81b3e243571ac4a96d41f44945f3c2c999c2a9c822b272ed4667e47/openinference_semantic_conventions-0.1.43.tar.gz", hash = "sha256:c12b213e8cbaa74c8fbf021d2959e244aceb39b5cefeb2c2cd8316235f2a905b", size = 16212, upload-time = "2026-10-29T22:13:22.01Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/11/02848572db2e9986f271853175cba2026d8ae46359d69d90deb19027f49f/openinference_semantic_conventions-0.1.43-py3-none-any.whl", hash = "sha256:058cf01935df390775605a87df07840dbd80ac1a92800a329c169b0d633f64ce", size = 12974, upload-time = "2026-10-29T22:13:20.246Z" },
+]
+
+[[package]]
 name = "opentelemetry-api"
 version = "1.45.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1055,6 +1064,9 @@ dependencies = [
     { name = "httpx" },
     { name = "litellm" },
     { name = "mcp" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
     { name = "python-dotenv" },
     { name = "slowapi" },
     { name = "strands-agents", extra = ["litellm"] },
@@ -1074,6 +1086,9 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "litellm", specifier = ">=1.106.6,<1.107" },
     { name = "mcp", specifier = ">=2.3.0,<3" },
+    { name = "openinference-semantic-conventions", specifier = ">=0.1.43" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.45.2" },
+    { name = "opentelemetry-sdk", specifier = ">=1.45.2" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "slowapi", specifier = ">=0.1.10" },
     { name = "strands-agents", extras = ["litellm"], specifier = ">=1.63.0,<2" },

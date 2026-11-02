@@ -8,6 +8,7 @@ is patched.
 """
 
 import importlib.metadata as _meta
+import json
 import logging
 import os
 import sys
@@ -81,6 +82,10 @@ def model_ids(authenticated: bool) -> list[str]:
     return list(MODELS_AUTHENTICATED if authenticated else MODELS_PUBLIC)
 
 
+# Per-message cap for the input messages sent to the tracing backends.
+TRACE_MESSAGE_LIMIT = 16_000
+
+
 def _preview_messages(messages: list[dict[str, Any]], limit: int = 800) -> list[dict[str, str]]:
     """Flatten Strands messages to ``{role, content}`` strings for the trace panel."""
     preview = []
@@ -100,6 +105,18 @@ def _preview_messages(messages: list[dict[str, Any]], limit: int = 800) -> list[
             content = content[:limit] + "…[truncated]"
         preview.append({"role": msg.get("role", "?"), "content": content})
     return preview
+
+
+def _tool_definitions(tool_specs: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Strands tool specs → LLMObs tool definitions (``{name, description, schema}``)."""
+    return [
+        {
+            "name": spec.get("name", ""),
+            "description": spec.get("description", ""),
+            "schema": spec.get("inputSchema", {}).get("json", {}),
+        }
+        for spec in tool_specs or []
+    ]
 
 
 def call_role(messages: list[dict[str, Any]]) -> str:
@@ -122,18 +139,34 @@ class _StreamedOutput:
 
     def __init__(self) -> None:
         self._parts: list[str] = []
+        self._calls: list[dict[str, str]] = []
         self._usage: dict[str, int] = {}
 
     def add(self, event: dict[str, Any]) -> None:
-        if text := event.get("contentBlockDelta", {}).get("delta", {}).get("text"):
+        delta = event.get("contentBlockDelta", {}).get("delta", {})
+        if text := delta.get("text"):
             self._parts.append(text)
+        elif "toolUse" in delta and self._calls:
+            self._calls[-1]["input"] += delta["toolUse"].get("input", "")
         elif tool_use := event.get("contentBlockStart", {}).get("start", {}).get("toolUse"):
             self._parts.append(f"\n[toolUse {tool_use.get('name')}]")
+            self._calls.append({"name": tool_use.get("name", ""), "tool_id": tool_use.get("toolUseId", ""), "input": ""})
         elif usage := event.get("metadata", {}).get("usage"):
             self._usage = usage
 
     def text(self) -> str:
         return "".join(self._parts).strip()
+
+    def tool_calls(self) -> list[dict[str, Any]]:
+        """Tool calls in the LLMObs message shape; arguments arrive as streamed JSON text."""
+        calls = []
+        for call in self._calls:
+            try:
+                arguments = json.loads(call["input"]) if call["input"] else {}
+            except ValueError:
+                arguments = {"raw": call["input"]}
+            calls.append({"name": call["name"], "arguments": arguments, "tool_id": call["tool_id"], "type": "function"})
+        return calls
 
     def metrics(self) -> dict[str, int]:
         u = self._usage
@@ -210,10 +243,14 @@ class TracedLiteLLMModel(LiteLLMModel):
                 raise
             finally:
                 system = [{"role": "system", "content": system_prompt}] if system_prompt else []
+                reply: dict[str, Any] = {"role": "assistant", "content": output.text()}
+                if calls := output.tool_calls():
+                    reply["tool_calls"] = calls
                 telemetry.annotate(
                     span,
-                    input_data=system + _preview_messages(messages, limit=4000),
-                    output_data=[{"role": "assistant", "content": output.text()}],
+                    input_data=system + _preview_messages(messages, limit=TRACE_MESSAGE_LIMIT),
+                    output_data=[reply],
+                    tool_definitions=_tool_definitions(tool_specs),
                     metrics=output.metrics(),
                     metadata={"call_role": role, "reasoning_effort": effort},
                     tags={"call_role": role, "reasoning_effort": effort},

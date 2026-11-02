@@ -7,7 +7,7 @@ Routes:
   POST /api/agent/run        — SSE stream: agent response, traces and widgets
   GET  /api/ui-resource      — widget HTML (`ui://` MCP Apps resource) + its CSP
   POST /api/mcp/call-tool    — widget → MCP server tool calls (UI-bound tools only)
-  POST /api/feedback         — 👍/👎 on a reply → Datadog LLM Observability feedback
+  POST /api/feedback         — 👍/👎 on a reply → feedback in Datadog LLM Observability / Phoenix
   GET  /api/prompts|tools|resources — MCP server capabilities
   GET  /                     — serves the frontend (StaticFiles mount)
 
@@ -56,7 +56,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Datadog LLM Observability (no-op without DD_API_KEY).
+# Datadog LLM Observability and/or Phoenix (no-op without DD_API_KEY / PHOENIX_COLLECTOR_ENDPOINT).
 telemetry.setup_telemetry()
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,8 @@ class CallToolRequest(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    # LLMObs ids from the reply's `done` event: 128-bit hex trace, decimal span.
+    # Agent span ids from the reply's `done` event (Datadog's, or Phoenix's when only it is on):
+    # 128-bit hex trace, decimal 64-bit span.
     trace_id: str = Field(..., pattern=r"^[0-9a-f]{32}$")
     span_id: str = Field(..., pattern=r"^[0-9]{1,20}$")
     value: str = Field(..., pattern=r"^(up|down)$")
@@ -298,7 +299,7 @@ async def get_wiki_events_catalog(request: Request):
 @app.post("/api/feedback", status_code=204)
 @limiter.limit("10/minute")
 async def post_feedback(request: Request, body: FeedbackRequest):
-    """Forward a vote to LLM Observability; only for replies this process issued, once each."""
+    """Forward a vote to the tracing backends; only for replies this process issued, once each."""
     status, conversation_id = feedback_registry.claim(body.span_id, body.trace_id)
     if status == "unknown":
         raise HTTPException(status_code=404, detail="Respuesta desconocida o expirada")
@@ -504,7 +505,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "text",          "delta": str}
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
-                                "trace_id": str?, "span_id": str?}  # ids only when LLM Observability is on
+                                "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
     from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent

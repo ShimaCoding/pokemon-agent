@@ -1,0 +1,90 @@
+# Arize Phoenix for the MCPokédex agent's traces (backend/telemetry_phoenix.py).
+#
+# Deployed as a raw compose app in Dokploy. Secrets live only in the Dokploy env:
+#   PHOENIX_DB_PASSWORD             Postgres password of the `phoenix` role
+#   PHOENIX_SECRET                  JWT secret, >= 32 chars with a digit and a lowercase letter
+#   PHOENIX_ADMIN_INITIAL_PASSWORD  first password of admin@localhost (changed on first login)
+#
+# The UI is public at https://phoenix.shimadev.xyz (auth on). OTLP is not routed by
+# Traefik: the agent sends to http://mcpokedex-phoenix:6006 over dokploy-network, with a
+# system API key. The database is reachable only on dokploy-network (Grafana reads it
+# with the read-only role `grafana_ro`, see observability/grafana/).
+services:
+  mcpokedex-phoenix:
+    image: arizephoenix/phoenix:21.0.0
+    restart: unless-stopped
+    depends_on:
+      mcpokedex-phoenix-db:
+        condition: service_healthy
+    environment:
+      PHOENIX_SQL_DATABASE_URL: postgresql://phoenix:${PHOENIX_DB_PASSWORD}@mcpokedex-phoenix-db:5432/phoenix
+      PHOENIX_ENABLE_AUTH: "true"
+      PHOENIX_SECRET: ${PHOENIX_SECRET}
+      PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD: ${PHOENIX_ADMIN_INITIAL_PASSWORD}
+      PHOENIX_USE_SECURE_COOKIES: "true"
+      PHOENIX_ROOT_URL: https://phoenix.shimadev.xyz
+      PHOENIX_DEFAULT_RETENTION_POLICY_DAYS: "60"
+      PHOENIX_TELEMETRY_ENABLED: "false"
+    healthcheck:
+      # Distroless image: no shell or curl.
+      test: ["CMD", "/usr/bin/python3.13", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 384M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.mcpokedex-phoenix.rule=Host(`phoenix.shimadev.xyz`) && !PathPrefix(`/v1/traces`)"
+      - "traefik.http.routers.mcpokedex-phoenix.entrypoints=websecure"
+      - "traefik.http.routers.mcpokedex-phoenix.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.mcpokedex-phoenix.service=mcpokedex-phoenix"
+      - "traefik.http.services.mcpokedex-phoenix.loadbalancer.server.port=6006"
+
+  mcpokedex-phoenix-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: phoenix
+      POSTGRES_PASSWORD: ${PHOENIX_DB_PASSWORD}
+      POSTGRES_DB: phoenix
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phoenix -d phoenix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - phoenix_pgdata:/var/lib/postgresql/data
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  phoenix_pgdata:

@@ -1,0 +1,607 @@
+{
+  "uid": "mcpokedex-phoenix",
+  "title": "MCPokedex Agent — Phoenix",
+  "description": "Trazas del agente en Phoenix (Postgres). Equivalente a 'MCPokedex Agent — Seguimiento' de Datadog.",
+  "tags": [
+    "mcpokedex",
+    "phoenix",
+    "managed_by:repo"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "links": [
+    {
+      "title": "Phoenix",
+      "url": "https://phoenix.shimadev.xyz",
+      "type": "link",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Proyecto (env)",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "phoenix-pg"
+        },
+        "query": "SELECT name FROM projects WHERE name LIKE 'mcpokedex-%' ORDER BY name = 'mcpokedex-prod' DESC, name",
+        "definition": "SELECT name FROM projects WHERE name LIKE 'mcpokedex-%'",
+        "current": {
+          "text": "mcpokedex-prod",
+          "value": "mcpokedex-prod"
+        },
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Resumen",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Consultas",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS consultas\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "% con error",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE s.status_code = 'ERROR') / greatest(count(*), 1) AS errores\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Latencia p95",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM s.end_time - s.start_time)) AS p95\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Tokens p95 por consulta",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY s.cumulative_llm_token_count_prompt + s.cumulative_llm_token_count_completion) AS p95\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Costo estimado",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT coalesce(sum(sc.total_cost), 0) AS usd\nFROM span_costs sc\nJOIN traces t ON t.id = sc.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND $__timeFilter(sc.span_start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "span_costs de Phoenix (precios incorporados por modelo)."
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Feedback 👍 / 👎",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) FILTER (WHERE sa.label = 'thumbs_up') AS \"👍\", count(*) FILTER (WHERE sa.label = 'thumbs_down') AS \"👎\"\nFROM span_annotations sa\nJOIN spans s ON s.id = sa.span_rowid\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND sa.name = 'user_feedback' AND $__timeFilter(s.start_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Latencia y errores",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Consultas y errores",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(s.start_time, $__interval, 0), count(*) AS consultas, count(*) FILTER (WHERE s.status_code = 'ERROR') AS errores\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Latencia por consulta (p50 / p95)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(s.start_time, $__interval), percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM s.end_time - s.start_time)) AS p50, percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM s.end_time - s.start_time)) AS p95\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Tokens y costo",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Tokens (prompt / completion / cache)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(s.start_time, $__interval, 0), sum(s.llm_token_count_prompt) AS prompt, sum(s.llm_token_count_completion) AS completion, sum((s.attributes #>> '{llm,token_count,prompt_details,cache_read}')::int) AS cache_read\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.span_kind = 'LLM' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Costo estimado",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(sc.span_start_time, $__interval, 0), sum(sc.total_cost) AS usd\nFROM span_costs sc\nJOIN traces t ON t.id = sc.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND $__timeFilter(sc.span_start_time)\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Modelos",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT s.attributes #>> '{llm,provider}' AS proveedor, s.attributes #>> '{llm,model_name}' AS modelo, count(*) AS llamadas, count(*) FILTER (WHERE s.status_code = 'ERROR') AS fallidas, sum(s.llm_token_count_prompt) AS prompt, sum(s.llm_token_count_completion) AS completion, round(avg(extract(epoch FROM s.end_time - s.start_time))::numeric, 2) AS seg_promedio\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.span_kind = 'LLM' AND $__timeFilter(s.start_time)\nGROUP BY 1, 2 ORDER BY llamadas DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Calidad",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Feedback 👍 / 👎",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT $__timeGroupAlias(s.start_time, $__interval, 0), count(*) FILTER (WHERE sa.label = 'thumbs_up') AS \"👍\", count(*) FILTER (WHERE sa.label = 'thumbs_down') AS \"👎\"\nFROM span_annotations sa\nJOIN spans s ON s.id = sa.span_rowid\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND sa.name = 'user_feedback' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Evals por reglas (pass rate)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT sa.name AS eval, count(*) AS turnos, round(100.0 * avg(sa.score)::numeric, 1) AS pass_pct\nFROM span_annotations sa\nJOIN spans s ON s.id = sa.span_rowid\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND sa.annotator_kind = 'CODE' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY pass_pct"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Tools",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT s.name AS tool, count(*) AS llamadas, round(100.0 * count(*) FILTER (WHERE s.status_code = 'ERROR') / count(*), 1) AS error_pct, round(percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM s.end_time - s.start_time))::numeric, 2) AS p95_seg, count(*) FILTER (WHERE s.attributes #>> '{metadata,cache}' = 'hit') AS cache_hits\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.span_kind = 'TOOL' AND $__timeFilter(s.start_time)\nGROUP BY 1 ORDER BY llamadas DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

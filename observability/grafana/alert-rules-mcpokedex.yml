@@ -1,0 +1,150 @@
+# Grafana alert rules over Phoenix's Postgres: the three monitors of
+# observability/datadog/monitors.json. Goes to /root/monitoring/grafana/provisioning/alerting/
+# on the VPS; notifications follow the default policy (contact point telegram-shima).
+#
+# Each query is "% of agent requests in the last hour that are bad", with the denominator
+# clamped to 20 like Datadog's clamp_min(all, 20): one bad request in a quiet hour is
+# 1/20 = 5%, which does not fire (> 5).
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: MCPokedex agent
+    folder: MCPokedex
+    interval: 5m
+    rules:
+      - uid: mcpokedex-latency
+        title: "[MCPokédex] Latencia p95 del agente > 5 s"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: phoenix-pg
+            model:
+              refId: A
+              editorMode: code
+              format: table
+              rawQuery: true
+              rawSql: |
+                SELECT 100.0 * count(*) FILTER (WHERE s.end_time - s.start_time > interval '5 seconds') / greatest(count(*), 20) AS value
+                FROM spans s
+                JOIN traces t ON t.id = s.trace_rowid
+                JOIN projects p ON p.id = t.project_rowid
+                WHERE p.name = 'mcpokedex-prod' AND s.parent_id IS NULL AND s.span_kind = 'AGENT'
+                  AND s.start_time > now() - interval '1 hour'
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [5], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Más del 5% de las consultas al agente Dexter tardaron más de 5 s en la última hora (equivale a p95 > 5 s)."
+          description: "Valor: {{ $values.A.Value | printf \"%.1f\" }}% (con menos de 20 consultas/hora el denominador se fija en 20). Revisar: modelo de fallback (models_tried), llamadas LLM por consulta, latencia de tools MCP."
+          dashboard: "https://grafana.shimadev.xyz/d/mcpokedex-phoenix"
+          traces: "https://phoenix.shimadev.xyz"
+        labels:
+          app: mcpokedex
+          env: prod
+          managed_by: repo
+      - uid: mcpokedex-errors
+        title: "[MCPokédex] % errores del agente > 5%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: phoenix-pg
+            model:
+              refId: A
+              editorMode: code
+              format: table
+              rawQuery: true
+              rawSql: |
+                SELECT 100.0 * count(*) FILTER (WHERE s.status_code = 'ERROR') / greatest(count(*), 20) AS value
+                FROM spans s
+                JOIN traces t ON t.id = s.trace_rowid
+                JOIN projects p ON p.id = t.project_rowid
+                WHERE p.name = 'mcpokedex-prod' AND s.parent_id IS NULL AND s.span_kind = 'AGENT'
+                  AND s.start_time > now() - interval '1 hour'
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [5], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Más del 5% de las consultas al agente Dexter terminaron con error en la última hora."
+          description: "Valor: {{ $values.A.Value | printf \"%.1f\" }}% (con menos de 20 consultas/hora el denominador se fija en 20). Revisar: proveedores LLM caídos o con rate limit, MCP server (failure_stage=setup), logs del contenedor."
+          dashboard: "https://grafana.shimadev.xyz/d/mcpokedex-phoenix"
+          traces: "https://phoenix.shimadev.xyz"
+        labels:
+          app: mcpokedex
+          env: prod
+          managed_by: repo
+      - uid: mcpokedex-tokens
+        title: "[MCPokédex] Tokens por consulta p95 > 15k"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: phoenix-pg
+            model:
+              refId: A
+              editorMode: code
+              format: table
+              rawQuery: true
+              rawSql: |
+                SELECT 100.0 * count(*) FILTER (WHERE s.cumulative_llm_token_count_prompt + s.cumulative_llm_token_count_completion > 15000) / greatest(count(*), 20) AS value
+                FROM spans s
+                JOIN traces t ON t.id = s.trace_rowid
+                JOIN projects p ON p.id = t.project_rowid
+                WHERE p.name = 'mcpokedex-prod' AND s.parent_id IS NULL AND s.span_kind = 'AGENT'
+                  AND s.start_time > now() - interval '1 hour'
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [5], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Más del 5% de las consultas al agente Dexter usaron más de 15k tokens en la última hora (equivale a p95 > 15k)."
+          description: "Valor: {{ $values.A.Value | printf \"%.1f\" }}% (con menos de 20 consultas/hora el denominador se fija en 20). Revisar: compactación del historial (history_messages), tools que devuelven payloads grandes, bucles de tool calls."
+          dashboard: "https://grafana.shimadev.xyz/d/mcpokedex-phoenix"
+          traces: "https://phoenix.shimadev.xyz"
+        labels:
+          app: mcpokedex
+          env: prod
+          managed_by: repo

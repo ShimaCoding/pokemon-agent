@@ -1,5 +1,5 @@
 """
-Thumbs feedback (👍/👎) on Dexter's replies → Datadog LLM Observability.
+Thumbs feedback (👍/👎) on Dexter's replies → Datadog LLM Observability and/or Phoenix.
 
 ``done`` carries the agent span's ``trace_id``/``span_id``; ``POST /api/feedback``
 only accepts spans this process issued, so it cannot be aimed at arbitrary spans,

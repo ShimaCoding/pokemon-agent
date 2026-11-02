@@ -45,7 +45,8 @@ def _run(monkeypatch, script, on_send=None):
     ``on_send(msg)`` runs after each message has been handed to the server.
     """
     monkeypatch.setattr(main, "log_query", lambda **kw: None)
-    monkeypatch.setattr(telemetry, "_enabled", False)
+    monkeypatch.setattr(telemetry, "_dd_enabled", False)
+    monkeypatch.setattr(telemetry, "_phoenix", None)
     monkeypatch.setattr(
         agent_mod, "create_agent", lambda *a, trace, hooks, **k: _FakeAgent(script, trace, hooks)
     )

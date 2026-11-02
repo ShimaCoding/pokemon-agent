@@ -15,6 +15,10 @@ dependencies = [
     "slowapi>=0.1.10",
     "strands-harness[litellm]~=0.3.3",
     "ddtrace>=4.16.1",
+    # Phoenix tracing (backend/telemetry_phoenix.py); the OTel SDK also comes with Strands.
+    "opentelemetry-sdk>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "openinference-semantic-conventions>=0.1.43",
 ]
 
 [tool.uv]
