@@ -44,9 +44,9 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from backend import build_info, mcp_gateway, telemetry, tool_cache
+from backend.database import get_queries, get_stats, init_db, log_query
 from backend.evals import checks
 from backend.feedback import registry as feedback_registry
-from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
 from backend.wiki_content import EVENTS_CATALOG, lessons_as_dicts
