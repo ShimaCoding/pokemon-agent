@@ -108,6 +108,15 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
     assert "<available_skills>" not in agent.system_prompt
 
 
+def test_system_prompt_rejects_unknown_or_mismatched_entry():
+    # "háblame de pikachuzard" must not become a Pikachu narration: the name
+    # goes to the tool verbatim, and an error or another Pokémon's entry is
+    # reported as missing from the records (epic #15 measurements, regression 1).
+    assert "tal como lo escribió el usuario, sin corregirlo ni adivinarlo" in SYSTEM_PROMPT
+    assert "la herramienta falla o devuelve la ficha de otro Pokémon, no la narres" in SYSTEM_PROMPT
+    assert "no existe en los registros" in SYSTEM_PROMPT
+
+
 def test_system_prompt_budget():
     # The prompt is sent on every LLM call (cached after the first). The inline
     # protocol must stay condensed (~360 tokens, #16): the persona above it
