@@ -1,0 +1,21 @@
+# Grafana datasource: Phoenix's Postgres (observability/phoenix/docker-compose.yml), read-only.
+# Goes to /root/monitoring/grafana/provisioning/datasources/ on the VPS. The password comes
+# from PHOENIX_DB_RO_PASSWORD in /root/monitoring/.env (passed to the grafana container).
+apiVersion: 1
+
+datasources:
+  - name: Phoenix (Postgres)
+    uid: phoenix-pg
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: mcpokedex-phoenix-db:5432
+    user: grafana_ro
+    jsonData:
+      database: phoenix
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+      maxOpenConns: 5
+    secureJsonData:
+      password: ${PHOENIX_DB_RO_PASSWORD}
+    editable: false
