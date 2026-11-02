@@ -17,6 +17,10 @@ SDK spans show up fine. The spans are emitted from the places that already see
 everything: ``TracedLiteLLMModel.stream`` (llm), ``_ToolTrace`` (tool) and the
 SSE generator (agent). ddtrace's auto-instrumentation stays off: its LiteLLM
 integration reports 0 tokens for streamed calls and does not cover tools.
+
+Spans carry ``env`` (``DD_ENV``, default ``local``; docker-compose.yml pins
+``prod``) and ``version`` (the git commit, see ``backend/build_info.py``), so
+deploys can be compared side by side.
 """
 
 import logging
@@ -24,10 +28,15 @@ import os
 from contextlib import nullcontext
 from typing import Any, ContextManager
 
+from backend import build_info
+
 logger = logging.getLogger(__name__)
 
 # ml_app in Datadog (shown lowercased). Matches the app created in the Datadog onboarding.
 DEFAULT_ML_APP = "McpokedexAgent"
+
+# Datadog `env` tag when DD_ENV is unset. Prod sets DD_ENV explicitly in docker-compose.yml.
+DEFAULT_ENV = "local"
 
 # Pure SDK mode: no APM tracer, no Datadog Agent on localhost:8126.
 _DDTRACE_DEFAULTS = {
@@ -50,8 +59,19 @@ def setup_telemetry() -> bool:
     for name, value in _DDTRACE_DEFAULTS.items():
         os.environ.setdefault(name, value)
 
+    version = build_info.version()
+    sha = build_info.commit_sha()
+    if sha:  # git.commit.sha / repository_url tags; ddtrace reads these at import time
+        os.environ.setdefault("DD_GIT_COMMIT_SHA", sha)
+        os.environ.setdefault("DD_GIT_REPOSITORY_URL", build_info.REPOSITORY_URL)
+
+    import ddtrace
     from ddtrace.llmobs import LLMObs
 
+    if version:
+        # LLMObs.enable() has no `version` param; spans read ddtrace.config.version per span.
+        ddtrace.config.version = version
+    env = os.environ.get("DD_ENV", "").strip() or DEFAULT_ENV
     ml_app = os.environ.get("DD_LLMOBS_ML_APP", DEFAULT_ML_APP)
     site = os.environ.get("DD_SITE", "datadoghq.com")
     LLMObs.enable(
@@ -60,11 +80,13 @@ def setup_telemetry() -> bool:
         site=site,
         agentless_enabled=True,
         integrations_enabled=False,
-        env=os.environ.get("DD_ENV", "prod"),
+        env=env,
         service=ml_app,
     )
     _enabled = True
-    logger.info("[TELEMETRY] LLM Observability → %s (ml_app=%s)", site, ml_app)
+    logger.info(
+        "[TELEMETRY] LLM Observability → %s (ml_app=%s env=%s version=%s)", site, ml_app, env, version or "?"
+    )
     return True
 
 

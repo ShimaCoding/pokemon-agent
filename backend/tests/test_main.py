@@ -19,6 +19,13 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
+def test_health_reports_version(client, monkeypatch):
+    monkeypatch.setenv("DD_VERSION", "abc1234")
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["version"] == "abc1234"
+
+
 # --- /api/agent/run validation ----------------------------------------------
 
 

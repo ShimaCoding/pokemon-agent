@@ -4,6 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file: .env
+    environment:
+      # Datadog env tag; `version` is resolved from .git at runtime (backend/build_info.py).
+      # Never set DD_VERSION here or in Dokploy: a static value freezes it across deploys.
+      DD_ENV: ${DD_ENV:-prod}
     restart: unless-stopped
 
     healthcheck:

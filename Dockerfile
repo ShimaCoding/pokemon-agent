@@ -51,6 +51,10 @@ COPY --from=frontend-builder --chown=appuser:appgroup /app/backend/static ./back
 # Restore admin.html (not part of the React build, gets wiped by the line above)
 COPY --chown=appuser:appgroup backend/static/admin.html ./backend/static/admin.html
 
+# Commit metadata for Datadog `version` (only HEAD/refs, see .dockerignore). The glob makes it
+# optional: builds without a .git directory (worktrees, tarballs) just skip it.
+COPY --chown=appuser:appgroup .gi[t] ./.git/
+
 # Pre-create data dir so the volume mount is writable by appuser
 RUN mkdir -p /app/data && chown appuser:appgroup /app/data
 

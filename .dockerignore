@@ -1,5 +1,10 @@
-# Git
+# Git: excluded except what backend/build_info.py needs to know the deployed commit.
+# NEVER re-include .git/config: a clone URL can embed credentials.
 .git
+!.git/HEAD
+!.git/packed-refs
+!.git/shallow
+!.git/refs/heads
 .gitignore
 
 # Python
