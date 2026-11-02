@@ -33,7 +33,7 @@ docker-compose up --build                       # production-like
 
 ## SSE contract
 
-Each event is `data: <json>\n\n`; `type` is one of `start`, `agent_init`, `llm_call`, `model_attempt`, `tool_call`, `tool_result`, `ui_resource`, `text`, `done`, `error` (full shapes in the `_sse_generator` docstring). `tool_call`/`tool_result`/`ui_resource` share `tool_id` and `index`. `ui_resource` carries `resource_uri`, `tool_input` and `tool_result` (MCP `CallToolResult` shape with `structuredContent`) — everything the frontend needs to mount the widget. New event types must also be added to `EVENTS_CATALOG` in `backend/wiki_content.py` (a test checks it).
+Each event is `data: <json>\n\n`; `type` is one of `start`, `agent_init`, `llm_call`, `model_attempt`, `tool_call`, `tool_result`, `ui_resource`, `text`, `done`, `error` (full shapes in the `_sse_generator` docstring). `tool_call`/`tool_result`/`ui_resource` share `tool_id` and `index`. `ui_resource` carries `resource_uri`, `tool_input` and `tool_result` (MCP `CallToolResult` shape with `structuredContent`) — everything the frontend needs to mount the widget. `timestamp_ms` is when the event happened (ms since request start); trace events are delivered between model stream events, so they can reach the client later than their stamp, while each `text` delta goes out as its own chunk (`backend/tests/test_streaming.py`). New event types must also be added to `EVENTS_CATALOG` in `backend/wiki_content.py` (a test checks it).
 
 ## Key Design Decisions
 
