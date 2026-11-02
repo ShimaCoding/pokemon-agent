@@ -78,7 +78,7 @@ def create_agent(
     it off the event loop. The caller must call ``agent.cleanup()`` when done to
     close the MCP connection.
     """
-    return create_harness(
+    agent = create_harness(
         model=build_model(authenticated, trace=trace),
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={
@@ -93,3 +93,8 @@ def create_agent(
         hooks=[RetryMalformedToolCalls(), *(hooks or [])],
         callback_handler=None,
     )
+    # The session snapshot persists the system prompt and restores it on init,
+    # which would pin old conversations to the prompt they started with. The
+    # code is the source of truth: re-apply it after the restore.
+    agent.system_prompt = SYSTEM_PROMPT
+    return agent

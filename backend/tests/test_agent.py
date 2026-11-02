@@ -8,12 +8,13 @@ future harness release adds may slip in silently.
 """
 
 import pytest
+from strands._async import run_async
 from strands.models import ModelRouter
 from strands.tools.mcp import MCPClient
 from strands.tools.tools import PythonAgentTool
 
 from backend import agent as agent_module
-from backend.agent import EXPECTED_TOOLS, MCP_TOOLS, create_agent
+from backend.agent import EXPECTED_TOOLS, MCP_TOOLS, SYSTEM_PROMPT, create_agent
 from backend.providers import MODELS_AUTHENTICATED, MODELS_PUBLIC
 
 
@@ -70,3 +71,17 @@ def _router_candidates(agent):
     routers = [p for p in agent._plugin_registry._plugins.values() if isinstance(p, ModelRouter)]
     assert len(routers) == 1
     return routers[0].candidates
+
+
+def test_restored_session_gets_current_system_prompt(harness_env):
+    # Snapshots persist the system prompt; an old conversation must still run
+    # with the current one, while keeping its messages.
+    agent = create_agent("conv-stale-prompt")
+    agent.system_prompt = "OLD PROMPT"
+    agent.messages.append({"role": "user", "content": [{"text": "háblame de bulbasaur"}]})
+    run_async(lambda: agent._session_manager.save_snapshot(agent, is_latest=True))
+    agent.cleanup()
+
+    restored = create_agent("conv-stale-prompt")
+    assert restored.system_prompt == SYSTEM_PROMPT
+    assert restored.messages == [{"role": "user", "content": [{"text": "háblame de bulbasaur"}]}]
