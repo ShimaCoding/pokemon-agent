@@ -206,8 +206,8 @@ def test_system_prompt_budget():
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
     assert len(protocol) <= 1850
-    # +200 over #16 for the past-results and index rule of #18 (~60 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 3700
+    # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 3750
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
