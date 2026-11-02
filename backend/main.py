@@ -354,11 +354,12 @@ class _ToolTrace:
         index = self._index_by_id.get(uid, -1)
         text = _extract_result_text(event.result)
         logger.info("[TOOL] Resultado de %s: %.120s%s", name, text, "…" if len(text) > 120 else "")
-        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": text})
+        display = text
+        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display})
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
             input_data=dict(event.tool_use.get("input") or {}),
-            output_data=text,
+            output_data=display,
             error=event.result.get("status") == "error",
         )
 
