@@ -11,18 +11,6 @@ El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SP
 
 ---
 
-## Capturas de pantalla
-
-| Herramientas MCP descubiertas dinámicamente | Respuesta con narración Dexter |
-|:---:|:---:|
-| ![MCP Tools panel](Screenshot%202026-03-29%20at%2011.56.32%E2%80%AFPM.png) | ![Dexter narration](Screenshot%202026-03-29%20at%2011.50.58%E2%80%AFPM.png) |
-
-| Trazas del LLM Router con fallback | Admin dashboard |
-|:---:|:---:|
-| ![Router fallback traces](Screenshot%202026-03-29%20at%2011.55.30%E2%80%AFPM.png) | ![Admin dashboard](Screenshot%202026-03-29%20at%2011.57.25%E2%80%AFPM.png) |
-
----
-
 ## Conceptos agénticos que ilustra el proyecto
 
 | Concepto | Descripción |
@@ -60,11 +48,14 @@ Abre **http://localhost:8000** en el navegador.
 ### Desarrollo local
 
 ```bash
-# Backend
-python -m uvicorn backend.main:app --reload
+# Una vez: crea .venv (Python 3.11) e instala dependencias de backend y frontend
+make setup
+
+# Backend (http://localhost:8000; otro puerto: make backend PORT=8010)
+make backend
 
 # Frontend (en otra terminal)
-cd frontend && npm install && npm run dev
+make frontend
 ```
 
 ### Desarrollo con Conductor

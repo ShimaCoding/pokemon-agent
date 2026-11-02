@@ -13,8 +13,10 @@ LLM requests are routed through LiteLLM with automatic provider fallback (Groq â
 ## Running the App
 
 ```bash
-# Local development
-python -m uvicorn backend.main:app --reload
+# Local development (make setup once; deps go to .venv via uv)
+make setup
+make backend    # PORT=8010 to change the port
+make frontend   # Vite on :5173, proxies to BACKEND_URL (default :8000)
 
 # Docker (production-like, port 8002)
 docker-compose up --build
