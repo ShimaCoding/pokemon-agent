@@ -17,6 +17,14 @@ from backend.providers import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _shipped_effort(monkeypatch):
+    # The module reads REASONING_EFFORT_* once at import (env and .env); pin the
+    # shipped defaults so a local A/B override does not break these tests.
+    monkeypatch.setattr(providers, "REASONING_EFFORT_ROUTING", providers.DEFAULT_REASONING_EFFORT["routing"])
+    monkeypatch.setattr(providers, "REASONING_EFFORT_FINAL", providers.DEFAULT_REASONING_EFFORT["final"])
+
+
 def test_public_requests_only_get_the_small_model():
     assert model_ids(authenticated=False) == ["groq/openai/gpt-oss-20b"]
 
