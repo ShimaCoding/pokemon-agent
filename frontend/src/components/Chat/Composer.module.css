@@ -5,7 +5,7 @@
   border-top: 2px solid var(--gbc-border);
   padding: 12px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  /* Slides in when the welcome dialog turns into this bar (global.css). */
+  /* Slides in when the first message leaves the welcome screen (global.css). */
   view-transition-name: dexter-bar;
 }
 
@@ -30,8 +30,6 @@
   color: #000;
   border: 2px solid var(--gbc-border);
   padding: 9px 14px;
-  /* Same name as the welcome dialog: the dialog morphs into this input. */
-  view-transition-name: dexter-input;
 }
 .chatInput::placeholder { color: var(--gbc-mid); font-size: 13px; }
 .chatInput:focus { outline: 2px solid var(--gbc-gold); outline-offset: 2px; border-color: var(--gbc-gold); }

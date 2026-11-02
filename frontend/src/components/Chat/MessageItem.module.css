@@ -14,6 +14,11 @@
   box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px var(--gbc-light), 3px 3px 0 rgba(0, 0, 0, 0.15);
 }
 
+/* Landing spot for the question sent from the welcome dialog (global.css). */
+.userRow:first-child .user { view-transition-name: dexter-bubble; }
+.userRow:first-child .userText { view-transition-name: dexter-query; }
+.userRow:first-child + .assistant { view-transition-name: dexter-reply; }
+
 .userLabel { display: block; font-size: 10px; color: var(--gbc-mid); margin-bottom: 4px; }
 .userText { font-size: 13px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
 
