@@ -13,6 +13,8 @@ export interface AgentInitEvent {
   skill_loaded: string | null
   system_prompt_preview: string | null
   history_messages: number
+  // 1-based turn of the conversation (#18); missing in traces saved before it.
+  turn?: number
   timestamp_ms: number
 }
 

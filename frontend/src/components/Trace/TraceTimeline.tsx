@@ -45,6 +45,7 @@ function summarize(step: Step, next: Step | undefined, finished: boolean): Summa
       const e = step.event
       const sub = [
         e.skill_loaded && `skill ${e.skill_loaded}`,
+        e.turn && `turno ${e.turn}`,
         e.history_messages > 0 && `recuerda ${e.history_messages} mensajes`,
       ].filter(Boolean).join(' · ')
       return { icon: '●', tone: 'init', label: `Preparó ${e.mcp_tools_count} herramientas`, sub, pending: false }

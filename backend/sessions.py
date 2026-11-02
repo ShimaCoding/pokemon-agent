@@ -48,6 +48,8 @@ def _session_dirs(root: Path) -> list[Path]:
 
     The harness storage namespaces each subsystem: ``session/<id>/…`` holds the
     message snapshot and ``context/<id>/…`` the context manager's offloaded data.
+    Since #18 the context manager has no stash, so ``context/<id>`` only exists
+    for older conversations; it is still pruned until those expire.
     """
     return [
         p

@@ -135,3 +135,58 @@ def test_unknown_tool_result_passes_through():
     events = _tool_events("skills", None, status="error")
     assert [e["type"] for e in events] == ["tool_call", "tool_result"]
     assert events[1]["result"] == "tabla"
+
+
+# --- /api/agent/run turn counter ----------------------------------------------------
+
+
+class _StubAgent:
+    """Just enough of a strands Agent for _sse_generator, without MCP or a model."""
+
+    def __init__(self, messages):
+        from strands.agent.state import AgentState
+
+        self.tool_names = ["get_pokedex_entry"]
+        self.messages = messages
+        self.state = AgentState()
+
+    async def stream_async(self, prompt):
+        self.messages.append({"role": "user", "content": [{"text": prompt}]})
+        yield {"data": "Escaneo completado."}
+        yield {"result": SimpleNamespace(metrics=SimpleNamespace(accumulated_usage={"inputTokens": 10}))}
+
+    def cleanup(self):
+        pass
+
+
+def _sse_events(res) -> list[dict]:
+    import json
+
+    return [json.loads(line[6:]) for line in res.text.splitlines() if line.startswith("data: ")]
+
+
+def test_run_reports_conversation_turn(client, monkeypatch):
+    from backend import agent as agent_module
+    from backend import telemetry
+
+    history = [
+        {"role": "user", "content": [{"text": "háblame de bulbasaur"}]},
+        {"role": "assistant", "content": [{"text": "BULBASAUR. El Pokémon Semilla."}]},
+    ]
+    stub = _StubAgent(history)
+    annotations: list[dict] = []
+    monkeypatch.setattr(agent_module, "create_agent", lambda *args, **kwargs: stub)
+    monkeypatch.setattr(main, "log_query", lambda **kwargs: None)
+    monkeypatch.setattr(telemetry, "annotate", lambda span, **fields: annotations.append(fields))
+
+    body = {"query": "¿y la de charmander?", "conversation_id": "turn-test-1234"}
+    events = _sse_events(client.post("/api/agent/run", json=body))
+    init = next(e for e in events if e["type"] == "agent_init")
+    # Restored history without a counter (pre-#18 snapshot): 1 past turn, so this is turn 2.
+    assert init["turn"] == 2
+    assert init["history_messages"] == 2
+    assert annotations[-1]["metadata"]["turn"] == 2
+    assert annotations[-1]["metadata"]["history_messages"] == 3
+
+    events = _sse_events(client.post("/api/agent/run", json=body))
+    assert next(e for e in events if e["type"] == "agent_init")["turn"] == 3

@@ -3,8 +3,13 @@ Tests for the harness configuration in backend/agent.py.
 
 The harness ships tools that are dangerous on a public site (shell, file
 editing, code execution, subagents, web fetch). The agent must expose exactly
-the MCP server's tools plus `retrieve_context` — nothing that a future harness
-release adds may slip in silently.
+the MCP server's tools — nothing that a future harness release adds may slip in
+silently.
+
+`retrieve_context` is gone on purpose (#18): it reads back what the context
+manager offloads by reference, but our compaction never offloads (old tool
+results become a "call the tool again" stub), so the stash is disabled and the
+tool would only cost ~290 prompt tokens per call.
 
 `skills` is gone on purpose (#16): loading the Dexter narration skill cost a
 whole LLM round-trip per Pokédex question and re-sent ~900 tokens of
@@ -13,9 +18,14 @@ SYSTEM_PROMPT. The tests below also make sure no AgentSkills plugin comes
 back through a harness default.
 """
 
+import copy
+import shutil
+from pathlib import Path
+
 import pytest
 from strands._async import run_async
 from strands.models import ModelRouter
+from strands.models.litellm import LiteLLMModel
 from strands.tools.mcp import MCPClient
 from strands.tools.tools import PythonAgentTool
 from strands.vended_plugins.skills import AgentSkills
@@ -23,10 +33,19 @@ from strands.vended_plugins.skills import AgentSkills
 from backend import agent as agent_module
 from backend.agent import (
     EXPECTED_TOOLS,
+    HARNESS_TOOLS,
     MCP_TOOLS,
     SYSTEM_PROMPT,
     create_agent,
     pokemon_slug,
+)
+from backend.context import (
+    INDEX_PREFIX,
+    TOOL_RESULT_STUB,
+    TURN_STATE_KEY,
+    CompactPastTurns,
+    next_turn,
+    turn_starts,
 )
 from backend.providers import MODELS_AUTHENTICATED, MODELS_PUBLIC
 
@@ -55,6 +74,9 @@ def harness_env(monkeypatch, tmp_path):
 def test_agent_exposes_exactly_the_expected_tools(harness_env):
     agent = create_agent("test-conversation")
     assert set(agent.tool_names) == EXPECTED_TOOLS
+    assert HARNESS_TOOLS == frozenset()
+    assert EXPECTED_TOOLS == MCP_TOOLS
+    assert "retrieve_context" not in agent.tool_names
 
 
 def test_agent_has_no_dangerous_harness_tools(harness_env):
@@ -102,6 +124,11 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
     assert "Cierre sin título ni encabezado" in SYSTEM_PROMPT
     assert "sin títulos de sección" in SYSTEM_PROMPT
     assert "omítelo en vez de inventarlo" in SYSTEM_PROMPT
+    # Past tool results are stubbed and old turns only indexed (#18): re-call,
+    # never answer or quote them from memory.
+    assert INDEX_PREFIX.strip("[: ") in SYSTEM_PROMPT
+    assert "vuelve a llamar a la herramienta según ese índice" in SYSTEM_PROMPT
+    assert "nunca respondas ni cites datos de memoria" in SYSTEM_PROMPT
     # Persona stays.
     assert SYSTEM_PROMPT.lstrip().startswith("Eres Dexter")
     assert "disonancia léxica" in SYSTEM_PROMPT
@@ -179,7 +206,8 @@ def test_system_prompt_budget():
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
     assert len(protocol) <= 1850
-    assert len(SYSTEM_PROMPT) <= 3500
+    # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 3750
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -194,3 +222,63 @@ def test_restored_session_gets_current_system_prompt(harness_env):
     restored = create_agent("conv-stale-prompt")
     assert restored.system_prompt == SYSTEM_PROMPT
     assert restored.messages == [{"role": "user", "content": [{"text": "háblame de bulbasaur"}]}]
+
+
+def test_agent_uses_compacting_context_manager(harness_env, tmp_path):
+    agent = create_agent("test-conversation")
+    manager = agent.context_manager
+    assert manager.stash is None
+    # Ours first; the SDK's overflow guard stays last.
+    assert [s.name for s in manager._strategies] == [CompactPastTurns.name, "offload:emergency-truncate"]
+    agent.messages.append({"role": "user", "content": [{"text": "hola"}]})
+    run_async(lambda: agent._session_manager.save_snapshot(agent, is_latest=True))
+    assert not (tmp_path / "context").exists()
+
+
+SESSION6 = Path(__file__).parent / "fixtures" / "session6_snapshot.json"
+
+
+def test_restores_legacy_snapshot_and_compacts_it(harness_env, monkeypatch, tmp_path):
+    # A pre-#18 snapshot: 6 turns, full tool results, an external stash
+    # reference and no turn counter. It must restore as is and get compacted
+    # before the first model call, and the compacted form must be persisted.
+    conversation_id = "legacy-session6"
+    snapshot = tmp_path / "session" / conversation_id / "scopes" / "agent" / "default" / "snapshots" / "snapshot_latest.json"
+    snapshot.parent.mkdir(parents=True)
+    shutil.copy(SESSION6, snapshot)
+
+    agent = create_agent(conversation_id)
+    assert len(agent.messages) == 34
+    assert agent.context_manager.stash is None
+    assert next_turn(agent) == 7
+
+    sent: list[list[dict]] = []
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        sent.append(copy.deepcopy(messages))
+        yield {"messageStart": {"role": "assistant"}}
+        yield {"contentBlockDelta": {"delta": {"text": "MEWTWO. El Pokémon Genético."}}}
+        yield {"contentBlockStop": {}}
+        yield {"messageStop": {"stopReason": "end_turn"}}
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+    agent("¿y la de mewtwo?")
+    agent.cleanup()
+
+    # What the model saw: 4 past turns (squirtle onwards), headed by the index
+    # of the dropped ones, + the new question.
+    (messages,) = sent
+    assert len(turn_starts(messages)) == 5
+    index, question = messages[0]["content"]
+    assert question == {"text": "ahora squirtle"}
+    assert "1) bulbasaur (get_pokedex_entry); 2) charmander (get_pokedex_entry)" in index["text"]
+    results = [b["toolResult"] for m in messages for b in m["content"] if "toolResult" in b]
+    assert results and all(r["content"] == [{"text": TOOL_RESULT_STUB}] for r in results)
+    assert "pikachu" in str(messages) and "eevee" in str(messages)
+
+    # Persisted: the snapshot holds exactly that history plus the reply.
+    restored = create_agent(conversation_id)
+    assert [(m["role"], m["content"]) for m in restored.messages[:-1]] == [(m["role"], m["content"]) for m in messages]
+    assert restored.messages[-1]["content"] == [{"text": "MEWTWO. El Pokémon Genético."}]
+    assert not any("reasoningContent" in b for m in restored.messages for b in m["content"])
+    assert restored.state.get(TURN_STATE_KEY) == 7
