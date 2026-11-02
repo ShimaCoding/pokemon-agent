@@ -21,7 +21,13 @@ from strands.tools.tools import PythonAgentTool
 from strands.vended_plugins.skills import AgentSkills
 
 from backend import agent as agent_module
-from backend.agent import EXPECTED_TOOLS, MCP_TOOLS, SYSTEM_PROMPT, create_agent
+from backend.agent import (
+    EXPECTED_TOOLS,
+    MCP_TOOLS,
+    SYSTEM_PROMPT,
+    create_agent,
+    pokemon_slug,
+)
 from backend.providers import MODELS_AUTHENTICATED, MODELS_PUBLIC
 
 
@@ -109,20 +115,70 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
 
 
 def test_system_prompt_rejects_unknown_or_mismatched_entry():
-    # "háblame de pikachuzard" must not become a Pikachu narration: the name
-    # goes to the tool verbatim, and an error or another Pokémon's entry is
-    # reported as missing from the records (epic #15 measurements, regression 1).
-    assert "tal como lo escribió el usuario, sin corregirlo ni adivinarlo" in SYSTEM_PROMPT
-    assert "la herramienta falla o devuelve la ficha de otro Pokémon, no la narres" in SYSTEM_PROMPT
+    # "háblame de pikachuzard" must not become a Pikachu narration: the tool
+    # gets the name the user wrote, and a not-found result or another species'
+    # entry is reported as missing from the records (epic #15 measurements,
+    # regression 1). A number or a form of the same species is not a mismatch.
+    assert "el nombre que escribió el usuario, nunca otro parecido" in SYSTEM_PROMPT
+    assert 'Si responde "not found" o trae otra especie (una forma o un número no cuentan), no lo narres' in SYSTEM_PROMPT
     assert "no existe en los registros" in SYSTEM_PROMPT
+
+
+def test_system_prompt_reports_other_failures_as_scan_failures():
+    # A timeout or MCP error is not "no existe": a real Pokémon must never be
+    # declared missing because the lookup failed.
+    assert "si falla por otro motivo, informa la falla del escaneo y sugiere reintentar" in SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize(
+    ("written", "slug"),
+    [
+        ("pikachu", "pikachu"),
+        ("Mr. Mime", "mr-mime"),
+        ("farfetch'd", "farfetchd"),
+        ("Farfetch’d", "farfetchd"),
+        ("tapu koko", "tapu-koko"),
+        ("Nidoran♀", "nidoran-f"),
+        ("Flabébé", "flabebe"),
+        ("Type: Null", "type-null"),
+        ("Ho-Oh", "ho-oh"),
+        ("25", "25"),
+        ("Giratina", "giratina-altered"),
+        ("mimikyu", "mimikyu-disguised"),
+        ("giratina-origin", "giratina-origin"),
+        # Format only: an unknown name is never swapped for a known one.
+        ("pikachuzard", "pikachuzard"),
+    ],
+)
+def test_pokemon_slug(written, slug):
+    assert pokemon_slug(written) == slug
+
+
+def test_tool_calls_get_pokeapi_slugs(harness_env):
+    from strands.hooks import BeforeToolCallEvent
+
+    agent = create_agent("test-conversation")
+
+    def call(name, tool_input):
+        tool_use = {"toolUseId": "t1", "name": name, "input": tool_input}
+        agent.hooks.invoke_callbacks(BeforeToolCallEvent(agent=agent, selected_tool=None, tool_use=tool_use, invocation_state={}))
+        return tool_use["input"]
+
+    assert call("get_pokedex_entry", {"pokemon": "Mr. Mime"}) == {"pokemon": "mr-mime"}
+    assert call("analyze_pokemon_stats", {"name_or_id": "Giratina"}) == {"name_or_id": "giratina-altered"}
+    assert call("compare_pokemon", {"pokemon_names": ["Tapu Koko", "pikachu"]}) == {"pokemon_names": ["tapu-koko", "pikachu"]}
+    # Other arguments and non-MCP tools are left alone.
+    assert call("get_type_effectiveness", {"attacking_type": "Fire"}) == {"attacking_type": "Fire"}
+    assert call("retrieve_context", {"pokemon": "Mr. Mime"}) == {"pokemon": "Mr. Mime"}
 
 
 def test_system_prompt_budget():
     # The prompt is sent on every LLM call (cached after the first). The inline
     # protocol must stay condensed (~360 tokens, #16): the persona above it
-    # already covers the tone rules of the old SKILL.md.
+    # already covers the tone rules of the old SKILL.md. The unknown-name rules
+    # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
-    assert len(protocol) <= 1800
+    assert len(protocol) <= 1850
     assert len(SYSTEM_PROMPT) <= 3500
 
 

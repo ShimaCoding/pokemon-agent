@@ -11,12 +11,17 @@ memory shared across every visitor), so everything is switched off except:
 
 The Dexter narration protocol lives inline in ``SYSTEM_PROMPT`` instead of a
 harness skill, so a Pokédex answer needs no extra LLM call to load it (#16).
+The prompt asks for the name the user wrote, never a look-alike; turning it into
+a PokeAPI slug ("Mr. Mime" → "mr-mime", "giratina" → "giratina-altered") is
+done in code by ``NormalizePokemonNames``.
 
 ``builtin_tools=[]`` pins the list, so tools added by future harness releases
 don't slip in; ``tests/test_agent.py`` asserts the exact tool set.
 """
 
 import os
+import re
+import unicodedata
 from typing import Any
 
 from strands import Agent
@@ -41,6 +46,46 @@ MCP_TOOLS = frozenset(
         "search_pokemon",
     }
 )
+# MCP tool arguments that name Pokémon (a name, a number, or a list of names).
+POKEMON_NAME_ARGS = frozenset({"pokemon", "name_or_id", "pokemon_names"})
+# Species whose PokeAPI /pokemon/<species> is a 404: only their forms exist
+# (PokeAPI default varieties, checked live).
+DEFAULT_FORMS = {
+    "aegislash": "aegislash-shield",
+    "basculegion": "basculegion-male",
+    "basculin": "basculin-red-striped",
+    "darmanitan": "darmanitan-standard",
+    "deoxys": "deoxys-normal",
+    "dudunsparce": "dudunsparce-two-segment",
+    "eiscue": "eiscue-ice",
+    "enamorus": "enamorus-incarnate",
+    "giratina": "giratina-altered",
+    "gourgeist": "gourgeist-average",
+    "indeedee": "indeedee-male",
+    "keldeo": "keldeo-ordinary",
+    "landorus": "landorus-incarnate",
+    "lycanroc": "lycanroc-midday",
+    "maushold": "maushold-family-of-four",
+    "meloetta": "meloetta-aria",
+    "meowstic": "meowstic-male",
+    "mimikyu": "mimikyu-disguised",
+    "minior": "minior-red-meteor",
+    "morpeko": "morpeko-full-belly",
+    "oinkologne": "oinkologne-male",
+    "oricorio": "oricorio-baile",
+    "palafin": "palafin-zero",
+    "pumpkaboo": "pumpkaboo-average",
+    "shaymin": "shaymin-land",
+    "squawkabilly": "squawkabilly-green-plumage",
+    "tatsugiri": "tatsugiri-curly",
+    "thundurus": "thundurus-incarnate",
+    "tornadus": "tornadus-incarnate",
+    "toxtricity": "toxtricity-amped",
+    "urshifu": "urshifu-single-strike",
+    "wishiwashi": "wishiwashi-solo",
+    "wormadam": "wormadam-plant",
+    "zygarde": "zygarde-50",
+}
 HARNESS_TOOLS = frozenset({"retrieve_context"})
 EXPECTED_TOOLS = MCP_TOOLS | HARNESS_TOOLS
 
@@ -70,12 +115,52 @@ Protocolo de narración, para responder con el resultado de get_pokedex_entry: p
 5. Cierre sin título ni encabezado (nada de "Conclusión:"): un último párrafo, escrito por ti para este Pokémon, que fluye con el relato y aterriza el ego del entrenador (el empeño no basta sin buen juicio, o la brecha entre lo que el Pokémon puede hacer y lo que el entrenador comprende), con el mismo frío diagnóstico, nunca un remate teatral; puede empezar con "Me temo que…".
 Tu sarcasmo es cruel pero inocuo. Con otras herramientas no fuerces esta estructura: comenta su resultado con la misma voz.
 Usa solo datos presentes en los resultados de las herramientas; si falta un dato (genus, hábitat, flavor text), omítelo en vez de inventarlo.
-Pasa a las herramientas el nombre tal como lo escribió el usuario, sin corregirlo ni adivinarlo.
-Si la herramienta falla o devuelve la ficha de otro Pokémon, no la narres: informa con el mismo tono clínico que ese Pokémon no existe en los registros (puedes preguntar si se refería al más parecido).
+Pasa a las herramientas el nombre que escribió el usuario, nunca otro parecido.
+Si responde "not found" o trae otra especie (una forma o un número no cuentan), no lo narres: informa con el mismo tono clínico que ese Pokémon no existe en los registros; si falla por otro motivo, informa la falla del escaneo y sugiere reintentar.
 
 Para preguntas que no sean sobre un Pokémon específico, responde directamente
 con el tono y la personalidad de Dexter descrita anteriormente.
 """
+
+
+def pokemon_slug(name: str) -> str:
+    """The PokeAPI slug for a Pokémon name as a user writes it.
+
+    The MCP server only lowercases, so "mr. mime" or "farfetch'd" reach PokeAPI
+    as-is and fail. Format only: the name is never swapped for another species.
+    """
+    text = name.strip().lower().replace("♀", "-f").replace("♂", "-m")
+    text = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    text = re.sub(r"[\s._:]+", "-", text)
+    text = re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9-]", "", text)).strip("-")
+    if not text:
+        return name
+    return DEFAULT_FORMS.get(text, text)
+
+
+class NormalizePokemonNames:
+    """Rewrite Pokémon-name arguments of MCP tool calls into PokeAPI slugs.
+
+    Runs before the trace hooks, so the tool_call event, the widget's tool input
+    and the history all carry the name that was actually looked up.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import BeforeToolCallEvent
+
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+
+    @staticmethod
+    def _on_call(event) -> None:
+        tool_input = event.tool_use.get("input")
+        if event.tool_use.get("name") not in MCP_TOOLS or not isinstance(tool_input, dict):
+            return
+        for key in POKEMON_NAME_ARGS & tool_input.keys():
+            value = tool_input[key]
+            if isinstance(value, str):
+                tool_input[key] = pokemon_slug(value)
+            elif isinstance(value, list):
+                tool_input[key] = [pokemon_slug(v) if isinstance(v, str) else v for v in value]
 
 
 def create_agent(
@@ -105,7 +190,7 @@ def create_agent(
         # omitted: the harness default loads ./.agent/skills when present.
         skills=False,
         session={"id": conversation_id, "dir": SESSIONS_DIR},
-        hooks=[RetryMalformedToolCalls(), *(hooks or [])],
+        hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or [])],
         callback_handler=None,
     )
     # The session snapshot persists the system prompt and restores it on init,
