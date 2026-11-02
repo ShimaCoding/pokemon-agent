@@ -219,8 +219,8 @@ Por eso en la traza ves siempre el par: un `tool_call` seguido —a veces ciento
 Cada request a `/api/agent/run` produce una secuencia de eventos SSE que cuentan la historia del agente de principio a fin. Aprender a leerlos es la forma más rápida de entender —y debuggear— cualquier agente. Este es el orden típico:
 
 - **`start`** — El servidor aceptó el request y seleccionó un proveedor LLM. El agente todavía no arrancó; sólo confirmamos que llegamos.
-- **`agent_init`** — Strands se conectó al servidor MCP y descubrió las tools disponibles. Aquí ves cuántas tools tiene el agente y el protocolo de narración activo (`skill_loaded`, incluido en el system prompt). Si algo anda mal con MCP, este evento revela problemas temprano.
-- **`llm_call`** — Se envía el prompt al LLM (con el historial completo). El campo `call_index` te dice cuántas veces vamos: un agente puede tener varias llamadas al LLM en un mismo run (una por cada "turno de razonamiento" entre tool calls).
+- **`agent_init`** — Strands se conectó al servidor MCP y descubrió las tools disponibles. Aquí ves cuántas tools tiene el agente, el protocolo de narración activo (`skill_loaded`, incluido en el system prompt), en qué turno de la conversación vas (`turn`) y cuántos mensajes recuerda (`history_messages`). Los turnos anteriores se guardan compactados: como mucho los 4 últimos, con los resultados de las tools reemplazados por un aviso y las respuestas recortadas. Si algo anda mal con MCP, este evento revela problemas temprano.
+- **`llm_call`** — Se envía el prompt al LLM (con el historial compactado). El campo `call_index` te dice cuántas veces vamos: un agente puede tener varias llamadas al LLM en un mismo run (una por cada "turno de razonamiento" entre tool calls).
 - **`model_attempt`** — Dentro del LiteLLM Router, se está probando un modelo concreto. `status: "success"` = respondió, `status: "failed"` = el Router va a pasar al siguiente. Aquí ves el fallback multi-proveedor funcionando.
 - **`tool_call`** — El LLM decidió llamar una tool. Los `args` son el input exacto que el modelo produjo. El `index` identifica este call para matchearlo con su resultado.
 - **`tool_result`** — La tool terminó y el resultado ya se le entregó al LLM. Mismo `index` que el tool_call correspondiente.
@@ -330,7 +330,9 @@ EVENTS_CATALOG: dict = {
         "description_md": (
             "**agent_init** — Strands se conectó al servidor MCP, descubrió las "
             "tools y cargó el protocolo de narración de Dexter (incluido en el "
-            "system prompt). A partir de aquí el "
+            "system prompt). `turn` es el número de turno de la conversación y "
+            "`history_messages` cuántos mensajes restauró de la sesión (los turnos "
+            "anteriores van compactados). A partir de aquí el "
             "agente está listo para razonar."
         ),
         "related_lesson_id": "mcp_protocol",

@@ -421,6 +421,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "start",         "provider": str, "conversation_id": str}
       {"type": "agent_init",    "mcp_tools_count": int, "tool_names": list, "skill_loaded": str, ...}
                                 # skill_loaded: the narration protocol, always inline in SYSTEM_PROMPT
+                                # turn: 1-based turn of the conversation; history_messages: after the last compaction
       {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int,
                                 "call_role": "routing"|"final", "reasoning_effort": str}
                                 # routing: opens the turn (picks a tool or answers directly); final: after tool results
@@ -435,6 +436,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
     from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent
+    from backend.context import next_turn
 
     start_time = time.time()
 
@@ -514,6 +516,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                 hooks=[tool_trace],
             )
             tool_names = list(agent.tool_names)
+            turn = next_turn(agent)
             yield _sse(
                 {
                     "type": "agent_init",
@@ -522,6 +525,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                     "skill_loaded": SKILL_NAME,
                     "system_prompt_preview": SYSTEM_PROMPT.strip()[:200],
                     "history_messages": len(agent.messages),
+                    "turn": turn,
                     "timestamp_ms": elapsed_ms(),
                 }
             )
@@ -581,6 +585,9 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "request_ttft_ms": done["ttft_ms"],
                                 "llm_calls": done["llm_calls"],
                                 "models_tried": done["models_tried"],
+                                # Compaction bounds the history, so the turn tells how deep the session is.
+                                "turn": turn,
+                                "history_messages": len(agent.messages),
                             },
                             metrics={
                                 "input_tokens": done["input_tokens"],
