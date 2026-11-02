@@ -443,9 +443,10 @@ def evaluate(base: dict, cand: dict, *, gate_judge: bool = False) -> list[GateRe
         drop = 100 * (bs["passed"] / bs["total"] - cs["passed"] / cs["total"])
         z = two_proportion_z(bs["passed"], bs["total"], cs["passed"], cs["total"])
         delta = f"{0.0 - drop:+.1f} pp"
-        if metric in STRICT_METRICS:
-            flagged = drop > 1e-9
-            detail = f"{delta}, strict: any drop" if flagged else delta
+        if drop <= 1e-9:
+            flagged, detail = False, delta
+        elif metric in STRICT_METRICS:
+            flagged, detail = True, f"{delta}, strict: any drop"
         elif drop <= allowed + 1e-9:
             flagged, detail = False, f"{delta}, within {allowed:g} pp"
         elif z <= Z_CRITICAL:
@@ -463,7 +464,9 @@ def evaluate(base: dict, cand: dict, *, gate_judge: bool = False) -> list[GateRe
         drop = bm["mean"] - cm["mean"]
         z = mean_z(bm, cm)
         delta = f"{0.0 - drop:+.2f}"
-        if drop <= allowed + 1e-9:
+        if drop <= 1e-9:
+            flagged, detail = False, delta
+        elif drop <= allowed + 1e-9:
             flagged, detail = False, f"{delta}, within {allowed:g}"
         elif z is None:  # no spread known: the tolerance alone decides
             flagged, detail = True, f"{delta}, no sd: tolerance only"
@@ -731,7 +734,7 @@ def main(argv: list[str] | None = None) -> int:
             base, cand = regrade(base, cases), regrade(cand, cases)
             print(f"(both runs re-graded with the current checks, {checks.CHECKS_VERSION}; judge verdicts as recorded)\n")
         results = evaluate(base, cand, gate_judge=args.gate_judge)
-        print(compare_table(base, cand, results))
+        print(compare_table(base, cand, results), flush=True)
         regressions = [r for r in results if r.regression]
         for reg in regressions:
             print(f"REGRESSION {reg.metric}: {reg.base} → {reg.candidate} ({reg.detail})", file=sys.stderr)
