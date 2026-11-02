@@ -323,6 +323,10 @@ def test_index_skips_legacy_harness_tools(session6):
 FIRST_TURN_INPUT = 3_412
 INPUT_BUDGET = 5_000
 LLM_CALLS_PER_POKEDEX_TURN = 2
+# History estimate at session6 turns 5-6. With 300-char replies it read ~785,
+# and the harness measured an input p95 of 5,148 there (epic #15 measurements):
+# PAST_REPLY_CHARS 200 brings it to ~683, about 200 input tokens less per request.
+SESSION6_HISTORY_CAP = 700
 
 
 def test_history_stays_under_input_budget(session6):
@@ -337,6 +341,7 @@ def test_history_stays_under_input_budget(session6):
     # Bounded: once the window is full, history stops growing.
     assert compacted[MAX_PAST_TURNS:] == pytest.approx([compacted[MAX_PAST_TURNS - 1]] * (6 - MAX_PAST_TURNS), abs=50)
     assert raw[-1] > 10 * compacted[-1]
+    assert max(compacted) <= SESSION6_HISTORY_CAP
     # Conservative: the fixture still carries the old `skills` call pairs.
     estimated_input = FIRST_TURN_INPUT + LLM_CALLS_PER_POKEDEX_TURN * max(compacted)
     assert estimated_input < INPUT_BUDGET

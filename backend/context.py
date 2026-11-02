@@ -27,8 +27,9 @@ from strands.experimental.context_manager import ContextManager, ContextState
 # (three turns back) plus one.
 MAX_PAST_TURNS = 4
 # Past replies keep their head: Dexter opens with "NOMBRE. Pokémon <genus>." and
-# a comparison opens with its conclusion, so the subject survives the cut.
-PAST_REPLY_CHARS = 300
+# a comparison opens with its conclusion, so the subject survives the cut. 300
+# measured an input p95 of 5,148 at turns 5-6 (target < 5,000): plan fallback.
+PAST_REPLY_CHARS = 200
 # Says the data is gone, not just hidden: a softer "omitido" stub let the model
 # quote an earlier Pokémon's flavor text from memory instead of re-calling.
 TOOL_RESULT_STUB = (
