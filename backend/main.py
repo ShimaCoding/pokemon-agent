@@ -287,6 +287,7 @@ async def get_wiki_events_catalog(request: Request):
 @limiter.limit("3/minute", exempt_when=_is_authenticated_request)
 async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
     authenticated = _is_valid_api_key(api_key)
+    # Every yielded SSE frame must reach the client as its own chunk (test_streaming.py).
     return StreamingResponse(
         _sse_generator(body.query, body.conversation_id, authenticated=authenticated),
         media_type="text/event-stream",
