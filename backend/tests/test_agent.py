@@ -94,6 +94,7 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
     assert '"BULBASAUR. El Pokémon Semilla."' in SYSTEM_PROMPT
     assert "genus exacto" in SYSTEM_PROMPT
     assert "Cierre sin título ni encabezado" in SYSTEM_PROMPT
+    assert "sin títulos de sección" in SYSTEM_PROMPT
     assert "omítelo en vez de inventarlo" in SYSTEM_PROMPT
     # Persona stays.
     assert SYSTEM_PROMPT.lstrip().startswith("Eres Dexter")
