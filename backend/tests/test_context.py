@@ -21,6 +21,9 @@ from strands.agent.state import AgentState
 from strands.experimental.context_manager import ContextState
 
 from backend.context import (
+    INDEX_MAX_ENTRIES,
+    INDEX_PREFIX,
+    INDEX_QUERY_CHARS,
     MAX_PAST_TURNS,
     PAST_REPLY_CHARS,
     REPLY_CUT_MARKER,
@@ -175,8 +178,9 @@ def test_window_keeps_last_turns_whole(session6):
     starts = turn_starts(messages)
     assert len(starts) - 1 == MAX_PAST_TURNS
     assert starts[0] == 0 and messages[0]["role"] == "user"
-    # Turns 3-6 remain: squirtle first.
-    assert messages[0]["content"] == [{"text": "ahora squirtle"}]
+    # Turns 3-6 remain: squirtle first, after the index of turns 1-2.
+    assert messages[0]["content"][1:] == [{"text": "ahora squirtle"}]
+    assert messages[0]["content"][0]["text"].startswith(INDEX_PREFIX)
     # No orphans: every toolUse has its toolResult and vice versa.
     use_ids = {tu["toolUseId"] for tu in _blocks(messages, "toolUse")}
     result_ids = {tr["toolUseId"] for tr in _blocks(messages, "toolResult")}
@@ -216,6 +220,101 @@ def test_followup_names_survive(session6):
         assert name in seen
 
 
+def _pokedex_turn(name: str, question: str | None = None) -> list[dict]:
+    """A finished Pokédex turn: question, tool call, full result, long reply."""
+    tool_id = f"tooluse_{name}"
+    return [
+        {"role": "user", "content": [{"text": question or f"háblame de {name}"}]},
+        {"role": "assistant", "content": [{"toolUse": {"toolUseId": tool_id, "name": "get_pokedex_entry", "input": {"pokemon": name}}}]},
+        {
+            "role": "user",
+            "content": [{"toolResult": {"toolUseId": tool_id, "status": "success", "content": [{"text": json.dumps({"name": name, "flavor_text": "x" * 1500})}]}}],
+        },
+        {"role": "assistant", "content": [{"text": f"{name.upper()}. El Pokémon de prueba. " + "Diagnóstico clínico. " * 60}]},
+    ]
+
+
+def _play(turns: list[list[dict]], question: str) -> list[dict]:
+    """Replay a conversation the way the agent does: compact at each new question."""
+    messages: list[dict] = []
+    for turn in turns:
+        messages.append(turn[0])
+        compact_history(messages)
+        messages.extend(copy.deepcopy(turn[1:]))
+    messages.append({"role": "user", "content": [{"text": question}]})
+    compact_history(messages)
+    return messages
+
+
+def _index(messages: list[dict]) -> str:
+    notes = [b["text"] for m in messages for b in m["content"] if b.get("text", "").startswith(INDEX_PREFIX)]
+    assert len(notes) <= 1
+    return notes[0] if notes else ""
+
+
+SEVEN_TURNS = ("gengar", "bulbasaur", "charmander", "squirtle", "pikachu", "eevee")
+BACK_TO_FIRST = "volviendo al primero que te pregunté, ¿qué tipo era?"
+
+
+def test_dropped_turns_leave_an_index_for_recall():
+    # Perf-18 regression: at turn 7 the first Pokémon (gengar) had been dropped
+    # and the model answered "Eevee, tipo Normal". It must still see gengar.
+    messages = _play([_pokedex_turn(n) for n in SEVEN_TURNS], BACK_TO_FIRST)
+
+    index = _index(messages)
+    assert index == f"{INDEX_PREFIX}1) gengar (get_pokedex_entry); 2) bulbasaur (get_pokedex_entry)]"
+    assert "gengar" in _past_text(messages)
+    # It heads the oldest kept turn, before its question; the current turn is untouched.
+    assert messages[0]["content"] == [{"text": index}, {"text": "háblame de charmander"}]
+    assert messages[turn_starts(messages)[-1] :] == [{"role": "user", "content": [{"text": BACK_TO_FIRST}]}]
+    # The window and the toolUse/toolResult pairing are unchanged by the index.
+    assert len(turn_starts(messages)) - 1 == MAX_PAST_TURNS
+    assert {tu["toolUseId"] for tu in _blocks(messages, "toolUse")} == {tr["toolUseId"] for tr in _blocks(messages, "toolResult")}
+    assert all(a["role"] != b["role"] for a, b in itertools.pairwise(messages))
+
+
+def test_index_merges_across_compactions_without_duplicates():
+    turns = [_pokedex_turn(n) for n in SEVEN_TURNS]
+    # Compacting at every turn (the real flow) or once over the whole history
+    # gives the same index: old entries carry over, none is repeated.
+    incremental = _play(turns, BACK_TO_FIRST)
+    at_once = [m for t in copy.deepcopy(turns) for m in t] + [{"role": "user", "content": [{"text": BACK_TO_FIRST}]}]
+    compact_history(at_once)
+    assert incremental == at_once
+
+    once = copy.deepcopy(incremental)
+    assert compact_history(incremental) is False
+    assert incremental == once
+
+
+def test_index_is_bounded_and_keeps_the_latest_entries():
+    names = [f"pokemon{i}" for i in range(1, 31)]
+    messages = _play([_pokedex_turn(n) for n in names], "¿y el primero?")
+    entries = _index(messages).removeprefix(INDEX_PREFIX).removesuffix("]").split("; ")
+    dropped = len(names) - MAX_PAST_TURNS
+    assert len(entries) == INDEX_MAX_ENTRIES
+    assert entries[0] == f"{dropped - INDEX_MAX_ENTRIES + 1}) pokemon{dropped - INDEX_MAX_ENTRIES + 1} (get_pokedex_entry)"
+    assert entries[-1] == f"{dropped}) pokemon{dropped} (get_pokedex_entry)"
+
+
+def test_index_entry_without_tools_uses_the_question_head():
+    chat = "cuéntame algo sobre ti; ¿por qué eres tan sarcástica con los entrenadores novatos?"
+    turns = [
+        [{"role": "user", "content": [{"text": chat}]}, {"role": "assistant", "content": [{"text": "Respuesta."}]}],
+        *(_pokedex_turn(n) for n in SEVEN_TURNS[:4]),
+    ]
+    index = _index(_play(turns, "¿y la de mew?"))
+    head = " ".join(chat.split()).replace(";", ",")[:INDEX_QUERY_CHARS].rstrip()
+    assert index == f'{INDEX_PREFIX}1) "{head}…"]'
+
+
+def test_index_skips_legacy_harness_tools(session6):
+    # The fixture's `skills` calls consulted nothing worth re-calling.
+    messages = _with_new_turn(session6, BACK_TO_FIRST)
+    compact_history(messages)
+    assert _index(messages) == f"{INDEX_PREFIX}1) bulbasaur (get_pokedex_entry); 2) charmander (get_pokedex_entry)]"
+
+
 # Input budget for a Pokédex question deep in a conversation (#18 acceptance:
 # p95 < 5,000 input tokens in sessions of 5+ turns). A Pokédex request makes 2
 # LLM calls and both re-send the history, so it costs about
@@ -241,6 +340,15 @@ def test_history_stays_under_input_budget(session6):
     # Conservative: the fixture still carries the old `skills` call pairs.
     estimated_input = FIRST_TURN_INPUT + LLM_CALLS_PER_POKEDEX_TURN * max(compacted)
     assert estimated_input < INPUT_BUDGET
+
+
+def test_full_index_stays_under_input_budget():
+    # A long conversation: the index is at its cap (INDEX_MAX_ENTRIES dropped turns).
+    names = [f"pokemon{i}" for i in range(1, INDEX_MAX_ENTRIES + MAX_PAST_TURNS + 2)]
+    messages = _play([_pokedex_turn(n) for n in names], "¿y el primero?")
+    assert len(_index(messages).split("; ")) == INDEX_MAX_ENTRIES
+    history = _estimate_tokens(messages[:-1])
+    assert FIRST_TURN_INPUT + LLM_CALLS_PER_POKEDEX_TURN * history < INPUT_BUDGET
 
 
 def test_strategy_mutates_agent_messages_in_place(session6):

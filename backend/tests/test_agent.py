@@ -40,6 +40,7 @@ from backend.agent import (
     pokemon_slug,
 )
 from backend.context import (
+    INDEX_PREFIX,
     TOOL_RESULT_STUB,
     TURN_STATE_KEY,
     CompactPastTurns,
@@ -123,8 +124,11 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
     assert "Cierre sin título ni encabezado" in SYSTEM_PROMPT
     assert "sin títulos de sección" in SYSTEM_PROMPT
     assert "omítelo en vez de inventarlo" in SYSTEM_PROMPT
-    # Past tool results are stubbed (#18): re-call, never quote them from memory.
-    assert "no cites sus datos de memoria" in SYSTEM_PROMPT
+    # Past tool results are stubbed and old turns only indexed (#18): re-call,
+    # never answer or quote them from memory.
+    assert INDEX_PREFIX.strip("[: ") in SYSTEM_PROMPT
+    assert "vuelve a llamar a la herramienta según ese índice" in SYSTEM_PROMPT
+    assert "nunca respondas ni cites datos de memoria" in SYSTEM_PROMPT
     # Persona stays.
     assert SYSTEM_PROMPT.lstrip().startswith("Eres Dexter")
     assert "disonancia léxica" in SYSTEM_PROMPT
@@ -202,8 +206,8 @@ def test_system_prompt_budget():
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
     assert len(protocol) <= 1850
-    # +100 over #16 for the past-results rule of #18 (~40 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 3600
+    # +200 over #16 for the past-results and index rule of #18 (~60 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 3700
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -261,10 +265,13 @@ def test_restores_legacy_snapshot_and_compacts_it(harness_env, monkeypatch, tmp_
     agent("¿y la de mewtwo?")
     agent.cleanup()
 
-    # What the model saw: 4 past turns (squirtle onwards) + the new question.
+    # What the model saw: 4 past turns (squirtle onwards), headed by the index
+    # of the dropped ones, + the new question.
     (messages,) = sent
     assert len(turn_starts(messages)) == 5
-    assert messages[0]["content"] == [{"text": "ahora squirtle"}]
+    index, question = messages[0]["content"]
+    assert question == {"text": "ahora squirtle"}
+    assert "1) bulbasaur (get_pokedex_entry); 2) charmander (get_pokedex_entry)" in index["text"]
     results = [b["toolResult"] for m in messages for b in m["content"] if "toolResult" in b]
     assert results and all(r["content"] == [{"text": TOOL_RESULT_STUB}] for r in results)
     assert "pikachu" in str(messages) and "eevee" in str(messages)
