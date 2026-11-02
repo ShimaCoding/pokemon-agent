@@ -7,9 +7,9 @@ import { useMessageInput } from './useMessageInput'
 import styles from './Welcome.module.css'
 
 /**
- * Send the first message and let the dialog box fly down into the bottom bar:
- * both share `view-transition-name: dexter-input`, and the 8-bit `steps()`
- * timing lives in global.css.
+ * Send the first message and let the typed question fly into the first "TÚ"
+ * bubble: both share `view-transition-name: dexter-query`; the rest of the
+ * choreography lives in global.css.
  */
 function sendWithTransition(query: string) {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches

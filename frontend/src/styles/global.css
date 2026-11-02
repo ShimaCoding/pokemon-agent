@@ -121,26 +121,37 @@ button:disabled { cursor: not-allowed; }
 ::-webkit-scrollbar-track { background: var(--gbc-bg); }
 ::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
-/* ── Welcome dialog → bottom bar (View Transitions, Welcome.tsx) ── */
-/* Chunky 8-bit movement: the box jumps in frames instead of gliding. */
-::view-transition-group(dexter-input) {
-  animation-duration: 480ms;
-  animation-timing-function: steps(8, end);
+/* ── Welcome → chat (View Transitions, Welcome.tsx) ─────────────── */
+/* The typed question flies from the dialog into the first "TÚ" bubble, the
+   welcome screen drifts up and fades, and the bottom bar slides in. */
+::view-transition-group(*) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-::view-transition-old(dexter-input),
-::view-transition-new(dexter-input) {
-  animation-duration: 480ms;
-  animation-timing-function: steps(4, end);
+/* Groups paint in capture order, so lift the question above its new bubble. */
+::view-transition-group(dexter-query) { z-index: 1; }
+/* Same text on both ends: never stretch it, keep it pinned to the top-left. */
+::view-transition-old(dexter-query),
+::view-transition-new(dexter-query) {
   height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(dexter-welcome) {
+  animation: welcome-out 200ms ease-out both;
+}
+::view-transition-new(dexter-bubble) {
+  animation: bubble-in 300ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+::view-transition-new(dexter-reply) {
+  animation: reply-in 320ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 ::view-transition-new(dexter-bar) {
-  animation: bar-in 480ms steps(4, end) both;
+  animation: bar-in 380ms 60ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 240ms;
-  animation-timing-function: steps(3, end);
-}
+@keyframes welcome-out { to { opacity: 0; transform: translateY(-16px) scale(0.98); } }
+@keyframes bubble-in { from { opacity: 0; transform: scale(0.94); } }
+@keyframes reply-in { from { opacity: 0; transform: translateY(8px); } }
 @keyframes bar-in { from { transform: translateY(100%); } }
 
 @media (prefers-reduced-motion: reduce) {
