@@ -4,7 +4,8 @@ Offline eval harness: the quality gate for prompt, model and context changes (#1
     uv run python -m backend.evals.harness run --label dev-base [--url http://127.0.0.1:8765]
         [--repeat 3] [--pace 21] [--only pokedex followup] [--out .context/evals]
         [--judge [--judge-model groq/openai/gpt-oss-120b]] [--submit]
-    uv run python -m backend.evals.harness compare .context/evals/dev-base.json .context/evals/perf-16.json [--gate-judge]
+    uv run python -m backend.evals.harness compare .context/evals/dev-base.json .context/evals/perf-16.json
+        [--gate-judge] [--regrade]
 
 ``run`` is a plain SSE client of ``POST /api/agent/run``: start any branch's backend
 (anonymous, so the 20b model as in prod) and point ``--url`` at it. Every case in
@@ -25,6 +26,8 @@ LLM sampling is nondeterministic, so ``compare`` gates pass *rates*, not single 
 when it is beyond the tolerance *and* statistically meaningful (z > 1.96); the safety
 metrics ``completed`` and ``no_invented_entry`` flag any drop. Judge metrics are
 reported but gate only with ``--gate-judge``. Every metric prints its z and reason.
+``--regrade`` re-applies the current checks to both stored runs first (e.g. after a
+check fix); judge verdicts are kept as recorded.
 
 ``--submit`` sends the judge results to Datadog LLM Observability as evaluations on
 each turn's agent span (``done.trace_id``/``span_id``, present when the backend runs
@@ -43,6 +46,7 @@ Output: ``<out>/<label>.json`` and a markdown summary on stdout.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -296,6 +300,32 @@ def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]
             problems.append(grounded["reasoning"])
         out["no_invented_entry"] = _metric(not problems, "; ".join(problems) or f"no inventó datos de {fake}")
     return out
+
+
+def judge_metric(verdict: dict) -> dict:
+    """The judge's grounded verdict as a pass rate like the rule checks (the persona score is a mean)."""
+    return _metric(verdict["grounded"], verdict["reasoning"], unsupported_claims=verdict["unsupported_claims"])
+
+
+def regrade(doc: dict, cases: list[dict]) -> dict:
+    """A stored run re-graded with the current checks and ``cases`` (judge verdicts kept as recorded). Pure.
+
+    Lets ``compare`` apply a fixed check to runs recorded before the fix.
+    """
+    doc = copy.deepcopy(doc)
+    by_id = {c["id"]: c for c in cases}
+    for run_doc in doc["runs"]:
+        if run_doc["case"] not in by_id:
+            raise SystemExit(f"{doc['label']}: case {run_doc['case']!r} is not in the cases file")
+        evidence: list[str] = []
+        for spec, record in zip(by_id[run_doc["case"]]["turns"], run_doc["turns"]):
+            if record["status"] == "done":
+                evidence.extend(evidence_texts(record))
+            record["metrics"] = grade_turn(spec, record, list(evidence))
+            if verdict := record.get("judge"):
+                record["metrics"]["judge_grounded"] = judge_metric(verdict)
+    doc["summary"] = summarize(doc)
+    return doc
 
 
 def evidence_texts(record: dict) -> list[str]:
@@ -633,10 +663,7 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                                 focus=spec.get("judge_focus"),
                             )
                             if verdict := record["judge"]:
-                                # A gated pass rate like the rule checks (the persona score is a mean).
-                                record["metrics"]["judge_grounded"] = _metric(
-                                    verdict["grounded"], verdict["reasoning"], unsupported_claims=verdict["unsupported_claims"]
-                                )
+                                record["metrics"]["judge_grounded"] = judge_metric(verdict)
                                 if submitter:
                                     submitter.submit(record, verdict)
                         run_doc["turns"].append(record)
@@ -679,12 +706,18 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("base")
     c.add_argument("candidate")
     c.add_argument("--gate-judge", action="store_true", help="judge metrics gate too (default: reported only)")
+    c.add_argument("--regrade", action="store_true", help="re-grade both runs with the current checks and --cases first")
+    c.add_argument("--cases", default=str(CASES_FILE))
 
     args = ap.parse_args(argv)
 
     if args.command == "compare":
         base = json.loads(Path(args.base).read_text(encoding="utf-8"))
         cand = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
+        if args.regrade:
+            cases = load_cases(Path(args.cases))
+            base, cand = regrade(base, cases), regrade(cand, cases)
+            print(f"(both runs re-graded with the current checks, {checks.CHECKS_VERSION}; judge verdicts as recorded)\n")
         results = evaluate(base, cand, gate_judge=args.gate_judge)
         print(compare_table(base, cand, results))
         regressions = [r for r in results if r.regression]

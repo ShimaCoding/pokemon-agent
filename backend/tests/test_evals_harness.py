@@ -333,6 +333,30 @@ def test_compare_cli_exit_codes(tmp_path, capsys):
     assert "pokemon_tool_used" in out.err
 
 
+def test_regrade_applies_current_checks_and_keeps_judge(monkeypatch, tmp_path):
+    [arm3] = [t for t in FAKE_TURNS if t["run"] == "perf-17-arm3-low-low r1"]
+    verdict = {"persona": 3, "grounded": False, "unsupported_claims": ["cristales"], "reasoning": "r"}
+    stored = {**copy.deepcopy(arm3), "metrics": {"no_invented_entry": {"passed": True, "reasoning": "old check"}}, "judge": verdict}
+    doc = {"label": "arm3", "runs": [{"case": "fake", "repeat": 1, "turns": [stored]}]}
+    cases = harness.load_cases(harness.CASES_FILE, ["fake"])
+
+    regraded = harness.regrade(doc, cases)
+    assert doc["runs"][0]["turns"][0]["metrics"]["no_invented_entry"]["passed"]  # input untouched
+    metrics = regraded["runs"][0]["turns"][0]["metrics"]
+    assert not metrics["no_invented_entry"]["passed"]
+    assert metrics["judge_grounded"]["passed"] is False
+    assert regraded["summary"]["rates"]["no_invented_entry"]["rate"] == 0.0
+
+    base = {**doc, "label": "base", "runs": [{"case": "fake", "repeat": 1, "turns": [{**copy.deepcopy(stored), "reply": "Pikachuzard no existe."}]}]}
+    b, c = tmp_path / "b.json", tmp_path / "c.json"
+    b.write_text(json.dumps(base), encoding="utf-8")
+    c.write_text(json.dumps(doc), encoding="utf-8")
+    assert harness.main(["compare", str(b), str(c)]) == 0  # stored metrics: both pass
+    assert harness.main(["compare", str(b), str(c), "--regrade"]) == 1
+    with pytest.raises(SystemExit, match="not in the cases file"):
+        harness.regrade({**doc, "runs": [{"case": "gone", "turns": []}]}, cases)
+
+
 def test_compare_cli_gate_judge(tmp_path, capsys):
     base, cand = tmp_path / "b.json", tmp_path / "c.json"
     base.write_text(json.dumps(_doc(judge_grounded=90.0)))
