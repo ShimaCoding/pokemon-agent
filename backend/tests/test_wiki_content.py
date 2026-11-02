@@ -91,3 +91,13 @@ def test_lessons_have_substantial_body() -> None:
         assert len(lesson.body_md) > 400, (
             f"Lesson {lesson.id!r} body is too short ({len(lesson.body_md)} chars)"
         )
+
+
+def test_llm_call_doc_matches_default_reasoning_effort() -> None:
+    """The llm_call description states the shipped effort per call role."""
+    from backend.providers import DEFAULT_REASONING_EFFORT
+
+    text = EVENTS_CATALOG["llm_call"]["description_md"]
+    assert "`call_role`" in text
+    assert f"`reasoning_effort: {DEFAULT_REASONING_EFFORT['routing']}`" in text
+    assert f"con `{DEFAULT_REASONING_EFFORT['final']}`" in text
