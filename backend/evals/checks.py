@@ -55,6 +55,15 @@ OPENING_RE = re.compile(
     rf"^[\W_]*?(?P<name>[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ0-9 .'’:♀♂-]*?){_EMPHASIS}\.{_EMPHASIS}\s+{_EMPHASIS}"
     r"(?:El\s+)?Pok[eé]mon\s+(?P<genus>[^.\n*_]+)"
 )
+# Any-case variant ("Pikachu. El Pokémon Ratón."), for gates where a narrated entry matters more
+# than the uppercase rule. At most two name tokens ("Mr. Mime", "Tapu Koko"), so a sentence that
+# merely ends before "Pokémon …" is not taken for a name.
+_NAME_CHAR = r"[\w'’♀♂‑-]"
+ANY_CASE_OPENING_RE = re.compile(
+    rf"^[\W_]*?(?P<name>[^\W\d_]{_NAME_CHAR}*(?:\.?\s{_NAME_CHAR}+)?){_EMPHASIS}\.{_EMPHASIS}\s+{_EMPHASIS}"
+    r"(?:El\s+)?Pok[eé]mon\s+(?P<genus>[^.\n*_]+)",
+    re.I,
+)
 
 # "1.000" (thousands) or "45" / "1,6" / "0.5". Digits glued to letters (Porygon2, x2) are skipped.
 _NUMBER_RE = re.compile(r"(?<![\w.,])(?:[1-9]\d{0,2}(?:\.\d{3})+|\d+(?:[.,]\d+)?)(?![\w])")
@@ -168,6 +177,14 @@ def _fmt(n: float) -> int | float:
 def pokedex_opening(reply: str) -> re.Match | None:
     """The "NOMBRE. El Pokémon <genus>." opening at the start of ``reply``, if any."""
     m = OPENING_RE.match(reply)
+    if m and sum(c.isalpha() for c in m.group("name")) >= 2:
+        return m
+    return None
+
+
+def entry_opening(reply: str) -> re.Match | None:
+    """Like ``pokedex_opening`` but in any case: "Pikachu. El Pokémon Ratón." also counts."""
+    m = pokedex_opening(reply) or ANY_CASE_OPENING_RE.match(reply)
     if m and sum(c.isalpha() for c in m.group("name")) >= 2:
         return m
     return None

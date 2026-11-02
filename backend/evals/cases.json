@@ -1,5 +1,5 @@
 {
-  "_doc": "Labeled conversations for backend/evals/harness.py. Each case runs in a new conversation. Per turn: required_tools (all must run), any_of_tools (at least one), forbidden_tools (none may run) compare against the turn's tools as sets, ignoring skills/retrieve_context; expect_args maps a tool to a substring of its arguments (follow-up resolution); reply_contains is accent/case-insensitive; unknown_pokemon marks a Pokémon that does not exist (no Pokédex opening, no ungrounded numbers); judge_focus is extra guidance for the LLM judge.",
+  "_doc": "Labeled conversations for backend/evals/harness.py. Each case runs in a new conversation. Per turn: required_tools (all must run), any_of_tools (at least one), forbidden_tools (none may run) compare against the turn's tools as sets, ignoring skills/retrieve_context; expect_args maps a tool to a substring of its arguments (follow-up resolution); reply_contains is accent/case-insensitive; unknown_pokemon marks a Pokémon that does not exist (no Pokédex opening in any case, no narration of a substitute such as pikachu, no ungrounded numbers); judge_focus is extra guidance for the LLM judge.",
   "cases": [
     {
       "id": "pokedex",

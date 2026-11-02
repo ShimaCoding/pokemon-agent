@@ -14,7 +14,8 @@ seconds between requests (anonymous limit: 3 req/min). Each turn is graded by:
 - the case expectations: ``tool_expectation`` (required tools must succeed, at least
   one any-of tool must run, no forbidden tool may run; ``skills``/``retrieve_context``
   ignored), ``followup_args``, ``reply_contains`` and
-  ``no_invented_entry`` (unknown Pokémon: no Pokédex opening, numbers grounded);
+  ``no_invented_entry`` (unknown Pokémon: no Pokédex opening in any case, no narration
+  of a different Pokémon looked up instead, numbers grounded);
 - the online rule checks (``checks.evaluate_turn``) with this conversation's tool
   results and user texts as evidence (independent of server-side compaction);
 - with ``--judge``, the LLM judge (``judge.py``): ``judge_persona`` 1–5, ``judge_grounded``.
@@ -41,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -196,6 +198,41 @@ def observations(record: dict) -> list[checks.ToolObservation]:
     ]
 
 
+# The reply says the asked-for Pokémon does not exist ("no existe", "no se encuentra", …).
+_DENIAL_RE = re.compile(
+    r"\bno\s+(?:existe|se\s+encuentr|se\s+encontr|figura|aparece|corresponde|consta|reconoce|est[aá]\s+registrad|hay\s+(?:ning|registro))"
+    r"|\binexistente|\bnot\s+found",
+    re.I,
+)
+
+
+def substituted_entry(fake: str, tools: list[checks.ToolObservation], reply: str) -> str | None:
+    """A real Pokémon looked up instead of ``fake`` (e.g. pikachuzard → pikachu) whose entry the reply narrates.
+
+    Narrating means naming its genus ("el Pokémon Ratón") or talking about it without
+    ever saying that ``fake`` does not exist. "No existe; ¿quizá Pikachu?" is fine.
+    """
+    norm_reply = checks.normalize(reply)
+    for tool in tools:
+        if tool.error or tool.name not in ("get_pokedex_entry", "get_pokemon_info"):
+            continue
+        try:
+            data = json.loads(tool.text)
+        except ValueError:
+            continue
+        if not isinstance(data, dict) or not isinstance(data.get("name"), str):
+            continue
+        name = checks.normalize(data["name"])
+        if name == checks.normalize(fake):
+            continue
+        genus = checks.normalize(data.get("genus") or "")
+        if genus and f" pokemon {genus.removeprefix('pokemon ')} " in f" {norm_reply} ":
+            return name
+        if f" {name} " in f" {norm_reply} " and not _DENIAL_RE.search(reply):
+            return name
+    return None
+
+
 def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]:
     """Applicable metrics for one turn: case expectations + rule checks."""
     out = {"completed": _metric(record["status"] == "done", record.get("error") or "ok")}
@@ -235,11 +272,13 @@ def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]
         out[r.label] = _metric(r.passed, r.reasoning, **r.metadata)
 
     if fake := spec.get("unknown_pokemon"):
-        opening = checks.pokedex_opening(reply)
+        opening = checks.entry_opening(reply)
         grounded = out.get("grounded_facts", {"passed": True})
         problems = []
         if opening:
             problems.append(f"narró una ficha ({opening.group(0)[:60]})")
+        elif substitute := substituted_entry(fake, tools, reply):
+            problems.append(f"narró la ficha de {substitute} como si fuera {fake}")
         if not grounded["passed"]:
             problems.append(grounded["reasoning"])
         out["no_invented_entry"] = _metric(not problems, "; ".join(problems) or f"no inventó datos de {fake}")

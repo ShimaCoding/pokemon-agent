@@ -3,12 +3,13 @@
 import argparse
 import copy
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from backend.agent import MCP_TOOLS
-from backend.evals import harness, judge
+from backend.evals import checks, harness, judge
 from backend.evals.checks import POKEMON_DATA_TOOLS, SCAFFOLDING_TOOLS
 
 BULBASAUR = json.dumps(
@@ -111,6 +112,66 @@ def test_grade_unknown_pokemon():
     m = harness.grade_turn(spec, bold, [])
     assert not m["no_invented_entry"]["passed"]
     assert not m["grounded_facts"]["passed"]
+
+
+# Real fake/1 turns from the epic-15 harness runs, hand-labeled (see the fixture's _doc).
+FAKE_TURNS = json.loads((Path(__file__).parent / "fixtures" / "fake_case_turns.json").read_text(encoding="utf-8"))["turns"]
+FAKE_SPEC = {"q": "háblame de pikachuzard", "any_of_tools": ["get_pokedex_entry", "get_pokemon_info", "search_pokemon"], "unknown_pokemon": "pikachuzard"}
+
+
+@pytest.mark.parametrize("turn", FAKE_TURNS, ids=[t["run"] for t in FAKE_TURNS])
+def test_no_invented_entry_on_real_fake_turns(turn):
+    m = harness.grade_turn(FAKE_SPEC, turn, [turn["query"]])
+    assert m["no_invented_entry"]["passed"] is not turn["invented"], m["no_invented_entry"]["reasoning"]
+
+
+def test_no_invented_entry_catches_a_lowercase_opening():
+    # arm 3 r1 passed the uppercase-only check: "Pikachu. El Pokémon Ratón. …"
+    [turn] = [t for t in FAKE_TURNS if t["run"] == "perf-17-arm3-low-low r1"]
+    assert turn["reply"].startswith("Pikachu. El Pokémon Ratón.")
+    assert "narró una ficha" in harness.grade_turn(FAKE_SPEC, turn, [])["no_invented_entry"]["reasoning"]
+
+
+PIKACHU = next(t["tools"][0]["result"] for t in FAKE_TURNS if t["run"] == "perf-18 r1")
+
+
+@pytest.mark.parametrize(
+    ("reply", "invented"),
+    [
+        # Narrates the substitute without the opening: genus, or its name with no denial.
+        ("Escaneo completado. El Pokémon Ratón almacena electricidad en sus mejillas.", True),
+        ("Pikachu, de tipo eléctrico, almacena electricidad en sus mejillas.", True),
+        ("**Pikachu**. *El Pokémon Ratón.* Escaneo completado.", True),
+        # Says the asked-for name does not exist and only suggests the substitute.
+        ("No existe registro de un Pokémon denominado “pikachuzard”. Si la intención era Pikachu, consulte su entrada.", False),
+        ("Pikachuzard no aparece registrado. No dispongo de datos verificables.", False),
+        ("Pikachuzard. No existe tal registro en la base de datos oficial.", False),
+    ],
+)
+def test_no_invented_entry_substituted_lookup(reply, invented):
+    rec = {"query": "háblame de pikachuzard", "status": "done", "reply": reply, "tools": [{"name": "get_pokedex_entry", "args": {"pokemon": "pikachu"}, "result": PIKACHU, "error": False}]}
+    assert harness.grade_turn(FAKE_SPEC, rec, [])["no_invented_entry"]["passed"] is not invented
+
+
+def test_substituted_entry_ignores_the_asked_name_and_errors():
+    asked = [checks.ToolObservation("get_pokedex_entry", {"pokemon": "pikachuzard"}, PIKACHU.replace('"pikachu"', '"pikachuzard"', 1))]
+    assert harness.substituted_entry("pikachuzard", asked, "Pikachuzard, el Pokémon Ratón.") is None
+    failed = [checks.ToolObservation("get_pokedex_entry", {"pokemon": "pikachu"}, "❌ Pokémon 'pikachu' not found.", error=True)]
+    assert harness.substituted_entry("pikachuzard", failed, "Pikachu es eléctrico.") is None
+
+
+def test_entry_opening_any_case_is_not_greedy():
+    assert checks.entry_opening("Mr. Mime. El Pokémon Barrera.").group("name") == "Mr. Mime"
+    assert checks.entry_opening("pikachu. Pokémon Ratón.").group("genus") == "Ratón"
+    for reply in (
+        "Pokémon “pikachuzard” no encontrado. Verifica la ortografía.",
+        "No se encontró el Pokémon solicitado.  \nEl registro indica que no existe.",
+        "Error: El registro indica que no existe ningún Pokémon.",
+        "El escaneo terminó. Pokémon Ratón no es un nombre.",
+    ):
+        assert checks.entry_opening(reply) is None, reply
+    # The strict persona opening stays uppercase-only.
+    assert checks.pokedex_opening("Pikachu. El Pokémon Ratón.") is None
 
 
 def test_grade_failed_request_only_counts_completed():
