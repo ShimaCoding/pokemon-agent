@@ -163,6 +163,22 @@ def test_run_with_judge_records_verdicts(monkeypatch, tmp_path):
     doc = harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
     assert seen["tool_texts"] == [BULBASAUR]  # skills summary is not evidence
     assert doc["summary"]["means"]["judge_persona"] == {"mean": 4, "n": 1}
+    assert doc["summary"]["rates"]["judge_grounded"] == {"passed": 1, "total": 1, "rate": 100.0}
+
+
+def test_judge_grounded_drop_is_a_regression(monkeypatch):
+    def judged(grounded):
+        monkeypatch.setattr(harness, "judge_turn", lambda *a, **k: {"persona": 4, "grounded": grounded, "unsupported_claims": ["x"], "reasoning": "r"})
+        return harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
+
+    base, cand = judged(True), judged(False)
+    assert cand["runs"][0]["turns"][0]["metrics"]["judge_grounded"]["metadata"] == {"unsupported_claims": ["x"]}
+    assert [r.metric for r in harness.compare(base, cand)] == ["judge_grounded"]
+    monkeypatch.setattr(harness, "judge_turn", lambda *a, **k: None)  # judge error: no metric, not a fail
+    errored = harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
+    assert "judge_grounded" not in errored["summary"]["rates"]
+    assert errored["summary"]["judge_errors"] == 1
+    assert harness.compare(base, errored) == []
 
 
 # --- compare ------------------------------------------------------------------------------

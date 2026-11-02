@@ -500,8 +500,13 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                                 model=args.judge_model,
                                 focus=spec.get("judge_focus"),
                             )
-                            if submitter and record["judge"]:
-                                submitter.submit(record, record["judge"])
+                            if verdict := record["judge"]:
+                                # A gated pass rate like the rule checks (the persona score is a mean).
+                                record["metrics"]["judge_grounded"] = _metric(
+                                    verdict["grounded"], verdict["reasoning"], unsupported_claims=verdict["unsupported_claims"]
+                                )
+                                if submitter:
+                                    submitter.submit(record, verdict)
                         run_doc["turns"].append(record)
                         failed = [m for m, r in record["metrics"].items() if not r["passed"]]
                         judge = record.get("judge")
