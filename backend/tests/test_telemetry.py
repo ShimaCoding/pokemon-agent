@@ -290,3 +290,24 @@ def test_eval_helpers_swallow_errors(monkeypatch):
     monkeypatch.setattr(LLMObs, "submit_evaluation", boom)
     assert telemetry.export_ids(object()) is None
     telemetry.submit_evaluations({"trace_id": "t", "span_id": "1"}, [EvalResult("dexter_persona", True, "ok", {})])
+
+
+def test_submit_feedback(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    calls = []
+    monkeypatch.setattr(LLMObs, "submit_feedback", lambda **kw: calls.append(kw))
+    ids = {"span_id": "123", "trace_id": "ab" * 16}
+    telemetry.submit_feedback(ids, value="up", submitter_id="conv-12345678")
+    assert calls == []  # disabled → no-op
+
+    monkeypatch.setattr(telemetry, "_enabled", True)
+    telemetry.submit_feedback(ids, value="down", submitter_id="conv-12345678")
+    [kw] = calls
+    assert kw["label"] == "user_feedback"
+    assert (kw["metric_type"], kw["value"], kw["assessment"]) == ("categorical", "thumbs_down", "fail")
+    assert kw["submitter"] == {"id": "conv-12345678", "type": "user"}
+    assert kw["span"] == ids
+
+    monkeypatch.setattr(LLMObs, "submit_feedback", lambda **kw: 1 / 0)
+    telemetry.submit_feedback(ids, value="up", submitter_id="conv-12345678")  # swallowed

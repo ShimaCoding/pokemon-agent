@@ -7,6 +7,7 @@ Routes:
   POST /api/agent/run        — SSE stream: agent response, traces and widgets
   GET  /api/ui-resource      — widget HTML (`ui://` MCP Apps resource) + its CSP
   POST /api/mcp/call-tool    — widget → MCP server tool calls (UI-bound tools only)
+  POST /api/feedback         — 👍/👎 on a reply → Datadog LLM Observability feedback
   GET  /api/prompts|tools|resources — MCP server capabilities
   GET  /                     — serves the frontend (StaticFiles mount)
 
@@ -14,6 +15,8 @@ Security:
   - API key auth: set API_KEY env var; clients send the X-API-Key header.
     Authenticated requests skip the agent rate limit and get the larger model.
   - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
+  - Feedback: /api/feedback takes 10 req/min per IP, one vote per reply, and
+    only for replies this process issued (in-memory registry, single worker).
   - CORS: controlled by ALLOWED_ORIGINS env var (comma-separated).
     Defaults to "*" when unset (local dev only — set a real domain in prod).
 """
@@ -42,6 +45,7 @@ from slowapi.util import get_remote_address
 
 from backend import build_info, mcp_gateway, telemetry, tool_cache
 from backend.evals import checks
+from backend.feedback import registry as feedback_registry
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
@@ -174,6 +178,13 @@ class CallToolRequest(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class FeedbackRequest(BaseModel):
+    # LLMObs ids from the reply's `done` event: 128-bit hex trace, decimal span.
+    trace_id: str = Field(..., pattern=r"^[0-9a-f]{32}$")
+    span_id: str = Field(..., pattern=r"^[0-9]{1,20}$")
+    value: str = Field(..., pattern=r"^(up|down)$")
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -277,6 +288,28 @@ async def get_wiki_lessons(request: Request):
 async def get_wiki_events_catalog(request: Request):
     """Return the SSE events catalog (tooltips + related lesson per type)."""
     return JSONResponse(content=EVENTS_CATALOG, headers=_WIKI_CACHE_HEADERS)
+
+
+# ---------------------------------------------------------------------------
+# Feedback — 👍/👎 on a reply, tied to its Datadog trace
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/feedback", status_code=204)
+@limiter.limit("10/minute")
+async def post_feedback(request: Request, body: FeedbackRequest):
+    """Forward a vote to LLM Observability; only for replies this process issued, once each."""
+    status, conversation_id = feedback_registry.claim(body.span_id, body.trace_id)
+    if status == "unknown":
+        raise HTTPException(status_code=404, detail="Respuesta desconocida o expirada")
+    if status == "voted":
+        raise HTTPException(status_code=409, detail="Esta respuesta ya fue valorada")
+    # The submitter is the server-side conversation id (the LLM Obs session), never client input.
+    telemetry.submit_feedback(
+        {"span_id": body.span_id, "trace_id": body.trace_id},
+        value=body.value,
+        submitter_id=conversation_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +678,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                         ids = telemetry.export_ids(agent_obs)
                         if ids:
                             done.update(ids)  # lets the frontend tie 👍/👎 to this trace
+                            feedback_registry.register(ids["span_id"], ids["trace_id"], conversation_id)
                         yield _sse(done)
                         # Rule evals run after `done` (no effect on elapsed/TTFT) and only
                         # enqueue. If the client disconnected, GeneratorExit is raised at

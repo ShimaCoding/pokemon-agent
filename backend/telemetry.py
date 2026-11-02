@@ -230,3 +230,24 @@ def submit_evaluations(ids: dict[str, str] | None, results: list[Any]) -> None:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("[TELEMETRY] submit_evaluation %s falló: %s", r.label, exc)
+
+
+def submit_feedback(ids: dict[str, str], *, value: str, submitter_id: str) -> None:
+    """A user's 👍/👎 (``value`` "up"/"down") as LLMObs feedback on the agent span."""
+    if not _enabled:
+        return
+    from ddtrace.llmobs import LLMObs
+
+    up = value == "up"
+    try:
+        LLMObs.submit_feedback(
+            label="user_feedback",
+            metric_type="categorical",
+            value="thumbs_up" if up else "thumbs_down",
+            assessment="pass" if up else "fail",
+            submitter={"id": submitter_id, "type": "user"},
+            span={"span_id": ids["span_id"], "trace_id": ids["trace_id"]},
+            tags={"source": "frontend"},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[TELEMETRY] submit_feedback falló: %s", exc)

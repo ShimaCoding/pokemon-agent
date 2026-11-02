@@ -311,9 +311,11 @@ def fake_run(monkeypatch):
     from contextlib import nullcontext
 
     from backend import agent as agent_module, telemetry
+    from backend.feedback import FeedbackRegistry
 
     monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: _FakeAgent(kw["hooks"]))
     monkeypatch.setattr(main, "log_query", lambda **kw: None)
+    monkeypatch.setattr(main, "feedback_registry", FeedbackRegistry())
     monkeypatch.setattr(telemetry, "agent_span", lambda session_id: nullcontext(object()))
     monkeypatch.setattr(telemetry, "annotate", lambda span, **kw: None)
     monkeypatch.setattr(telemetry, "export_ids", lambda span: dict(IDS))
@@ -347,6 +349,7 @@ def test_done_carries_ids_and_rule_evals_are_submitted(fake_run):
 
     [(ids, results)] = fake_run
     assert ids == IDS
+    assert main.feedback_registry.claim(IDS["span_id"], IDS["trace_id"]) == ("ok", "conv-12345678")
     by_label = {r.label: r for r in results}
     assert set(by_label) == {"pokemon_tool_used", "dexter_persona", "grounded_facts"}
     assert all(r.passed for r in results), [(r.label, r.reasoning) for r in results]
@@ -359,6 +362,7 @@ def test_no_ids_and_no_evals_when_telemetry_disabled(fake_run, monkeypatch):
     done = _run_eval_events()[-1]
     assert "trace_id" not in done and "span_id" not in done
     assert fake_run == []
+    assert len(main.feedback_registry) == 0
 
 
 def test_evals_skipped_when_client_disconnects_at_done(fake_run):

@@ -4,6 +4,7 @@ import type {
   AssistantMessage,
   ChatMessage,
   DoneEvent,
+  FeedbackValue,
   McpResource,
   McpTool,
   SlashPrompt,
@@ -100,6 +101,7 @@ interface ChatState {
   addTrace: (id: string, event: TraceEvent) => void
   finishAssistant: (id: string, done: DoneEvent | undefined) => void
   failAssistant: (id: string, error: string) => void
+  setFeedback: (id: string, value: FeedbackValue | undefined) => void
   setInFlight: (v: boolean) => void
   setRateLimitSeconds: (v: number | ((prev: number) => number)) => void
 }
@@ -170,6 +172,11 @@ export const useChat = create<ChatState>()(
       failAssistant: (id, error) =>
         set((s) => ({
           messages: updateAssistant(s.messages, id, (m) => ({ ...m, status: 'error', error })),
+        })),
+
+      setFeedback: (id, feedback) =>
+        set((s) => ({
+          messages: updateAssistant(s.messages, id, (m) => ({ ...m, feedback })),
         })),
 
       setInFlight: (inFlight) => set({ inFlight }),
