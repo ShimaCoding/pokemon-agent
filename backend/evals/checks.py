@@ -63,6 +63,7 @@ _ES_WORDS = frozenset("de la el que y en los las por con para es su se del un un
 _EN_WORDS = frozenset("the and is of to with its that this are for".split())
 _EMPATHY = (
     "lo siento",
+    "lo lamento",
     "con gusto",
     "excelente pregunta",
     "buena pregunta",

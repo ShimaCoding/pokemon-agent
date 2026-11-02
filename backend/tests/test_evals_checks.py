@@ -221,6 +221,12 @@ def test_persona_fails_exclamations_and_empathy():
     assert r.metadata["empathy"] == ["con gusto"]
 
 
+def test_persona_fails_apology():
+    # Live reply to "háblame de pikachuzard" (gpt-oss-20b, local smoke run).
+    r = _persona("Lo lamento, pero la referencia “Pikachuzard” no figura en la Pokédex oficial.")
+    assert r.metadata["failed"] == ["no_empathy"]
+
+
 def test_persona_requires_opening_after_pokedex_entry():
     r = _persona("Este organismo de tipo planta tiene 45 de velocidad.", [POKEDEX])
     assert r.metadata["failed"] == ["pokedex_opening"]
