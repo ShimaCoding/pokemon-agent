@@ -5,9 +5,9 @@ The harness defaults are meant for coding agents and are unsafe on a public
 site (shell, file tools, code execution, subagents, web fetch, and long-term
 memory shared across every visitor), so everything is switched off except:
 
-- the MCP server's tools (no name prefix),
-- ``retrieve_context`` (context manager), and
-- per-conversation session snapshots for multi-turn memory.
+- the MCP server's tools (no name prefix), and
+- per-conversation session snapshots for multi-turn memory, compacted by
+  ``backend/context.py`` so past turns stay small (#18).
 
 The Dexter narration protocol lives inline in ``SYSTEM_PROMPT`` instead of a
 harness skill, so a Pokédex answer needs no extra LLM call to load it (#16).
@@ -27,6 +27,7 @@ from typing import Any
 from strands import Agent
 from strands_harness import create_harness
 
+from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
 
@@ -86,7 +87,9 @@ DEFAULT_FORMS = {
     "wormadam": "wormadam-plant",
     "zygarde": "zygarde-50",
 }
-HARNESS_TOOLS = frozenset({"retrieve_context"})
+# No harness tools: the context manager runs without a stash, so it registers no
+# ``retrieve_context`` (#18).
+HARNESS_TOOLS = frozenset()
 EXPECTED_TOOLS = MCP_TOOLS | HARNESS_TOOLS
 
 SYSTEM_PROMPT = """
@@ -189,6 +192,9 @@ def create_agent(
         # The narration protocol is inline in SYSTEM_PROMPT (#16). False, not
         # omitted: the harness default loads ./.agent/skills when present.
         skills=False,
+        # Compacts past turns before each model call instead of the harness
+        # "auto" preset, which never fired here and cost a retrieve_context tool.
+        context_manager=build_context_manager(),
         session={"id": conversation_id, "dir": SESSIONS_DIR},
         hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or [])],
         callback_handler=None,
