@@ -251,6 +251,42 @@ def test_reasoning_effort_reaches_groq_payload(monkeypatch, model_id, messages, 
     assert body["reasoning_effort"] == expected
 
 
+@pytest.mark.parametrize("authenticated", [False, True])
+@pytest.mark.parametrize("messages", [[_USER], _TURN], ids=["routing", "final"])
+def test_every_candidate_streams(monkeypatch, authenticated, messages):
+    """Every model the router may pick streams from Groq for real.
+
+    LiteLLM fakes Groq streaming (one response, replayed at the end) whenever
+    ``response_format`` is set, which would hold back the whole reply.
+    """
+    import json
+
+    import httpx
+
+    sent: list[httpx.Request] = []
+
+    async def fake_send(self, request, *args, **kwargs):
+        sent.append(request)
+        raise _Sent()
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(httpx.AsyncClient, "send", fake_send)
+    router = build_model(authenticated)
+
+    for candidate in router.candidates:
+        request = candidate.model.format_request(messages)
+        assert request["stream"] is True
+        assert "response_format" not in request
+
+        sent.clear()
+        with pytest.raises(Exception):  # noqa: B017 - litellm wraps _Sent in its own error type
+            _collect(candidate.model, messages)
+        assert sent, "litellm never built the HTTP request"
+        body = json.loads(sent[0].content)
+        assert body["stream"] is True
+        assert "response_format" not in body
+
+
 def test_llm_span_tagged_with_effort(monkeypatch):
     from contextlib import nullcontext
 
