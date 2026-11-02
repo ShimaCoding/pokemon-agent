@@ -265,6 +265,12 @@ def test_next_turn_counts_and_persists(session6):
     assert next_turn(fresh) == 1
 
 
+def test_next_turn_without_agent_state(session6):
+    # Stub agents (other tests' fakes) have no state: count, don't persist.
+    assert next_turn(SimpleNamespace(messages=copy.deepcopy(session6))) == 7
+    assert next_turn(SimpleNamespace(messages=[])) == 1
+
+
 def test_stub_forbids_quoting_from_memory():
     # A past result's data must be re-fetched, never recalled (an "omitido" stub
     # let a comparison turn quote an earlier Pokémon's flavor text).

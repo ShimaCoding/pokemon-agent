@@ -145,9 +145,13 @@ def next_turn(agent: Any) -> int:
     persists. Snapshots from before #18 have no counter: their turns are
     counted from the restored history, which is still uncompacted at this point.
     """
-    previous = agent.state.get(TURN_STATE_KEY)
+    state = getattr(agent, "state", None)
+    if state is None:
+        # Stub agents in tests have no state: count the history, persist nothing.
+        return len(turn_starts(agent.messages)) + 1
+    previous = state.get(TURN_STATE_KEY)
     if previous is None:
         previous = len(turn_starts(agent.messages))
     turn = previous + 1
-    agent.state.set(TURN_STATE_KEY, turn)
+    state.set(TURN_STATE_KEY, turn)
     return turn
