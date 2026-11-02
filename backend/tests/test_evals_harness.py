@@ -244,13 +244,25 @@ def test_compare_cli_exit_codes(tmp_path, capsys):
 
 @pytest.mark.parametrize("ml_app", ["mcpokedexagent", "McpokedexAgent", " MCPOKEDEXAGENT "])
 def test_submit_refuses_prod_ml_app(ml_app):
-    assert "prod" in harness.submit_refusal({"DD_LLMOBS_ML_APP": ml_app, "DD_API_KEY": "k"})
+    assert "prod" in harness.submit_refusal({"DD_LLMOBS_ML_APP": ml_app, "DD_API_KEY": "k"}, harness.DEFAULT_URL)
 
 
 def test_submit_needs_dev_ml_app_and_key():
-    assert harness.submit_refusal({"DD_API_KEY": "k"})
-    assert harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev"})
-    assert harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev", "DD_API_KEY": "k"}) is None
+    url = harness.DEFAULT_URL
+    assert harness.submit_refusal({"DD_API_KEY": "k"}, url)
+    assert harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev"}, url)
+    assert harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev", "DD_API_KEY": "k"}, url) is None
+
+
+@pytest.mark.parametrize("url", ["http://localhost:8765", "http://[::1]:8765"])
+def test_submit_allows_loopback_urls(url):
+    assert harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev", "DD_API_KEY": "k"}, url) is None
+
+
+@pytest.mark.parametrize("url", ["https://mcpokedex.com", "http://192.168.1.10:8000", "not a url"])
+def test_submit_refuses_remote_backend(url):
+    reason = harness.submit_refusal({"DD_LLMOBS_ML_APP": "mcpokedexagent-dev", "DD_API_KEY": "k"}, url)
+    assert "local backend" in reason
 
 
 def test_run_cli_refuses_prod_before_any_request(monkeypatch, capsys):
@@ -259,6 +271,9 @@ def test_run_cli_refuses_prod_before_any_request(monkeypatch, capsys):
     monkeypatch.setattr(harness, "run", lambda *a, **k: pytest.fail("must not run"))
     assert harness.main(["run", "--label", "x", "--judge", "--submit"]) == 2
     assert "prod" in capsys.readouterr().err
+    monkeypatch.setenv("DD_LLMOBS_ML_APP", "mcpokedexagent-dev")
+    assert harness.main(["run", "--label", "x", "--judge", "--submit", "--url", "https://mcpokedex.com"]) == 2
+    assert "local backend" in capsys.readouterr().err
 
 
 # --- cases.json ------------------------------------------------------------------------------

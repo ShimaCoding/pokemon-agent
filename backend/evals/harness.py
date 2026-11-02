@@ -24,9 +24,11 @@ LLM sampling is nondeterministic, so ``compare`` gates pass *rates*, not single 
 
 ``--submit`` sends the judge results to Datadog LLM Observability as evaluations on
 each turn's agent span (``done.trace_id``/``span_id``, present when the backend runs
-with ``DD_API_KEY``). It refuses the prod ml_app: local runs use
-``DD_LLMOBS_ML_APP=mcpokedexagent-dev``. Rule checks are already submitted by the
-backend itself.
+with ``DD_API_KEY``). It refuses the prod ml_app in the harness's own environment and
+any non-loopback ``--url``. Evaluations join spans by id only, so the guard cannot see
+which ml_app the target backend uses: start it with ``DD_LLMOBS_ML_APP=mcpokedexagent-dev``
+too (without it the backend reports to the prod ml_app). Rule checks are already
+submitted by the backend itself.
 
 Output: ``<out>/<label>.json`` and a markdown summary on stdout.
 
@@ -47,6 +49,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -79,6 +82,7 @@ OPTIONAL_METRICS = frozenset({"judge_grounded", "judge_persona"})
 PERF_FIELDS = ("elapsed_ms", "ttft_ms", "llm_calls", "input_tokens", "output_tokens", "total_tokens", "cached_tokens")
 
 PROD_ML_APPS = frozenset({"mcpokedexagent"})
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 # ---------------------------------------------------------------------------
@@ -378,8 +382,10 @@ def summary_table(doc: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def submit_refusal(env: dict[str, str]) -> str | None:
-    """Why --submit must not run with this environment (None when it may)."""
+def submit_refusal(env: dict[str, str], url: str) -> str | None:
+    """Why --submit must not run with this environment and target (None when it may)."""
+    if (urlsplit(url).hostname or "").lower() not in LOOPBACK_HOSTS:
+        return f"--submit only targets a local backend (got {url}); deployed spans belong to the prod ml_app"
     ml_app = env.get("DD_LLMOBS_ML_APP", "").strip()
     if not ml_app:
         return "--submit needs DD_LLMOBS_ML_APP (e.g. mcpokedexagent-dev)"
@@ -564,7 +570,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.submit:
         if not args.judge:
             ap.error("--submit sends judge results; add --judge")
-        if reason := submit_refusal(dict(os.environ)):
+        if reason := submit_refusal(dict(os.environ), args.url):
             print(reason, file=sys.stderr)
             return 2
     if args.repeat < 1:
