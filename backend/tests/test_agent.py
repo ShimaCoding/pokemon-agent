@@ -123,6 +123,8 @@ def test_system_prompt_inlines_narration_protocol(harness_env):
     assert "Cierre sin título ni encabezado" in SYSTEM_PROMPT
     assert "sin títulos de sección" in SYSTEM_PROMPT
     assert "omítelo en vez de inventarlo" in SYSTEM_PROMPT
+    # Past tool results are stubbed (#18): re-call, never quote them from memory.
+    assert "no cites sus datos de memoria" in SYSTEM_PROMPT
     # Persona stays.
     assert SYSTEM_PROMPT.lstrip().startswith("Eres Dexter")
     assert "disonancia léxica" in SYSTEM_PROMPT
@@ -200,7 +202,8 @@ def test_system_prompt_budget():
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
     assert len(protocol) <= 1850
-    assert len(SYSTEM_PROMPT) <= 3500
+    # +100 over #16 for the past-results rule of #18 (~40 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 3600
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):

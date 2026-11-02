@@ -263,3 +263,11 @@ def test_next_turn_counts_and_persists(session6):
 
     fresh = SimpleNamespace(state=AgentState(), messages=[])
     assert next_turn(fresh) == 1
+
+
+def test_stub_forbids_quoting_from_memory():
+    # A past result's data must be re-fetched, never recalled (an "omitido" stub
+    # let a comparison turn quote an earlier Pokémon's flavor text).
+    assert "ya no están disponibles" in TOOL_RESULT_STUB
+    assert "No los cites de memoria" in TOOL_RESULT_STUB
+    assert "vuelve a llamar a la herramienta" in TOOL_RESULT_STUB

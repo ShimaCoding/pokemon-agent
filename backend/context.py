@@ -5,8 +5,8 @@ Every past turn is re-sent on every LLM call of the next request, so without a
 policy the input grows by ~1.9k tokens per Pokédex turn. Past turns keep what
 follow-ups need ("¿y la de charmander?", "¿cuál de los tres es más rápido?"):
 the user text, each tool call's name and input, and the head of each reply.
-Bulky tool results become a stub the model can resolve by calling the tool
-again. The current turn is never touched.
+Bulky tool results become a stub telling the model to call the tool again
+rather than quote them from memory. The current turn is never touched.
 
 It runs as a strands ContextManager strategy before every model call and edits
 ``agent.messages`` in place, so the compacted history is also what the session
@@ -25,7 +25,12 @@ MAX_PAST_TURNS = 4
 # Past replies keep their head: Dexter opens with "NOMBRE. Pokémon <genus>." and
 # a comparison opens with its conclusion, so the subject survives the cut.
 PAST_REPLY_CHARS = 300
-TOOL_RESULT_STUB = "[Omitido del historial. Si necesitas estos datos, vuelve a llamar a la herramienta.]"
+# Says the data is gone, not just hidden: a softer "omitido" stub let the model
+# quote an earlier Pokémon's flavor text from memory instead of re-calling.
+TOOL_RESULT_STUB = (
+    "[Resultado omitido del historial: sus datos ya no están disponibles. "
+    "No los cites de memoria; si los necesitas, vuelve a llamar a la herramienta.]"
+)
 REPLY_CUT_MARKER = " …[respuesta recortada en el historial]"
 # Agent state key for the turn counter (agent state is persisted in the snapshot).
 TURN_STATE_KEY = "mcpokedex_turn"
