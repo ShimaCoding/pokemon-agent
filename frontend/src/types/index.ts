@@ -92,6 +92,9 @@ export interface DoneEvent {
   cached_tokens?: number
   llm_calls?: number
   ttft_ms?: number | null
+  /** LLM Observability ids of the agent span; only when Datadog is on. Used by 👍/👎. */
+  trace_id?: string | null
+  span_id?: string | null
 }
 
 export interface ErrorEvent {
@@ -135,7 +138,11 @@ export interface AssistantMessage {
   status: 'streaming' | 'done' | 'error'
   done?: DoneEvent
   error?: string
+  /** The user's 👍/👎, persisted with the message. */
+  feedback?: FeedbackValue
 }
+
+export type FeedbackValue = 'up' | 'down'
 
 export type ChatMessage = UserMessage | AssistantMessage
 

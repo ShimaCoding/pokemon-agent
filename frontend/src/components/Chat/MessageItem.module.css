@@ -62,3 +62,20 @@
   font-size: 12px;
   line-height: 1.8;
 }
+
+/* 👍/👎 under a finished reply; muted until chosen. */
+.feedback { display: flex; align-items: center; gap: 6px; }
+
+.thumb {
+  padding: 2px 8px;
+  border: 1px dashed var(--gbc-mid);
+  font-size: 13px;
+  line-height: 1.6;
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+.thumb:hover:not(:disabled) { border-style: solid; border-color: var(--gbc-border); opacity: 1; }
+.thumb[aria-pressed='true'] { border: 1px solid var(--gbc-border); background: var(--gbc-cream); filter: none; opacity: 1; }
+.thumb:disabled { cursor: default; }
+
+.feedbackError { font-size: 11px; color: var(--gbc-red); }

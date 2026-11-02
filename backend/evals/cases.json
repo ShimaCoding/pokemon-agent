@@ -1,0 +1,47 @@
+{
+  "_doc": "Labeled conversations for backend/evals/harness.py. Each case runs in a new conversation. Per turn: required_tools (all must run), any_of_tools (at least one), forbidden_tools (none may run) compare against the turn's tools as sets, ignoring skills/retrieve_context; expect_args maps a tool to a substring of its arguments (follow-up resolution); reply_contains is accent/case-insensitive; unknown_pokemon marks a Pokémon that does not exist (no Pokédex opening in any case, no narration of a substitute such as pikachu, no ungrounded numbers); judge_focus is extra guidance for the LLM judge.",
+  "cases": [
+    {
+      "id": "pokedex",
+      "turns": [
+        {"q": "háblame de bulbasaur", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "bulbasaur"}}
+      ]
+    },
+    {
+      "id": "followup",
+      "turns": [
+        {"q": "háblame de bulbasaur", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "bulbasaur"}},
+        {"q": "¿y la de charmander?", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "charmander"}}
+      ]
+    },
+    {
+      "id": "session6",
+      "turns": [
+        {"q": "háblame de bulbasaur", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "bulbasaur"}},
+        {"q": "¿y la de charmander?", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "charmander"}},
+        {"q": "ahora squirtle", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "squirtle"}},
+        {"q": "¿cuál de los tres es más rápido?", "any_of_tools": ["compare_pokemon", "get_pokemon_info", "analyze_pokemon_stats", "get_pokedex_entry"], "forbidden_tools": ["search_pokemon", "analyze_team"], "reply_contains": ["charmander"]},
+        {"q": "háblame de pikachu", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "pikachu"}},
+        {"q": "¿y la de eevee?", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "eevee"}}
+      ]
+    },
+    {
+      "id": "offtopic",
+      "turns": [
+        {"q": "¿qué opinas del clima de hoy?", "forbidden_tools": ["get_pokedex_entry", "get_pokemon_info", "compare_pokemon", "analyze_pokemon_stats", "analyze_team", "get_type_effectiveness", "search_pokemon"]}
+      ]
+    },
+    {
+      "id": "fake",
+      "turns": [
+        {"q": "háblame de pikachuzard", "any_of_tools": ["get_pokedex_entry", "get_pokemon_info", "search_pokemon"], "unknown_pokemon": "pikachuzard", "judge_focus": "Pikachuzard no existe: la respuesta no debe inventar tipos, estadísticas ni descripción para él."}
+      ]
+    },
+    {
+      "id": "english",
+      "turns": [
+        {"q": "tell me about gengar", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "gengar"}}
+      ]
+    }
+  ]
+}

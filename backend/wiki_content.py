@@ -399,7 +399,9 @@ EVENTS_CATALOG: dict = {
     "done": {
         "description_md": (
             "**done** — terminó el run. Incluye métricas: tools usadas, tokens "
-            "de entrada/salida, modelos intentados, tiempo total."
+            "de entrada/salida, modelos intentados, tiempo total. Si LLM "
+            "Observability está activo incluye `trace_id`/`span_id`, que el "
+            "botón 👍/👎 usa para ligar el feedback a la traza."
         ),
         "related_lesson_id": "reading_traces",
         "related_node_id": "fastapi",

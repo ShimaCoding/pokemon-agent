@@ -217,6 +217,41 @@ class _StubAgent:
         pass
 
 
+# --- Agent run: `done` ids and post-done rule evals ---------------------------------------
+
+POKEDEX_JSON = (
+    '{"id": 1, "name": "bulbasaur", "genus": "Pokémon Semilla", '
+    '"base_stats": {"hp": 45, "attack": 49, "defense": 49, "special-attack": 65, "special-defense": 65, "speed": 45}}'
+)
+IDS = {"trace_id": "ab" * 16, "span_id": "1234567890"}
+
+
+class _FakeAgent:
+    """Stands in for the harness agent: one get_pokedex_entry call, then a narrated reply."""
+
+    tool_names = ["get_pokedex_entry"]
+
+    def __init__(self, hooks):
+        self._trace = hooks[0]
+        self.messages = [{"role": "user", "content": [{"text": "háblame de bulbasaur"}]}]
+
+    async def stream_async(self, prompt):
+        tool_use = {"toolUseId": "tu-1", "name": "get_pokedex_entry", "input": {"pokemon": "bulbasaur"}}
+        self._trace._on_call(SimpleNamespace(tool_use=tool_use))
+        result = {"status": "success", "content": [{"text": POKEDEX_JSON}]}
+        self._trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=SimpleNamespace()))
+        self.messages += [
+            {"role": "assistant", "content": [{"toolUse": tool_use}]},
+            {"role": "user", "content": [{"toolResult": {"toolUseId": "tu-1", **result}}]},
+        ]
+        yield {"data": "BULBASAUR. El Pokémon Semilla. Velocidad 45; tu intelecto, "}
+        yield {"data": "por desgracia, no figura en mis registros."}
+        yield {"result": SimpleNamespace(metrics=SimpleNamespace(accumulated_usage={}))}
+
+    def cleanup(self):
+        pass
+
+
 def _sse_events(res) -> list[dict]:
     import json
 
@@ -268,3 +303,77 @@ def test_tool_result_without_cache_status():
     events = _tool_events("search_pokemon", None)
     assert events[1]["cached"] is False
     assert events[1]["duration_ms"] is None
+
+
+@pytest.fixture
+def fake_run(monkeypatch):
+    """Patch the agent factory and telemetry so `_sse_generator` runs offline; returns captured evals."""
+    from contextlib import nullcontext
+
+    from backend import agent as agent_module, telemetry
+    from backend.feedback import FeedbackRegistry
+
+    monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: _FakeAgent(kw["hooks"]))
+    monkeypatch.setattr(main, "log_query", lambda **kw: None)
+    monkeypatch.setattr(main, "feedback_registry", FeedbackRegistry())
+    monkeypatch.setattr(telemetry, "agent_span", lambda session_id: nullcontext(object()))
+    monkeypatch.setattr(telemetry, "annotate", lambda span, **kw: None)
+    monkeypatch.setattr(telemetry, "export_ids", lambda span: dict(IDS))
+    submitted = []
+    monkeypatch.setattr(telemetry, "submit_evaluations", lambda ids, results: submitted.append((ids, results)))
+    return submitted
+
+
+def _run_eval_events(stop_after_done: bool = False) -> list[dict]:
+    import asyncio
+    import json
+
+    async def collect():
+        events = []
+        gen = main._sse_generator("háblame de bulbasaur", "conv-12345678")
+        async for frame in gen:
+            events.append(json.loads(frame[len("data: ") :]))
+            if stop_after_done and events[-1]["type"] == "done":
+                await gen.aclose()  # what a client disconnect does to the generator
+                break
+        return events
+
+    return asyncio.run(collect())
+
+
+def test_done_carries_ids_and_rule_evals_are_submitted(fake_run):
+    events = _run_eval_events()
+    done = events[-1]
+    assert done["type"] == "done"
+    assert (done["trace_id"], done["span_id"]) == (IDS["trace_id"], IDS["span_id"])
+
+    [(ids, results)] = fake_run
+    assert ids == IDS
+    assert main.feedback_registry.claim(IDS["span_id"], IDS["trace_id"]) == ("ok", "conv-12345678")
+    by_label = {r.label: r for r in results}
+    assert set(by_label) == {"pokemon_tool_used", "dexter_persona", "grounded_facts"}
+    assert all(r.passed for r in results), [(r.label, r.reasoning) for r in results]
+
+
+def test_no_ids_and_no_evals_when_telemetry_disabled(fake_run, monkeypatch):
+    from backend import telemetry
+
+    monkeypatch.setattr(telemetry, "export_ids", lambda span: None)
+    done = _run_eval_events()[-1]
+    assert "trace_id" not in done and "span_id" not in done
+    assert fake_run == []
+    assert len(main.feedback_registry) == 0
+
+
+def test_evals_skipped_when_client_disconnects_at_done(fake_run):
+    assert _run_eval_events(stop_after_done=True)[-1]["type"] == "done"
+    assert fake_run == []
+
+
+def test_eval_errors_never_break_the_stream(fake_run, monkeypatch):
+    from backend.evals import checks
+
+    monkeypatch.setattr(checks, "evaluate_turn", lambda turn: 1 / 0)
+    events = _run_eval_events()
+    assert events[-1]["type"] == "done"
+    assert "error" not in [e["type"] for e in events]

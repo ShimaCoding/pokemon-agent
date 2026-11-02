@@ -1,5 +1,5 @@
 import { useSettings } from '../store/useStore'
-import type { CallToolResult, UiResource } from '../types'
+import type { CallToolResult, FeedbackValue, UiResource } from '../types'
 
 export function authHeaders(): Record<string, string> {
   const apiKey = useSettings.getState().apiKey
@@ -45,4 +45,20 @@ export async function callServerTool(name: string, args: Record<string, unknown>
     return { content: [{ type: 'text', text: await errorDetail(res) }], isError: true }
   }
   return (await res.json()) as CallToolResult
+}
+
+/** 👍/👎 on a reply, tied to its Datadog trace. 409 means it was already rated. */
+export async function sendFeedback(traceId: string, spanId: string, value: FeedbackValue): Promise<'ok' | 'voted' | 'error'> {
+  try {
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trace_id: traceId, span_id: spanId, value }),
+    })
+    if (res.status === 204) return 'ok'
+    if (res.status === 409) return 'voted'
+    return 'error'
+  } catch {
+    return 'error'
+  }
 }

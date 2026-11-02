@@ -7,6 +7,9 @@ With ``DD_API_KEY`` set, every request becomes one trace in Datadog:
     ├── llm   one per model call: messages, output, tokens (incl. cached), model
     └── tool  one per tool call: input and result
 
+After each reply the rule-based quality checks (``backend/evals/checks.py``) are
+attached to the agent span as evaluations (``submit_evaluations``).
+
 Spans are sent agentless with the ddtrace LLM Observability SDK, straight to
 Datadog's intake; nothing runs on the host. Without the key every helper here is
 a no-op.
@@ -184,3 +187,67 @@ def annotate(span: Any, **fields: Any) -> None:
         LLMObs.annotate(span=span, **fields)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[TELEMETRY] annotate falló: %s", exc)
+
+
+def export_ids(span: Any) -> dict[str, str] | None:
+    """``{trace_id, span_id}`` of an LLMObs span, to attach evals and feedback; None when disabled."""
+    if span is None or not _enabled:
+        return None
+    from ddtrace.llmobs import LLMObs
+
+    try:
+        exported = LLMObs.export_span(span=span)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[TELEMETRY] export_span falló: %s", exc)
+        return None
+    if not exported:
+        return None
+    return {"trace_id": exported["trace_id"], "span_id": exported["span_id"]}
+
+
+def submit_evaluations(ids: dict[str, str] | None, results: list[Any]) -> None:
+    """Rule-check results (``backend.evals.checks.EvalResult``) as boolean evals on the agent span.
+
+    Only enqueues: ddtrace's eval writer sends them in the background.
+    """
+    if not ids or not _enabled:
+        return
+    from ddtrace.llmobs import LLMObs
+
+    from backend.evals.checks import CHECKS_VERSION
+
+    for r in results:
+        try:
+            LLMObs.submit_evaluation(
+                label=r.label,
+                metric_type="boolean",
+                value=r.passed,
+                span={"span_id": ids["span_id"], "trace_id": ids["trace_id"]},
+                assessment=r.assessment,
+                reasoning=r.reasoning[:500],
+                metadata=r.metadata,
+                tags={"eval_source": "rules", "checks_version": CHECKS_VERSION},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[TELEMETRY] submit_evaluation %s falló: %s", r.label, exc)
+
+
+def submit_feedback(ids: dict[str, str], *, value: str, submitter_id: str) -> None:
+    """A user's 👍/👎 (``value`` "up"/"down") as LLMObs feedback on the agent span."""
+    if not _enabled:
+        return
+    from ddtrace.llmobs import LLMObs
+
+    up = value == "up"
+    try:
+        LLMObs.submit_feedback(
+            label="user_feedback",
+            metric_type="categorical",
+            value="thumbs_up" if up else "thumbs_down",
+            assessment="pass" if up else "fail",
+            submitter={"id": submitter_id, "type": "user"},
+            span={"span_id": ids["span_id"], "trace_id": ids["trace_id"]},
+            tags={"source": "frontend"},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[TELEMETRY] submit_feedback falló: %s", exc)
