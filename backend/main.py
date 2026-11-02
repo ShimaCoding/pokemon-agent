@@ -517,6 +517,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
         }
 
     agent = None
+    agent_span_opened = False
     async with conversation_lock(conversation_id):
         try:
             logger.info("[MCP] Conectando al servidor MCP y restaurando la sesión…")
@@ -544,6 +545,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
             reply: list[str] = []
             with telemetry.agent_span(conversation_id) as agent_obs:
+                agent_span_opened = True
                 prompt = await _expand_prompt(query)
 
                 async for event in agent.stream_async(prompt):
@@ -613,6 +615,9 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
         except Exception as exc:
             logger.exception("Agent run failed: %s", exc)
+            if not agent_span_opened:
+                # Failed before the agent span opened (MCP connect, session restore): still count it.
+                telemetry.record_failed_request(conversation_id, exc, input_data=query)
             for frame in drain():
                 yield frame
             _log.update(

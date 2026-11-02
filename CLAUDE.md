@@ -31,6 +31,7 @@ docker-compose up --build                       # production-like
 - **`backend/mcp_gateway.py`** — short-lived MCP connections for non-agent endpoints: widget HTML (`read_ui_resource`) and widget tool calls (`call_ui_tool`), both restricted to UI-bound tools and cached for 5 min.
 - **`frontend/`** — React + Vite chat (builds into `backend/static`). `hooks/useAgentStream.ts` streams a reply into the chat store as ordered text/widget parts plus traces; `components/Widget/WidgetFrame.tsx` is the MCP Apps host (sandboxed `srcdoc` iframe with CSP from `_meta.ui.csp`, `AppBridge` over postMessage, lazy-loaded); `components/Thinking/ThinkingPanel.tsx` is the "ver cómo lo pensó" trace panel. `conversation_id` and recent messages persist in localStorage; "Nueva" starts a new conversation.
 - **`backend/main.py`** — FastAPI app. `POST /api/agent/run` streams SSE; `GET /api/ui-resource?uri=` and `POST /api/mcp/call-tool` back the widget bridge. Static frontend mounted at `/`.
+- **`observability/datadog/monitors.json`** — the three Datadog monitors (agent latency p95 > 5 s, error % > 5%, tokens/query p95 > 15k) as `llm-observability alert` formulas `bad / clamp_min(all, 20) * 100 > 5` over 1 h on agent spans; `backend/tests/test_monitors.py` pins them to the code. No `@` handles in the file. Error spans: a failure before the agent runs (MCP connect, session restore) gets an error agent span tagged `failure_stage:setup` (`telemetry.record_failed_request`); a browser disconnect is not an error (`client_disconnected:true`).
 
 ## SSE contract
 

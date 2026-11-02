@@ -40,6 +40,57 @@ def test_run_requires_conversation_id(client):
     assert res.status_code == 422
 
 
+# --- Telemetry on setup failures ----------------------------------------------------
+
+
+@pytest.fixture
+def failed_requests(monkeypatch):
+    from backend import telemetry
+
+    recorded = []
+    monkeypatch.setattr(main, "log_query", lambda **kw: None)
+    monkeypatch.setattr(
+        telemetry,
+        "record_failed_request",
+        lambda session_id, exc, *, input_data=None: recorded.append((session_id, str(exc), input_data)),
+    )
+    return recorded
+
+
+def _run_events(client) -> list[dict]:
+    import json
+
+    res = client.post("/api/agent/run", json={"query": "hola", "conversation_id": "conv-12345678"})
+    assert res.status_code == 200
+    return [json.loads(line[len("data: ") :]) for line in res.text.splitlines() if line.startswith("data: ")]
+
+
+def test_setup_failure_records_error_span(client, monkeypatch, failed_requests):
+    """MCP down (create_agent raises before the agent span opens) still reaches the error monitor."""
+    from backend import agent
+
+    def create_agent(*args, **kwargs):
+        raise RuntimeError("mcp down")
+
+    monkeypatch.setattr(agent, "create_agent", create_agent)
+    assert [e["type"] for e in _run_events(client)] == ["start", "error", "done"]
+    assert failed_requests == [("conv-12345678", "mcp down", "hola")]
+
+
+def test_run_failure_is_left_to_the_agent_span(client, monkeypatch, failed_requests):
+    """A failure inside the agent span is already marked there; no second error span."""
+    from backend import agent
+
+    async def stream_async(prompt):
+        raise RuntimeError("groq down")
+        yield  # pragma: no cover
+
+    fake = SimpleNamespace(tool_names=[], messages=[], stream_async=stream_async, cleanup=lambda: None)
+    monkeypatch.setattr(agent, "create_agent", lambda *args, **kwargs: fake)
+    assert [e["type"] for e in _run_events(client)] == ["start", "agent_init", "error", "done"]
+    assert failed_requests == []
+
+
 # --- /api/ui-resource ---------------------------------------------------------
 
 

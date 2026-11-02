@@ -1,5 +1,6 @@
 """telemetry: no-op without DD_API_KEY; with it, LLMObs is enabled agentless."""
 
+import asyncio
 import os
 
 import ddtrace
@@ -104,6 +105,107 @@ def test_no_version_leaves_config_untouched(monkeypatch, enable_calls):
     telemetry.setup_telemetry()
     assert ddtrace.config.version == "untouched"
     assert "DD_GIT_COMMIT_SHA" not in os.environ
+
+class FakeSpan:
+    """Stands in for the ddtrace Span so nothing is sent; records what the error monitor would see."""
+
+    def __init__(self):
+        self.error, self.exc, self.finished = 0, None, False
+
+    def set_exc_info(self, exc_type, exc_val, exc_tb):
+        self.error, self.exc = 1, exc_type
+
+    def finish(self):
+        self.finished = True
+
+
+@pytest.fixture
+def fake_llmobs(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    spans: list[FakeSpan] = []
+    notes: list[dict] = []
+
+    def agent(**kw):
+        spans.append(FakeSpan())
+        return spans[-1]
+
+    monkeypatch.setattr(telemetry, "_enabled", True)
+    monkeypatch.setattr(LLMObs, "agent", agent)
+    monkeypatch.setattr(LLMObs, "annotate", lambda **kw: notes.append(kw))
+    return spans, notes
+
+
+def test_agent_span_marks_errors(fake_llmobs):
+    spans, _ = fake_llmobs
+    with pytest.raises(ValueError):
+        with telemetry.agent_span("conv-12345678") as span:
+            raise ValueError("groq down")
+    assert span is spans[0]
+    assert (span.error, span.exc, span.finished) == (1, ValueError, True)
+
+
+def test_agent_span_ok(fake_llmobs):
+    spans, _ = fake_llmobs
+    with telemetry.agent_span("conv-12345678"):
+        pass
+    assert (spans[0].error, spans[0].finished) == (0, True)
+
+
+@pytest.mark.parametrize("exc_type", [asyncio.CancelledError, GeneratorExit])
+def test_agent_span_ignores_client_disconnect(fake_llmobs, exc_type):
+    spans, notes = fake_llmobs
+    with pytest.raises(exc_type):
+        with telemetry.agent_span("conv-12345678"):
+            raise exc_type()
+    assert (spans[0].error, spans[0].finished) == (0, True)
+    assert notes == [{"span": spans[0], "tags": {"client_disconnected": "true"}}]
+
+
+def test_agent_span_ignores_aclose(fake_llmobs):
+    """Starlette closes the SSE generator with aclose() when the browser goes away."""
+    spans, _ = fake_llmobs
+
+    async def stream():
+        with telemetry.agent_span("conv-12345678"):
+            yield "text"
+            yield "more"
+
+    async def main():
+        gen = stream()
+        assert await gen.asend(None) == "text"
+        await gen.aclose()
+
+    asyncio.run(main())
+    assert (spans[0].error, spans[0].finished) == (0, True)
+
+
+def test_record_failed_request(fake_llmobs):
+    spans, notes = fake_llmobs
+    try:
+        raise RuntimeError("mcp down")
+    except RuntimeError as exc:
+        telemetry.record_failed_request("conv-12345678", exc, input_data="hola")
+    [span] = spans
+    assert (span.error, span.exc, span.finished) == (1, RuntimeError, True)
+    assert notes == [{"span": span, "input_data": "hola", "tags": {"failure_stage": "setup"}}]
+
+
+def test_record_failed_request_noop_when_disabled(fake_llmobs, monkeypatch):
+    spans, _ = fake_llmobs
+    monkeypatch.setattr(telemetry, "_enabled", False)
+    telemetry.record_failed_request("conv-12345678", RuntimeError("x"))
+    assert spans == []
+
+
+def test_record_failed_request_never_raises(fake_llmobs, monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    def broken(**kw):
+        raise RuntimeError("intake down")
+
+    monkeypatch.setattr(LLMObs, "agent", broken)
+    telemetry.record_failed_request("conv-12345678", RuntimeError("x"))
 
 
 def test_streamed_output_collects_text_tools_and_usage():
