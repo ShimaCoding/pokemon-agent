@@ -287,6 +287,7 @@ async def get_wiki_events_catalog(request: Request):
 @limiter.limit("3/minute", exempt_when=_is_authenticated_request)
 async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
     authenticated = _is_valid_api_key(api_key)
+    # Every yielded SSE frame must reach the client as its own chunk (test_streaming.py).
     return StreamingResponse(
         _sse_generator(body.query, body.conversation_id, authenticated=authenticated),
         media_type="text/event-stream",
@@ -461,11 +462,17 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     }
 
     # Trace events from the model wrapper and the tool hooks, in the order they happen.
+    # Stamped when they happen, delivered between stream events.
     pending: list[dict] = []
     models_tried: list[str] = []
     llm_calls = 0
     # Time to first streamed text delta, i.e. what the user perceives as latency.
     ttft_ms: int | None = None
+
+    def queue(evt: dict) -> None:
+        # Strands yields nothing while a model call waits for its first byte or a
+        # tool runs, so a drain-time stamp would hide that time.
+        pending.append({**evt, "timestamp_ms": elapsed_ms()})
 
     def on_model_event(evt: dict) -> None:
         nonlocal llm_calls
@@ -474,15 +481,13 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
             evt = {**evt, "call_index": llm_calls}
         else:
             models_tried.append(evt["model"])
-        pending.append(evt)
+        queue(evt)
 
     def drain():
         while pending:
-            evt = pending.pop(0)
-            evt["timestamp_ms"] = elapsed_ms()
-            yield _sse(evt)
+            yield _sse(pending.pop(0))
 
-    tool_trace = _ToolTrace(pending.append)
+    tool_trace = _ToolTrace(queue)
 
     logger.info("[REQUEST] ─── Nueva consulta (conversación %s) ───", conversation_id)
     logger.info("[REQUEST] Query: %.120s%s", query, "…" if len(query) > 120 else "")
