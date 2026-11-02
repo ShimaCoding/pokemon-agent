@@ -127,6 +127,32 @@ def test_text_deltas_reach_the_socket_before_the_agent_continues(monkeypatch):
     assert all(b.endswith(b"\n\n") and b.count(b"data:") == 1 for b in bodies)
 
 
+def test_trace_events_are_stamped_when_they_happen(monkeypatch):
+    async def script(agent):
+        # Like TracedLiteLLMModel.stream and the tool hooks: these fire while
+        # strands yields nothing, so they are delivered later, in a batch.
+        agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-20b", "messages": []})
+        await asyncio.sleep(_STEP_S)  # Groq time to first byte
+        agent.trace({"type": "model_attempt", "model": "groq/openai/gpt-oss-20b", "status": "success"})
+        tool_use = {"toolUseId": "tu-1", "name": "get_pokedex_entry", "input": {"name": "bulbasaur"}}
+        agent.tool_trace._on_call(SimpleNamespace(tool_use=tool_use))
+        await asyncio.sleep(_STEP_S)  # the MCP tool runs
+        result = {"status": "success", "content": [{"text": "{}"}]}
+        agent.tool_trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=None))
+        yield {"data": "BULBASAUR."}
+        yield _result_event()
+
+    _, events = _run(monkeypatch, script)
+    by_type = {e["type"]: e for e in events}
+
+    assert by_type["tool_result"]["timestamp_ms"] - by_type["tool_call"]["timestamp_ms"] >= _STEP_MS - 50
+    assert by_type["model_attempt"]["timestamp_ms"] - by_type["llm_call"]["timestamp_ms"] >= _STEP_MS - 50
+    assert by_type["done"]["ttft_ms"] - by_type["llm_call"]["timestamp_ms"] >= 2 * _STEP_MS - 50
+    # The emit callback contract is unchanged: same fields plus the stamp.
+    assert by_type["llm_call"]["call_index"] == 1
+    assert by_type["tool_call"]["args"] == {"name": "bulbasaur"}
+
+
 def test_ttft_is_first_text_not_first_event(monkeypatch):
     async def script(agent):
         agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-20b", "messages": []})
