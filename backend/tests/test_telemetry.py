@@ -67,3 +67,17 @@ def test_streamed_output_collects_text_tools_and_usage():
         "total_tokens": 12,
         "cache_read_input_tokens": 8,
     }
+
+
+def test_finish_tool_span_forwards_cache_tag(monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    calls = []
+    monkeypatch.setattr(LLMObs, "annotate", lambda **kw: calls.append(kw))
+    span = type("Span", (), {"error": 0, "finish": lambda self: None})()
+
+    telemetry.finish_tool_span(span, input_data={"pokemon": "pikachu"}, output_data="ok", tags={"cache": "hit"})
+    telemetry.finish_tool_span(span, input_data={}, output_data="ok")
+
+    assert calls[0]["tags"] == {"cache": "hit"}
+    assert "tags" not in calls[1]

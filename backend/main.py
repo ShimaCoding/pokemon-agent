@@ -40,7 +40,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import mcp_gateway, telemetry
+from backend import mcp_gateway, telemetry, tool_cache
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.providers import API_KEY_ENV, PROVIDER_LABEL, groq_configured
 from backend.sessions import CONVERSATION_ID_RE, conversation_lock, prune_periodically
@@ -356,12 +356,18 @@ class _ToolTrace:
         text = _extract_result_text(event.result)
         logger.info("[TOOL] Resultado de %s: %.120s%s", name, text, "…" if len(text) > 120 else "")
         display = text
-        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display})
+        # Set by the tool cache middleware (backend/tool_cache.py) for cacheable tools.
+        cache = tool_cache.status(getattr(event, "invocation_state", None), uid)
+        duration = getattr(event, "duration", None)
+        duration_ms = round(duration * 1000, 2) if duration is not None else None
+        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display,
+                    "cached": cache in ("hit", "stale"), "duration_ms": duration_ms})
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
             input_data=dict(event.tool_use.get("input") or {}),
             output_data=display,
             error=event.result.get("status") == "error",
+            tags={"cache": cache} if cache else None,
         )
 
         uri = mcp_gateway.ui_resource_uri(getattr(event.selected_tool, "mcp_tool", None))
@@ -428,7 +434,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 # routing: opens the turn (picks a tool or answers directly); final: after tool results
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
       {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
-      {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int}
+      {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int,
+                                "cached": bool, "duration_ms": float | None}
       {"type": "ui_resource",   "index": int, "tool_id": str, "tool": str, "resource_uri": str,
                                 "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
       {"type": "text",          "delta": str}

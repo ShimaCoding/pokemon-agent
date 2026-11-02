@@ -190,3 +190,23 @@ def test_run_reports_conversation_turn(client, monkeypatch):
 
     events = _sse_events(client.post("/api/agent/run", json=body))
     assert next(e for e in events if e["type"] == "agent_init")["turn"] == 3
+
+
+def test_tool_result_reports_cache_status_and_duration():
+    events: list[dict] = []
+    trace = main._ToolTrace(events.append)
+    tool_use = {"toolUseId": "tu-1", "name": "get_pokedex_entry", "input": {"pokemon": "pikachu"}}
+    trace._on_call(SimpleNamespace(tool_use=tool_use))
+    result = {"status": "success", "content": [{"text": "{}"}]}
+    state = {"mcpokedex:tool_cache": {"tu-1": "hit"}}
+    trace._on_result(
+        SimpleNamespace(tool_use=tool_use, result=result, selected_tool=None, invocation_state=state, duration=0.0004)
+    )
+    assert events[1]["cached"] is True
+    assert events[1]["duration_ms"] == 0.4
+
+
+def test_tool_result_without_cache_status():
+    events = _tool_events("search_pokemon", None)
+    assert events[1]["cached"] is False
+    assert events[1]["duration_ms"] is None
