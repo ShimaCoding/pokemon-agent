@@ -371,7 +371,9 @@ EVENTS_CATALOG: dict = {
     "tool_result": {
         "description_md": (
             "**tool_result** — la tool terminó y el resultado ya se le entregó "
-            "al LLM. Mismo `index` que el tool_call correspondiente."
+            "al LLM. Mismo `index` que el tool_call correspondiente. "
+            "`cached: true` cuando el resultado salió de la caché del agente "
+            "(sin ir al servidor MCP); `duration_ms` es lo que tardó la tool."
         ),
         "related_lesson_id": "tool_call_anatomy",
         "related_node_id": "mcp_server",
