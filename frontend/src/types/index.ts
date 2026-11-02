@@ -22,6 +22,9 @@ export interface LlmCallEvent {
   model: string
   timestamp_ms: number
   messages: Array<{ role: string; content: string }>
+  /** routing: opens the turn (picks a tool or answers directly); final: after tool results. */
+  call_role?: 'routing' | 'final'
+  reasoning_effort?: string
 }
 
 export interface ModelAttemptEvent {

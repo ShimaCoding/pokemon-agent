@@ -421,7 +421,9 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "start",         "provider": str, "conversation_id": str}
       {"type": "agent_init",    "mcp_tools_count": int, "tool_names": list, "skill_loaded": str, ...}
                                 # skill_loaded: the narration protocol, always inline in SYSTEM_PROMPT
-      {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int}
+      {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int,
+                                "call_role": "routing"|"final", "reasoning_effort": str}
+                                # routing: opens the turn (picks a tool or answers directly); final: after tool results
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
       {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
       {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int}

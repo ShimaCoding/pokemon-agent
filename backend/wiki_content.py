@@ -340,7 +340,10 @@ EVENTS_CATALOG: dict = {
         "description_md": (
             "**llm_call** — Strands envía un prompt al LLM. `call_index` indica "
             "cuántas veces vamos: un mismo run suele tener 2+ llamadas (una para "
-            "decidir la tool, otra para narrar con el resultado)."
+            "decidir la tool, otra para narrar con el resultado). `call_role` las "
+            "distingue: `routing` (abre el turno y elige la tool, o responde directo "
+            "si no hace falta ninguna) va con `reasoning_effort: low`; `final` "
+            "(narra tras el resultado de la tool) con `medium`."
         ),
         "related_lesson_id": "strands_sdk",
         "related_node_id": "strands_agent",
