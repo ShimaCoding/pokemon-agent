@@ -64,7 +64,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from backend.evals import checks
-from backend.evals.judge import DEFAULT_JUDGE_MODEL, judge_turn
+from backend.evals.judge import DEFAULT_JUDGE_MODEL, JUDGE_VERSION, judge_turn
 
 CASES_FILE = Path(__file__).with_name("cases.json")
 DEFAULT_OUT = Path(".context/evals")
@@ -497,9 +497,20 @@ def _gate_cell(metric: str, allowed: float, gating: bool, unit: str) -> str:
     return f"drop > {allowed:g}{unit} and z > {Z_CRITICAL}"
 
 
+def judge_version(doc: dict) -> str | None:
+    """The judge rubric a run was graded with (runs before ``judge_version`` existed used judge-v1)."""
+    if not doc.get("judge_model"):
+        return None
+    return doc.get("judge_version") or "judge-v1"
+
+
 def compare_table(base: dict, cand: dict, results: list[GateResult]) -> str:
     b, c = _summary(base), _summary(cand)
-    lines = [
+    lines = []
+    versions = (judge_version(base), judge_version(cand))
+    if None not in versions and versions[0] != versions[1]:
+        lines += [f"Judge rubrics differ ({versions[0]} vs {versions[1]}): judge metrics are not on the same scale.", ""]
+    lines += [
         f"| metric | {base['label']} | {cand['label']} | z | gate | result |",
         "|---|---|---|---|---|---|",
     ]
@@ -630,6 +641,7 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
         "pace_s": args.pace,
         "checks_version": checks.CHECKS_VERSION,
         "judge_model": args.judge_model if args.judge else None,
+        "judge_version": JUDGE_VERSION if args.judge else None,
         "cases": [c["id"] for c in cases],
         "runs": [],
     }

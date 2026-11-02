@@ -224,6 +224,7 @@ def test_run_with_judge_records_verdicts(monkeypatch, tmp_path):
     doc = harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
     assert seen["tool_texts"] == [BULBASAUR]  # skills summary is not evidence
     assert doc["summary"]["means"]["judge_persona"] == {"mean": 4, "n": 1, "sd": None}
+    assert doc["judge_version"] == judge.JUDGE_VERSION
     assert doc["summary"]["rates"]["judge_grounded"] == {"passed": 1, "total": 1, "rate": 100.0}
 
 
@@ -462,3 +463,24 @@ def test_judge_turn_with_mocked_litellm(monkeypatch):
 
     monkeypatch.setattr(litellm, "completion", lambda **kw: (_ for _ in ()).throw(RuntimeError("boom")))
     assert judge.judge_turn("q", "r", []) is None
+
+
+def test_rubric_follows_the_system_prompt_persona():
+    from backend.agent import SYSTEM_PROMPT
+
+    rubric = judge._RUBRIC.lower()
+    for phrase in ("prosodia descendente y plana", "disonancia léxica", "refuerzo positivo incondicional", "empatía paternal"):
+        assert phrase in SYSTEM_PROMPT.lower() and phrase in rubric, phrase
+    # Neither the prompt nor the protocol asks for first-person pronouns: judge-v1 penalized their absence.
+    assert "no penalices la ausencia" in rubric
+    assert "en primera persona, como" not in rubric
+
+
+def test_compare_notes_a_judge_rubric_change():
+    base, cand = _doc(), _doc("cand")
+    base["judge_model"] = cand["judge_model"] = judge.DEFAULT_JUDGE_MODEL
+    cand["judge_version"] = judge.JUDGE_VERSION
+    assert harness.judge_version(base) == "judge-v1"
+    assert "Judge rubrics differ (judge-v1 vs judge-v2)" in harness.compare_table(base, cand, harness.evaluate(base, cand))
+    cand["judge_version"] = None
+    assert "differ" not in harness.compare_table(base, cand, harness.evaluate(base, cand))
