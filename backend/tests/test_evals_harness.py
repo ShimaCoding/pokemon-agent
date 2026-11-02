@@ -223,35 +223,38 @@ def test_run_with_judge_records_verdicts(monkeypatch, tmp_path):
     monkeypatch.setattr(harness, "judge_turn", fake_judge)
     doc = harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
     assert seen["tool_texts"] == [BULBASAUR]  # skills summary is not evidence
-    assert doc["summary"]["means"]["judge_persona"] == {"mean": 4, "n": 1}
+    assert doc["summary"]["means"]["judge_persona"] == {"mean": 4, "n": 1, "sd": None}
     assert doc["summary"]["rates"]["judge_grounded"] == {"passed": 1, "total": 1, "rate": 100.0}
 
 
-def test_judge_grounded_drop_is_a_regression(monkeypatch):
+def test_judge_grounded_drop_gates_only_with_gate_judge(monkeypatch):
     def judged(grounded):
         monkeypatch.setattr(harness, "judge_turn", lambda *a, **k: {"persona": 4, "grounded": grounded, "unsupported_claims": ["x"], "reasoning": "r"})
-        return harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
+        return harness.run(_args(only=["pokedex"], judge=True, repeat=10), send=lambda *a: _record(), sleep=lambda s: None)
 
     base, cand = judged(True), judged(False)
     assert cand["runs"][0]["turns"][0]["metrics"]["judge_grounded"]["metadata"] == {"unsupported_claims": ["x"]}
-    assert [r.metric for r in harness.compare(base, cand)] == ["judge_grounded"]
+    assert harness.compare(base, cand) == []  # reported, not gating
+    [row] = [r for r in harness.evaluate(base, cand) if r.metric == "judge_grounded"]
+    assert not row.gating and not row.regression and "not gating" in row.detail
+    assert [r.metric for r in harness.compare(base, cand, gate_judge=True)] == ["judge_grounded"]
     monkeypatch.setattr(harness, "judge_turn", lambda *a, **k: None)  # judge error: no metric, not a fail
     errored = harness.run(_args(only=["pokedex"], judge=True), send=lambda *a: _record(), sleep=lambda s: None)
     assert "judge_grounded" not in errored["summary"]["rates"]
     assert errored["summary"]["judge_errors"] == 1
-    assert harness.compare(base, errored) == []
+    assert harness.compare(base, errored, gate_judge=True) == []
 
 
 # --- compare ------------------------------------------------------------------------------
 
 
-def _doc(label="base", **rates):
+def _doc(label="base", n=100, **rates):
     defaults = {"completed": 100.0, "tool_expectation": 100.0, "pokemon_tool_used": 100.0, "dexter_persona": 90.0, "grounded_facts": 90.0}
     merged = {**defaults, **rates}
     return {
         "label": label,
         "summary": {
-            "rates": {k: {"passed": int(v), "total": 100, "rate": v} for k, v in merged.items() if v is not None},
+            "rates": {k: {"passed": round(v * n / 100), "total": n, "rate": v} for k, v in merged.items() if v is not None},
             "means": {},
             "judge_errors": 0,
             "perf_median": {"elapsed_ms": 2000},
@@ -264,10 +267,20 @@ def test_compare_equal_runs_pass():
     assert harness.compare(_doc(), _doc("cand")) == []
 
 
-def test_compare_tool_rate_drop_is_regression():
-    [reg] = harness.compare(_doc(), _doc("cand", tool_expectation=97.0))
+def test_two_proportion_z():
+    assert harness.two_proportion_z(23, 35, 18, 36) == pytest.approx(1.34, abs=0.01)  # dev-base → perf-20 judge_grounded
+    assert harness.two_proportion_z(10, 10, 10, 10) == 0.0
+    assert harness.two_proportion_z(5, 10, 9, 10) < 0  # improvement
+
+
+def test_compare_tool_rate_drop_needs_significance():
+    # 1 of 27 follow-ups (perf-20) or 100 → 97 % at n = 100 is within sampling noise.
+    [row] = [r for r in harness.evaluate(_doc(), _doc("cand", tool_expectation=97.0)) if r.metric == "tool_expectation"]
+    assert not row.regression and "noise" in row.detail and row.z == pytest.approx(1.75, abs=0.01)
+    [reg] = harness.compare(_doc(), _doc("cand", tool_expectation=90.0))
     assert reg.metric == "tool_expectation"
     assert reg.allowed_drop == 0
+    assert reg.z > harness.Z_CRITICAL
 
 
 def test_compare_heuristic_tolerance():
@@ -276,12 +289,31 @@ def test_compare_heuristic_tolerance():
     assert reg.metric == "dexter_persona"
 
 
-def test_compare_judge_metrics():
+def test_compare_drop_beyond_tolerance_but_noise_passes():
+    # n = 36 (harness --repeat 3): 32/36 → 27/36 is −13.9 pp, beyond the 10 pp tolerance, but z ≈ 1.53.
+    base, cand = _doc(n=36, grounded_facts=90.0), _doc("cand", n=36, grounded_facts=75.0)
+    [row] = [r for r in harness.evaluate(base, cand) if r.metric == "grounded_facts"]
+    assert not row.regression and row.detail.startswith("-13.9 pp, noise")
+
+
+@pytest.mark.parametrize("metric", sorted(harness.STRICT_METRICS))
+def test_compare_strict_metrics_flag_any_drop(metric):
+    base, cand = _doc(n=3, **{metric: 100.0}), _doc("cand", n=3, **{metric: 66.7})
+    [reg] = harness.compare(base, cand)
+    assert reg.metric == metric and "strict" in reg.detail
+    assert reg.z < harness.Z_CRITICAL  # flagged although not significant
+
+
+def test_compare_judge_persona_mean():
     base, cand = _doc(), _doc("cand")
-    base["summary"]["means"]["judge_persona"] = {"mean": 4.5, "n": 12}
-    assert harness.compare(base, cand) == []  # judge only in base → skipped
-    cand["summary"]["means"]["judge_persona"] = {"mean": 3.9, "n": 12}
-    assert [r.metric for r in harness.compare(base, cand)] == ["judge_persona"]
+    base["summary"]["means"]["judge_persona"] = {"mean": 4.5, "n": 12, "sd": 0.5}
+    assert harness.compare(base, cand, gate_judge=True) == []  # judge only in base → skipped
+    cand["summary"]["means"]["judge_persona"] = {"mean": 3.9, "n": 12, "sd": 0.5}
+    assert harness.compare(base, cand) == []  # not gating by default
+    [reg] = harness.compare(base, cand, gate_judge=True)
+    assert reg.metric == "judge_persona" and reg.z == pytest.approx(2.94, abs=0.01)
+    cand["summary"]["means"]["judge_persona"] = {"mean": 3.9, "n": 12, "sd": 1.5}
+    assert harness.compare(base, cand, gate_judge=True) == []  # z ≈ 1.31: noise
 
 
 def test_compare_missing_required_metric_is_regression():
@@ -291,13 +323,24 @@ def test_compare_missing_required_metric_is_regression():
 def test_compare_cli_exit_codes(tmp_path, capsys):
     base, good, bad = tmp_path / "b.json", tmp_path / "g.json", tmp_path / "x.json"
     base.write_text(json.dumps(_doc()))
-    good.write_text(json.dumps(_doc("good")))
+    good.write_text(json.dumps(_doc("good", tool_expectation=97.0)))
     bad.write_text(json.dumps(_doc("bad", pokemon_tool_used=90.0)))
     assert harness.main(["compare", str(base), str(good)]) == 0
+    assert "noise: z 1.75" in capsys.readouterr().out
     assert harness.main(["compare", str(base), str(bad)]) == 1
     out = capsys.readouterr()
     assert "REGRESSION" in out.out
     assert "pokemon_tool_used" in out.err
+
+
+def test_compare_cli_gate_judge(tmp_path, capsys):
+    base, cand = tmp_path / "b.json", tmp_path / "c.json"
+    base.write_text(json.dumps(_doc(judge_grounded=90.0)))
+    cand.write_text(json.dumps(_doc("cand", judge_grounded=60.0)))
+    assert harness.main(["compare", str(base), str(cand)]) == 0
+    assert "info only (--gate-judge)" in capsys.readouterr().out
+    assert harness.main(["compare", str(base), str(cand), "--gate-judge"]) == 1
+    assert "judge_grounded" in capsys.readouterr().err
 
 
 # --- --submit guard ----------------------------------------------------------------------------

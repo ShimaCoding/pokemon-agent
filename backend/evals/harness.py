@@ -4,7 +4,7 @@ Offline eval harness: the quality gate for prompt, model and context changes (#1
     uv run python -m backend.evals.harness run --label dev-base [--url http://127.0.0.1:8765]
         [--repeat 3] [--pace 21] [--only pokedex followup] [--out .context/evals]
         [--judge [--judge-model groq/openai/gpt-oss-120b]] [--submit]
-    uv run python -m backend.evals.harness compare .context/evals/dev-base.json .context/evals/perf-16.json
+    uv run python -m backend.evals.harness compare .context/evals/dev-base.json .context/evals/perf-16.json [--gate-judge]
 
 ``run`` is a plain SSE client of ``POST /api/agent/run``: start any branch's backend
 (anonymous, so the 20b model as in prod) and point ``--url`` at it. Every case in
@@ -21,7 +21,10 @@ seconds between requests (anonymous limit: 3 req/min). Each turn is graded by:
 - with ``--judge``, the LLM judge (``judge.py``): ``judge_persona`` 1–5, ``judge_grounded``.
 
 LLM sampling is nondeterministic, so ``compare`` gates pass *rates*, not single turns
-(see ``RATE_GATES``/``MEAN_GATES``) and exits 1 on any regression.
+(see ``RATE_GATES``/``MEAN_GATES``), and exits 1 on any regression. A drop counts only
+when it is beyond the tolerance *and* statistically meaningful (z > 1.96); the safety
+metrics ``completed`` and ``no_invented_entry`` flag any drop. Judge metrics are
+reported but gate only with ``--gate-judge``. Every metric prints its z and reason.
 
 ``--submit`` sends the judge results to Datadog LLM Observability as evaluations on
 each turn's agent span (``done.trace_id``/``span_id``, present when the backend runs
@@ -41,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import statistics
@@ -80,6 +84,15 @@ RATE_GATES: dict[str, float] = {
 MEAN_GATES: dict[str, float] = {"judge_persona": 0.5}
 # Only present when --judge ran; skipped (not failed) if either side lacks them.
 OPTIONAL_METRICS = frozenset({"judge_grounded", "judge_persona"})
+# A drop beyond the tolerance is a regression only if it is also beyond sampling noise:
+# at n = 36 a pass rate has a standard error of about 8 pp, so 1 of 27 follow-ups or a
+# 10 pp judge swing between two runs of the same code is noise. Two-proportion z-test
+# (pooled) for rates, Welch z for means; one-sided drops beyond z = 1.96.
+Z_CRITICAL = 1.96
+# Safety metrics: any drop is a regression, however small the sample.
+STRICT_METRICS = frozenset({"completed", "no_invented_entry"})
+# The judge is an LLM with its own variance: reported, gating only with --gate-judge.
+JUDGE_METRICS = frozenset({"judge_grounded", "judge_persona"})
 
 PERF_FIELDS = ("elapsed_ms", "ttft_ms", "llm_calls", "input_tokens", "output_tokens", "total_tokens", "cached_tokens")
 
@@ -330,45 +343,113 @@ def summarize(doc: dict) -> dict:
     median = lambda d: {f: statistics.median(v) for f, v in d.items() if v}  # noqa: E731
     return {
         "rates": dict(sorted(rates.items())),
-        "means": {k: {"mean": round(statistics.mean(v), 2), "n": len(v)} for k, v in means.items()},
+        "means": {
+            k: {"mean": round(statistics.mean(v), 2), "n": len(v), "sd": round(statistics.stdev(v), 2) if len(v) > 1 else None}
+            for k, v in means.items()
+        },
         "judge_errors": judge_errors,
         "perf_median": median(all_perf),
         "perf_median_by_turn": {k: median(v) for k, v in perf.items()},
     }
 
 
+def two_proportion_z(b_passed: int, b_total: int, c_passed: int, c_total: int) -> float:
+    """z of the drop from base to candidate (positive = candidate worse), pooled standard error."""
+    pooled = (b_passed + c_passed) / (b_total + c_total)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / b_total + 1 / c_total))
+    if se == 0:  # both sides at 0 % or both at 100 %: nothing dropped
+        return 0.0
+    return (b_passed / b_total - c_passed / c_total) / se
+
+
+def mean_z(b: dict, c: dict) -> float | None:
+    """Welch z of the drop between two means ({mean, n, sd}); None without both standard deviations."""
+    if b.get("sd") is None or c.get("sd") is None:
+        return None
+    se = math.sqrt(b["sd"] ** 2 / b["n"] + c["sd"] ** 2 / c["n"])
+    if se == 0:
+        return math.inf if b["mean"] > c["mean"] else 0.0
+    return (b["mean"] - c["mean"]) / se
+
+
 @dataclass(frozen=True)
-class Regression:
+class GateResult:
+    """One metric of a compare: ``regression`` is what makes the gate exit 1."""
+
     metric: str
     base: float | None
     candidate: float | None
     allowed_drop: float
     detail: str
+    z: float | None = None
+    gating: bool = True
+    regression: bool = False
 
 
-def compare(base: dict, cand: dict) -> list[Regression]:
-    """Gate a candidate run against a base run (both full harness JSON docs). Pure."""
-    b, c = base["summary"], cand["summary"]
-    regressions: list[Regression] = []
+def _summary(doc: dict) -> dict:
+    # Recomputed from the turns when present: older docs lack the judge persona sd.
+    return summarize(doc) if doc.get("runs") else doc["summary"]
+
+
+def evaluate(base: dict, cand: dict, *, gate_judge: bool = False) -> list[GateResult]:
+    """Every gated metric of a candidate run against a base run (both full harness JSON docs). Pure.
+
+    A drop is a regression when it exceeds the metric's tolerance *and* is statistically
+    meaningful (z > ``Z_CRITICAL``); ``STRICT_METRICS`` flag any drop. Judge metrics are
+    reported but only gate with ``gate_judge``.
+    """
+    b, c = _summary(base), _summary(cand)
+    results: list[GateResult] = []
     for metric, allowed in RATE_GATES.items():
-        b_rate = b["rates"].get(metric, {}).get("rate")
-        c_rate = c["rates"].get(metric, {}).get("rate")
-        if b_rate is None:
+        bs, cs = b["rates"].get(metric), c["rates"].get(metric)
+        if not bs or not bs["total"]:
             continue
-        if c_rate is None:
-            if metric not in OPTIONAL_METRICS:
-                regressions.append(Regression(metric, b_rate, None, allowed, "missing in candidate"))
+        gating = metric not in JUDGE_METRICS or gate_judge
+        if not cs or not cs["total"]:
+            missing = metric not in OPTIONAL_METRICS
+            detail = "missing in candidate" if missing else "skipped: not in candidate"
+            results.append(GateResult(metric, bs["rate"], None, allowed, detail, gating=gating, regression=missing and gating))
             continue
-        if c_rate < b_rate - allowed - 1e-9:
-            regressions.append(Regression(metric, b_rate, c_rate, allowed, f"{c_rate - b_rate:+.1f} pp"))
+        drop = 100 * (bs["passed"] / bs["total"] - cs["passed"] / cs["total"])
+        z = two_proportion_z(bs["passed"], bs["total"], cs["passed"], cs["total"])
+        delta = f"{0.0 - drop:+.1f} pp"
+        if metric in STRICT_METRICS:
+            flagged = drop > 1e-9
+            detail = f"{delta}, strict: any drop" if flagged else delta
+        elif drop <= allowed + 1e-9:
+            flagged, detail = False, f"{delta}, within {allowed:g} pp"
+        elif z <= Z_CRITICAL:
+            flagged, detail = False, f"{delta}, noise: z {z:.2f} ≤ {Z_CRITICAL}"
+        else:
+            flagged, detail = True, f"{delta}, z {z:.2f} > {Z_CRITICAL}"
+        if flagged and not gating:
+            detail += " (judge: not gating)"
+        results.append(GateResult(metric, bs["rate"], cs["rate"], allowed, detail, z, gating, flagged and gating))
     for metric, allowed in MEAN_GATES.items():
-        b_mean = b["means"].get(metric, {}).get("mean")
-        c_mean = c["means"].get(metric, {}).get("mean")
-        if b_mean is None or c_mean is None:
+        bm, cm = b["means"].get(metric), c["means"].get(metric)
+        if not bm or not cm:
             continue
-        if c_mean < b_mean - allowed - 1e-9:
-            regressions.append(Regression(metric, b_mean, c_mean, allowed, f"{c_mean - b_mean:+.2f}"))
-    return regressions
+        gating = metric not in JUDGE_METRICS or gate_judge
+        drop = bm["mean"] - cm["mean"]
+        z = mean_z(bm, cm)
+        delta = f"{0.0 - drop:+.2f}"
+        if drop <= allowed + 1e-9:
+            flagged, detail = False, f"{delta}, within {allowed:g}"
+        elif z is None:  # no spread known: the tolerance alone decides
+            flagged, detail = True, f"{delta}, no sd: tolerance only"
+        elif z <= Z_CRITICAL:
+            flagged, detail = False, f"{delta}, noise: z {z:.2f} ≤ {Z_CRITICAL}"
+        else:
+            flagged, detail = True, f"{delta}, z {z:.2f} > {Z_CRITICAL}"
+        if flagged and not gating:
+            detail += " (judge: not gating)"
+        results.append(GateResult(metric, bm["mean"], cm["mean"], allowed, detail, z, gating, flagged and gating))
+    return results
+
+
+def compare(base: dict, cand: dict, *, gate_judge: bool = False) -> list[GateResult]:
+    """The regressions only (empty = the candidate passes the gate)."""
+    return [r for r in evaluate(base, cand, gate_judge=gate_judge) if r.regression]
 
 
 def _rate_cell(summary: dict, metric: str) -> str:
@@ -378,25 +459,31 @@ def _rate_cell(summary: dict, metric: str) -> str:
     return f"{slot['rate']}% ({slot['passed']}/{slot['total']})"
 
 
-def compare_table(base: dict, cand: dict, regressions: list[Regression]) -> str:
-    b, c = base["summary"], cand["summary"]
-    failed = {r.metric for r in regressions}
+def _gate_cell(metric: str, allowed: float, gating: bool, unit: str) -> str:
+    if not gating:
+        return "info only (--gate-judge)"
+    if metric in STRICT_METRICS:
+        return "strict: any drop"
+    return f"drop > {allowed:g}{unit} and z > {Z_CRITICAL}"
+
+
+def compare_table(base: dict, cand: dict, results: list[GateResult]) -> str:
+    b, c = _summary(base), _summary(cand)
     lines = [
-        f"| metric | {base['label']} | {cand['label']} | gate | result |",
-        "|---|---|---|---|---|",
+        f"| metric | {base['label']} | {cand['label']} | z | gate | result |",
+        "|---|---|---|---|---|---|",
     ]
-    for metric, allowed in RATE_GATES.items():
-        if metric not in b["rates"] and metric not in c["rates"]:
-            continue
-        verdict = "REGRESSION" if metric in failed else "ok"
-        lines.append(f"| {metric} | {_rate_cell(b, metric)} | {_rate_cell(c, metric)} | ≥ base − {allowed:g} pp | {verdict} |")
-    for metric, allowed in MEAN_GATES.items():
-        bm, cm = b["means"].get(metric), c["means"].get(metric)
-        if not bm and not cm:
-            continue
-        verdict = "REGRESSION" if metric in failed else "ok"
-        cell = lambda m: f"{m['mean']} (n={m['n']})" if m else "—"  # noqa: E731
-        lines.append(f"| {metric} | {cell(bm)} | {cell(cm)} | ≥ base − {allowed:g} | {verdict} |")
+    verdict = lambda r: ("REGRESSION" if r.regression else "ok") + f": {r.detail}"  # noqa: E731
+    zcell = lambda r: "—" if r.z is None else ("inf" if math.isinf(r.z) else f"{r.z:.2f}")  # noqa: E731
+    for r in results:
+        if r.metric in MEAN_GATES:
+            cell = lambda m: f"{m['mean']} (n={m['n']}, sd={m.get('sd', '—')})" if m else "—"  # noqa: E731
+            base_cell, cand_cell = cell(b["means"].get(r.metric)), cell(c["means"].get(r.metric))
+            unit = ""
+        else:
+            base_cell, cand_cell = _rate_cell(b, r.metric), _rate_cell(c, r.metric)
+            unit = " pp"
+        lines.append(f"| {r.metric} | {base_cell} | {cand_cell} | {zcell(r)} | {_gate_cell(r.metric, r.allowed_drop, r.gating, unit)} | {verdict(r)} |")
     lines += ["", "| perf (median, info only) | base | candidate |", "|---|---|---|"]
     for f in PERF_FIELDS:
         lines.append(f"| {f} | {b['perf_median'].get(f, '—')} | {c['perf_median'].get(f, '—')} |")
@@ -591,14 +678,16 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("compare", help="gate a candidate run against a base run (exit 1 on regression)")
     c.add_argument("base")
     c.add_argument("candidate")
+    c.add_argument("--gate-judge", action="store_true", help="judge metrics gate too (default: reported only)")
 
     args = ap.parse_args(argv)
 
     if args.command == "compare":
         base = json.loads(Path(args.base).read_text(encoding="utf-8"))
         cand = json.loads(Path(args.candidate).read_text(encoding="utf-8"))
-        regressions = compare(base, cand)
-        print(compare_table(base, cand, regressions))
+        results = evaluate(base, cand, gate_judge=args.gate_judge)
+        print(compare_table(base, cand, results))
+        regressions = [r for r in results if r.regression]
         for reg in regressions:
             print(f"REGRESSION {reg.metric}: {reg.base} → {reg.candidate} ({reg.detail})", file=sys.stderr)
         return 1 if regressions else 0
