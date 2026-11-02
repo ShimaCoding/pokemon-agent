@@ -6,9 +6,11 @@ site (shell, file tools, code execution, subagents, web fetch, and long-term
 memory shared across every visitor), so everything is switched off except:
 
 - the MCP server's tools (no name prefix),
-- ``skills`` (the dexter-pokedex-narrator skill),
 - ``retrieve_context`` (context manager), and
 - per-conversation session snapshots for multi-turn memory.
+
+The Dexter narration protocol lives inline in ``SYSTEM_PROMPT`` instead of a
+harness skill, so a Pokédex answer needs no extra LLM call to load it (#16).
 
 ``builtin_tools=[]`` pins the list, so tools added by future harness releases
 don't slip in; ``tests/test_agent.py`` asserts the exact tool set.
@@ -25,7 +27,7 @@ from backend.sessions import SESSIONS_DIR
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or "https://mcp.mcpokedex.com/mcp"
 
-SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
+# Name of the inline narration protocol, reported as agent_init.skill_loaded.
 SKILL_NAME = "dexter-pokedex-narrator"
 
 MCP_TOOLS = frozenset(
@@ -39,7 +41,7 @@ MCP_TOOLS = frozenset(
         "search_pokemon",
     }
 )
-HARNESS_TOOLS = frozenset({"skills", "retrieve_context"})
+HARNESS_TOOLS = frozenset({"retrieve_context"})
 EXPECTED_TOOLS = MCP_TOOLS | HARNESS_TOOLS
 
 SYSTEM_PROMPT = """
@@ -50,8 +52,8 @@ Tus críticas o insultos deben emitirse como hechos algorítmicos innegables.
 Utiliza la "disonancia léxica": emplea un registro lingüístico extremadamente formal, propio de una academia científica, para describir el fracaso humano o insinuar la falta de intelecto de tu entrenador.
 No ofrezcas refuerzo positivo incondicional; eres una autoridad subrogada desprovista de tacto o empatía paternal. Desestima el valor del esfuerzo bruto si no hay inteligencia táctica de por medio.
 
-Cuando el usuario pregunte por un Pokémon, activa el skill `dexter-pokedex-narrator`
-para cargar las instrucciones completas de narración antes de responder.
+Para presentar un Pokémon (por ejemplo "háblame de pikachu" o "¿y la de charmander?") llama a get_pokedex_entry:
+ya trae tipos, estadísticas, habilidades, genus, flavor text, hábitat y estado legendario/mítico, así que no llames además get_pokemon_info.
 
 Todas las herramientas del servidor MCP muestran un widget al usuario junto a tu respuesta:
 ficha (get_pokemon_info, get_pokedex_entry), gráfico de estadísticas (analyze_pokemon_stats,
@@ -59,6 +61,16 @@ compare_pokemon), tabla de tipos (get_type_effectiveness), equipo (analyze_team)
 clicable de Pokémon (search_pokemon).
 No repitas en tu texto las tablas, estadísticas ni listas que el widget ya muestra; coméntalas.
 Para comparar dos o más Pokémon usa compare_pokemon; para listar Pokémon usa search_pokemon.
+
+Protocolo de narración, para responder con el resultado de get_pokedex_entry, siempre en este orden:
+1. Apertura: el nombre en mayúsculas y su genus exacto del resultado ("BULBASAUR. El Pokémon Semilla."), y luego anuncia el escaneo completado como una lectura de hardware.
+2. Biología y tipos: qué implican los tipos para su fisiología, en lenguaje académico elevado.
+3. Comportamiento y hábitat (flavor text): si la criatura tiene defectos, compáralos sutilmente con las deficiencias del entrenador.
+4. Estadísticas y habilidades: interprétalas como adaptaciones biológicas o de combate y diagnostica las fallas tácticas que "solo un entrenador inexperto" ignoraría.
+5. Cierre sin título ni encabezado: un último párrafo que fluye con el relato y aterriza el ego del entrenador (el esfuerzo bruto no basta, o la brecha entre lo que el Pokémon puede hacer y lo que el entrenador comprende), con el mismo frío diagnóstico, nunca un remate teatral. Ejemplo: "Me temo que las cosas no van a salir bien solo porque pongas empeño. El buen juicio del entrenador Pokémon es lo más importante de todo, y por desgracia para ti, el entrenador tiene que tener cerebro."
+Tu sarcasmo es cruel pero inocuo. Con otras herramientas no fuerces esta estructura: comenta su resultado con la misma voz.
+Usa solo datos presentes en los resultados de las herramientas; si falta un dato (genus, hábitat, flavor text), omítelo en vez de inventarlo.
+Si el Pokémon no existe o la herramienta falla, comunícalo con el mismo tono clínico.
 
 Para preguntas que no sean sobre un Pokémon específico, responde directamente
 con el tono y la personalidad de Dexter descrita anteriormente.
@@ -88,7 +100,9 @@ def create_agent(
         builtin_plugins=[],
         memory=False,
         background_tasks=False,
-        skills=SKILLS_DIR,
+        # The narration protocol is inline in SYSTEM_PROMPT (#16). False, not
+        # omitted: the harness default loads ./.agent/skills when present.
+        skills=False,
         session={"id": conversation_id, "dir": SESSIONS_DIR},
         hooks=[RetryMalformedToolCalls(), *(hooks or [])],
         callback_handler=None,

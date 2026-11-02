@@ -129,6 +129,9 @@ def test_failed_ui_tool_emits_no_widget():
     assert "ui_resource" not in [e["type"] for e in events]
 
 
-def test_skills_result_is_summarized():
-    events = _tool_events("skills", None)
-    assert events[1]["result"].startswith("[Skill activado")
+def test_unknown_tool_result_passes_through():
+    # An old conversation may still call the removed `skills` tool (#16): its
+    # error result is shown as is, with no widget.
+    events = _tool_events("skills", None, status="error")
+    assert [e["type"] for e in events] == ["tool_call", "tool_result"]
+    assert events[1]["result"] == "tabla"

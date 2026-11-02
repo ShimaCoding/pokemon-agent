@@ -219,7 +219,7 @@ Por eso en la traza ves siempre el par: un `tool_call` seguido —a veces ciento
 Cada request a `/api/agent/run` produce una secuencia de eventos SSE que cuentan la historia del agente de principio a fin. Aprender a leerlos es la forma más rápida de entender —y debuggear— cualquier agente. Este es el orden típico:
 
 - **`start`** — El servidor aceptó el request y seleccionó un proveedor LLM. El agente todavía no arrancó; sólo confirmamos que llegamos.
-- **`agent_init`** — Strands se conectó al servidor MCP y descubrió las tools disponibles. Aquí ves cuántas tools tiene el agente y si se cargó alguna skill. Si algo anda mal con MCP, este evento revela problemas temprano.
+- **`agent_init`** — Strands se conectó al servidor MCP y descubrió las tools disponibles. Aquí ves cuántas tools tiene el agente y el protocolo de narración activo (`skill_loaded`, incluido en el system prompt). Si algo anda mal con MCP, este evento revela problemas temprano.
 - **`llm_call`** — Se envía el prompt al LLM (con el historial completo). El campo `call_index` te dice cuántas veces vamos: un agente puede tener varias llamadas al LLM en un mismo run (una por cada "turno de razonamiento" entre tool calls).
 - **`model_attempt`** — Dentro del LiteLLM Router, se está probando un modelo concreto. `status: "success"` = respondió, `status: "failed"` = el Router va a pasar al siguiente. Aquí ves el fallback multi-proveedor funcionando.
 - **`tool_call`** — El LLM decidió llamar una tool. Los `args` son el input exacto que el modelo produjo. El `index` identifica este call para matchearlo con su resultado.
@@ -329,7 +329,8 @@ EVENTS_CATALOG: dict = {
     "agent_init": {
         "description_md": (
             "**agent_init** — Strands se conectó al servidor MCP, descubrió las "
-            "tools y (si corresponde) cargó la skill Dexter. A partir de aquí el "
+            "tools y cargó el protocolo de narración de Dexter (incluido en el "
+            "system prompt). A partir de aquí el "
             "agente está listo para razonar."
         ),
         "related_lesson_id": "mcp_protocol",
