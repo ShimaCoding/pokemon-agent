@@ -2,15 +2,9 @@ import { useState } from 'react'
 import { flushSync } from 'react-dom'
 import { sendChatMessage } from '../../hooks/useAgentStream'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { randomSuggestions } from './suggestions'
 import { useMessageInput } from './useMessageInput'
 import styles from './Welcome.module.css'
-
-const SUGGESTIONS = [
-  { title: 'Ficha Pokédex', prompt: 'Muéstrame la entrada de la Pokédex de Gengar' },
-  { title: 'Comparar stats', prompt: 'Compara a Snorlax, Lapras y Dragonite' },
-  { title: 'Analizar stats', prompt: '¿Qué tan bueno es Shuckle? Analiza sus estadísticas' },
-  { title: 'Tipos', prompt: '¿Contra qué tipos es fuerte el tipo Agua?' },
-]
 
 /**
  * Send the first message and let the dialog box fly down into the bottom bar:
@@ -29,6 +23,8 @@ function sendWithTransition(query: string) {
 
 export default function Welcome() {
   const [hover, setHover] = useState(0)
+  // Picked once per mount, so every page load shows different examples.
+  const [suggestions] = useState(randomSuggestions)
   const { inFlight, rateLimitSeconds, canSend, submit, slashMenu, inputRef, inputProps } = useMessageInput({
     onSend: sendWithTransition,
     keepValueOnSend: true,
@@ -72,7 +68,7 @@ export default function Welcome() {
         )}
       </div>
       <nav className={styles.menu} aria-label="Ejemplos">
-        {SUGGESTIONS.map((s, i) => (
+        {suggestions.map((s, i) => (
           <button
             key={s.title}
             className={styles.option}
