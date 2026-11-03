@@ -27,6 +27,8 @@ package = false
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",
+    # Phoenix datasets/experiments for the eval harness (backend/evals/phoenix_experiment.py).
+    "arize-phoenix-client>=3.6.0",
 ]
 
 [tool.pytest.ini_options]
