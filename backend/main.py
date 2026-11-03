@@ -15,6 +15,8 @@ Security:
   - API key auth: set API_KEY env var; clients send the X-API-Key header.
     Authenticated requests skip the agent rate limit and get the larger model.
   - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
+    Local eval runs can lift that cap with RATE_LIMIT_DISABLED=1, which is
+    ignored (with a warning) when DD_ENV is prod or preview.
   - Feedback: /api/feedback takes 10 req/min per IP, one vote per reply, and
     only for replies this process issued (in-memory registry, single worker).
   - CORS: controlled by ALLOWED_ORIGINS env var (comma-separated).
@@ -88,6 +90,21 @@ def _is_authenticated_request() -> bool:
     return _is_valid_api_key(_req_api_key.get())
 
 
+# Envs where RATE_LIMIT_DISABLED never takes effect.
+_PROTECTED_ENVS = {"prod", "preview"}
+
+
+def rate_limit_disabled() -> bool:
+    """True when RATE_LIMIT_DISABLED is set and DD_ENV is not prod/preview (local evals only)."""
+    if os.environ.get("RATE_LIMIT_DISABLED", "").strip().lower() not in {"1", "true", "yes"}:
+        return False
+    return os.environ.get("DD_ENV", "").strip().lower() not in _PROTECTED_ENVS
+
+
+def _agent_run_exempt() -> bool:
+    return rate_limit_disabled() or _is_authenticated_request()
+
+
 async def require_api_key(api_key: str = Security(_api_key_header)) -> None:
     """Dependency: require a valid API key (used for admin endpoints)."""
     if not _is_valid_api_key(api_key):
@@ -104,6 +121,11 @@ async def lifespan(app: FastAPI):
             "CORS configured with wildcard '*'. "
             "Set ALLOWED_ORIGINS in .env for production."
         )
+    if os.environ.get("RATE_LIMIT_DISABLED", "").strip():
+        if rate_limit_disabled():
+            logger.warning("RATE_LIMIT_DISABLED: /api/agent/run has no rate limit (local evals only).")
+        else:
+            logger.warning("RATE_LIMIT_DISABLED ignored: DD_ENV=%s keeps the rate limit.", os.environ.get("DD_ENV"))
     init_db()
     prune_task = asyncio.create_task(prune_periodically())
     try:
@@ -319,7 +341,7 @@ async def post_feedback(request: Request, body: FeedbackRequest):
 
 
 @app.post("/api/agent/run")
-@limiter.limit("3/minute", exempt_when=_is_authenticated_request)
+@limiter.limit("3/minute", exempt_when=_agent_run_exempt)
 async def run_agent(request: Request, body: RunRequest, api_key: str = Security(_api_key_header)):
     authenticated = _is_valid_api_key(api_key)
     # Every yielded SSE frame must reach the client as its own chunk (test_streaming.py).
