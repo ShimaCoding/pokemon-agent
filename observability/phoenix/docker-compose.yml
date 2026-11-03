@@ -5,10 +5,12 @@
 #   PHOENIX_SECRET                  JWT secret, >= 32 chars with a digit and a lowercase letter
 #   PHOENIX_ADMIN_INITIAL_PASSWORD  first password of admin@localhost (changed on first login)
 #
-# The UI is public at https://phoenix.shimadev.xyz (auth on). OTLP is not routed by
-# Traefik: the agent sends to http://mcpokedex-phoenix:6006 over dokploy-network, with a
-# system API key. The database is reachable only on dokploy-network (Grafana reads it
-# with the read-only role `grafana_ro`, see observability/grafana/).
+# Public at https://phoenix.shimadev.xyz with auth on: the UI, the REST API and OTLP
+# (/v1/traces), which Phoenix only accepts with an API key. The agent sends OTLP over
+# dokploy-network to http://mcpokedex-phoenix:6006 (system key mcpokedex-agent); eval
+# experiments run from dev machines send their task traces through the public route
+# (system key mcpokedex-evals). The database is reachable only on dokploy-network
+# (Grafana reads it with the read-only role `grafana_ro`, see observability/grafana/).
 services:
   mcpokedex-phoenix:
     image: arizephoenix/phoenix:21.0.0
@@ -49,7 +51,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.mcpokedex-phoenix.rule=Host(`phoenix.shimadev.xyz`) && !PathPrefix(`/v1/traces`)"
+      - "traefik.http.routers.mcpokedex-phoenix.rule=Host(`phoenix.shimadev.xyz`)"
       - "traefik.http.routers.mcpokedex-phoenix.entrypoints=websecure"
       - "traefik.http.routers.mcpokedex-phoenix.tls.certresolver=letsencrypt"
       - "traefik.http.routers.mcpokedex-phoenix.service=mcpokedex-phoenix"
