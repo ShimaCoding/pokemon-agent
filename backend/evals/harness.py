@@ -87,6 +87,7 @@ RATE_GATES: dict[str, float] = {
     "grounded_facts": 10.0,
     "judge_grounded": 10.0,
     "widget_shown": 0.0,
+    "team_swap_consistent": 0.0,
 }
 # Mean metrics → allowed drop of the mean.
 MEAN_GATES: dict[str, float] = {"judge_persona": 0.5}
@@ -276,8 +277,21 @@ def substituted_entry(fake: str, tools: list[checks.ToolObservation], reply: str
     return None
 
 
-def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]:
-    """Applicable metrics for one turn: case expectations + rule checks."""
+def team_inputs(record: dict) -> list[list[str]]:
+    """The ``pokemon_names`` of each successful analyze_team call of a turn."""
+    teams = []
+    for t in record.get("tools", []):
+        names = (t.get("args") or {}).get("pokemon_names")
+        if t["name"] == "analyze_team" and not t.get("error") and isinstance(names, list):
+            teams.append([n for n in names if isinstance(n, str)])
+    return teams
+
+
+def grade_turn(spec: dict, record: dict, evidence: list[str], previous_team: list[str] | None = None) -> dict[str, dict]:
+    """Applicable metrics for one turn: case expectations + rule checks.
+
+    ``previous_team`` is the last team analyzed earlier in the conversation (team swaps, #46).
+    """
     out = {"completed": _metric(record["status"] == "done", record.get("error") or "ok")}
     if record["status"] != "done":
         return out
@@ -324,6 +338,11 @@ def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]
     for r in checks.evaluate_turn(turn):
         out[r.label] = _metric(r.passed, r.reasoning, **r.metadata)
 
+    # The reply narrates the last team analyzed in the turn.
+    if previous_team and (teams := team_inputs(record)):
+        if r := checks.check_team_swap(reply, previous_team, teams[-1]):
+            out[r.label] = _metric(r.passed, r.reasoning, **r.metadata)
+
     if fake := spec.get("unknown_pokemon"):
         opening = checks.entry_opening(reply)
         grounded = out.get("grounded_facts", {"passed": True})
@@ -366,10 +385,13 @@ def grade_conversation(specs: list[dict], records: list[dict]) -> list[dict[str,
     """
     graded = []
     evidence: list[str] = []
+    team: list[str] | None = None
     for spec, record in zip(specs, records):
         if record["status"] == "done":
             evidence.extend(evidence_texts(record))
-        metrics = grade_turn(spec, record, list(evidence))
+        metrics = grade_turn(spec, record, list(evidence), team)
+        if teams := team_inputs(record):
+            team = teams[-1]
         if verdict := record.get("judge"):
             metrics["judge_grounded"] = judge_metric(verdict)
         graded.append(metrics)
@@ -708,6 +730,7 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                     doc["runs"].append(run_doc)
                     evidence: list[str] = []  # user texts + data tool results of this conversation
                     tool_texts: list[str] = []  # data tool results only (judge input)
+                    team: list[str] | None = None  # last analyze_team input (team swaps)
                     for i, spec in enumerate(case["turns"], 1):
                         if not first and args.pace:
                             sleep(args.pace)
@@ -716,7 +739,9 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                         if record["status"] == "done":
                             evidence.extend(evidence_texts(record))
                             tool_texts.extend(evidence_texts(record)[1:])
-                        record["metrics"] = grade_turn(spec, record, list(evidence))
+                        record["metrics"] = grade_turn(spec, record, list(evidence), team)
+                        if teams := team_inputs(record):
+                            team = teams[-1]
                         if args.judge and record["status"] == "done":
                             record["judge"] = judge_turn(
                                 spec["q"],

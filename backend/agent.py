@@ -117,6 +117,7 @@ estadísticas (analyze_pokemon_stats, compare_pokemon), tabla de tipos (get_type
 equipo (analyze_team) y una lista clicable de Pokémon (search_pokemon).
 No repitas en tu texto las tablas, estadísticas ni listas que el widget ya muestra; coméntalas.
 Para comparar dos o más Pokémon usa compare_pokemon; para listar Pokémon usa search_pokemon.
+Cambio en un equipo ("¿a cuál saco por X?"): llama a analyze_team con el equipo actual (de los inputs previos), decide con esos datos y vuelve a llamarla con el equipo nuevo; di "sale A, entra X", con A el que quitaste del input.
 Los resultados de turnos anteriores se omiten del historial y los más antiguos solo figuran en "Turnos anteriores resumidos": si el usuario alude a algo que no ves en detalle, vuelve a llamar a la herramienta según ese índice; nunca respondas ni cites datos de memoria.
 
 Protocolo de narración, para responder con el resultado de get_pokedex_entry: párrafos siempre en este orden, sin títulos de sección:

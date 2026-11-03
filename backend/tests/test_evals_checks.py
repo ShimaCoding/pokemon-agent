@@ -302,3 +302,33 @@ def test_evaluate_turn_labels_have_no_dots():
         for r in checks.evaluate_turn(turn):
             assert "." not in r.label
             assert r.assessment in ("pass", "fail")
+
+
+# --- team swaps (#46) ---------------------------------------------------------------
+
+TEAM = ["togepi", "pikachu", "ditto", "charmander", "pidgey", "mew"]
+SWAPPED = ["togepi", "pikachu", "ditto", "charmander", "pidgey", "torterra"]  # mew out
+
+
+@pytest.mark.parametrize(
+    ("reply", "passed"),
+    [
+        ("Sale Mew, entra Torterra.", True),
+        ("La sustitución más lógica es eliminar a **Mew**.", True),
+        ("El candidato lógico de retiro es Mew.", True),
+        ("Mew sale del equipo y Torterra ocupa su lugar.", True),
+        ("Saco a Mew; retirar a Pidgey, por el contrario, sería peor.", True),
+        ("Retira a Pidgey: su BST de 251 es el más bajo.", False),  # prod bdaac873, T3
+        ("Torterra aporta Planta/Tierra al equipo.", False),
+    ],
+)
+def test_team_swap_consistent(reply, passed):
+    result = checks.check_team_swap(reply, TEAM, SWAPPED)
+    assert result.label == "team_swap_consistent"
+    assert result.passed is passed
+
+
+def test_team_swap_check_needs_exactly_one_swap():
+    assert checks.check_team_swap("Sale Mew.", TEAM, TEAM) is None
+    assert checks.check_team_swap("Sale Mew.", TEAM, ["torterra", "lucario", *TEAM[2:5]]) is None
+    assert checks.check_team_swap("Sale Mr. Mime.", ["mr-mime", "pikachu"], ["mew", "pikachu"]).passed

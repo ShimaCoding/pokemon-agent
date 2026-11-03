@@ -209,7 +209,8 @@ def test_system_prompt_budget():
     assert len(protocol) <= 1870
     # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
     # +350 for get_evolution_chain routing and narration (#47, ~90 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 4100
+    # +230 for the team-swap rule of #46.
+    assert len(SYSTEM_PROMPT) <= 4330
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -293,3 +294,8 @@ def test_prompt_routes_evolution_questions_to_get_evolution_chain():
     assert "pokemon" in POKEMON_NAME_ARGS  # get_evolution_chain(pokemon) is slugged
     assert "get_evolution_chain" in SYSTEM_PROMPT
     assert "nunca des etapas ni niveles de memoria" in SYSTEM_PROMPT
+
+
+def test_prompt_has_the_team_swap_rule():
+    assert "analyze_team con el equipo actual" in SYSTEM_PROMPT
+    assert '"sale A, entra X"' in SYSTEM_PROMPT
