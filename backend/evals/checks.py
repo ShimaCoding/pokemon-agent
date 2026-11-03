@@ -425,7 +425,8 @@ def swap_mentions(reply: str, names: list[str]) -> set[str]:
     for name in names:
         n = re.escape(normalize(name))
         # Up to two words in between: "saco a pidgey", "el candidato de retiro es togepi".
-        before = rf"\b{_SWAP_VERB}(?:\s+[a-z]+){{0,2}}?\s+{n}\b"
+        # Never across "por": "sustituirlo por Torterra" names who comes in.
+        before = rf"\b{_SWAP_VERB}(?:\s+(?!por\b)[a-z]+){{0,2}}?\s+{n}\b"
         bare = rf"\b(?:fuera|sale)\s+{n}\b"
         after = rf"\b{n}{_SWAP_AFTER}"
         if re.search(before, norm) or re.search(bare, norm) or re.search(after, norm):

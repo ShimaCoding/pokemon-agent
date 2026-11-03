@@ -320,6 +320,7 @@ SWAPPED = ["togepi", "pikachu", "ditto", "charmander", "pidgey", "torterra"]  # 
         ("Saco a Mew; retirar a Pidgey, por el contrario, sería peor.", True),
         ("Retira a Pidgey: su BST de 251 es el más bajo.", False),  # prod bdaac873, T3
         ("Torterra aporta Planta/Tierra al equipo.", False),
+        ("Sacarías a Mew y sustituirlo por Torterra.", True),
     ],
 )
 def test_team_swap_consistent(reply, passed):
@@ -332,3 +333,9 @@ def test_team_swap_check_needs_exactly_one_swap():
     assert checks.check_team_swap("Sale Mew.", TEAM, TEAM) is None
     assert checks.check_team_swap("Sale Mew.", TEAM, ["torterra", "lucario", *TEAM[2:5]]) is None
     assert checks.check_team_swap("Sale Mr. Mime.", ["mr-mime", "pikachu"], ["mew", "pikachu"]).passed
+
+
+def test_team_swap_por_names_who_comes_in():
+    # Back to the original team: Torterra leaves, but "sustituirlo por Torterra" is not that.
+    result = checks.check_team_swap("Sacarías a Mew y sustituirlo por Torterra.", SWAPPED, TEAM)
+    assert not result.passed
