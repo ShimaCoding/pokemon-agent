@@ -209,7 +209,8 @@ def test_system_prompt_budget():
     assert len(protocol) <= 1870
     # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
     # +350 for get_evolution_chain routing and narration (#47, ~90 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 4100
+    # +230 for the team-swap rule of #46.
+    assert len(SYSTEM_PROMPT) <= 4330
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -293,3 +294,66 @@ def test_prompt_routes_evolution_questions_to_get_evolution_chain():
     assert "pokemon" in POKEMON_NAME_ARGS  # get_evolution_chain(pokemon) is slugged
     assert "get_evolution_chain" in SYSTEM_PROMPT
     assert "nunca des etapas ni niveles de memoria" in SYSTEM_PROMPT
+
+
+def test_prompt_has_the_team_swap_rule():
+    assert "analyze_team con el equipo actual" in SYSTEM_PROMPT
+    assert '"sale A, entra X"' in SYSTEM_PROMPT
+
+
+# --- AnnotateTeamSwap (#46) -------------------------------------------------------------
+
+from types import SimpleNamespace as _NS
+
+from backend.agent import TEAM_SWAP_NOTE, AnnotateTeamSwap, previous_team
+
+_TEAM = ["togepi", "pikachu", "ditto", "charmander", "pidgey", "mew"]
+
+
+def _use(uid, names, name="analyze_team"):
+    return {"toolUse": {"toolUseId": uid, "name": name, "input": {"pokemon_names": names}}}
+
+
+def _swap_event(current, history):
+    use = {"toolUseId": "now", "name": "analyze_team", "input": {"pokemon_names": current}}
+    messages = [{"role": "assistant", "content": [b]} for b in history] + [{"role": "assistant", "content": [{"toolUse": use}]}]
+    result = {"toolUseId": "now", "status": "success", "content": [{"text": "{\"team_size\": 6}"}]}
+    return _NS(tool_use=use, result=result, agent=_NS(messages=messages))
+
+
+def test_previous_team_is_the_last_analyze_team_before_the_current_call():
+    history = [_use("a", ["mew"]), _use("b", ["pikachu"], name="compare_pokemon"), _use("c", _TEAM)]
+    messages = [{"role": "assistant", "content": history}, {"role": "assistant", "content": [_use("now", ["x"])]}]
+    assert previous_team(messages, "now") == _TEAM
+    assert previous_team([], "now") is None
+
+
+def test_team_swap_note_names_who_leaves():
+    event = _swap_event([*_TEAM[:5], "torterra"], [_use("t1", _TEAM)])
+    AnnotateTeamSwap._on_result(event)
+    assert event.result["content"][-1]["text"] == TEAM_SWAP_NOTE.format(out="mew", inc="torterra")
+    assert event.result["content"][0]["text"] == "{\"team_size\": 6}"
+
+
+@pytest.mark.parametrize(
+    ("current", "history"),
+    [
+        (_TEAM, [_use("t1", _TEAM)]),  # same team
+        (["torterra", "lucario", *_TEAM[2:]], [_use("t1", _TEAM)]),  # two changes
+        ([*_TEAM[:5], "torterra"], []),  # first analysis
+    ],
+)
+def test_no_note_without_a_single_swap(current, history):
+    event = _swap_event(current, history)
+    AnnotateTeamSwap._on_result(event)
+    assert len(event.result["content"]) == 1
+
+
+def test_annotate_runs_before_the_trace_hooks():
+    # AfterToolCallEvent callbacks run in reverse registration order.
+    import inspect
+
+    from backend import agent as agent_module
+
+    src = inspect.getsource(agent_module.create_agent)
+    assert "*(hooks or []), AnnotateTeamSwap()]" in src

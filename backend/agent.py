@@ -117,6 +117,7 @@ estadísticas (analyze_pokemon_stats, compare_pokemon), tabla de tipos (get_type
 equipo (analyze_team) y una lista clicable de Pokémon (search_pokemon).
 No repitas en tu texto las tablas, estadísticas ni listas que el widget ya muestra; coméntalas.
 Para comparar dos o más Pokémon usa compare_pokemon; para listar Pokémon usa search_pokemon.
+Cambio en un equipo ("¿a cuál saco por X?"): llama a analyze_team con el equipo actual (de los inputs previos), decide con esos datos y vuelve a llamarla con el equipo nuevo; di "sale A, entra X", con A el que quitaste del input.
 Los resultados de turnos anteriores se omiten del historial y los más antiguos solo figuran en "Turnos anteriores resumidos": si el usuario alude a algo que no ves en detalle, vuelve a llamar a la herramienta según ese índice; nunca respondas ni cites datos de memoria.
 
 Protocolo de narración, para responder con el resultado de get_pokedex_entry: párrafos siempre en este orden, sin títulos de sección:
@@ -175,6 +176,55 @@ class NormalizePokemonNames:
                 tool_input[key] = [pokemon_slug(v) if isinstance(v, str) else v for v in value]
 
 
+TEAM_SWAP_NOTE = "[Cambio respecto al equipo anterior: sale {out}, entra {inc}. Nárralo así.]"
+
+
+def previous_team(messages: list[dict], current_id: str) -> list[str] | None:
+    """The ``pokemon_names`` of the last analyze_team call before ``current_id`` in the history."""
+    team = None
+    for message in messages:
+        for block in message.get("content", []):
+            use = block.get("toolUse") if isinstance(block, dict) else None
+            if not use or use.get("name") != "analyze_team" or use.get("toolUseId") == current_id:
+                continue
+            names = (use.get("input") or {}).get("pokemon_names")
+            if isinstance(names, list):
+                team = [n for n in names if isinstance(n, str)]
+    return team
+
+
+class AnnotateTeamSwap:
+    """State the swap in an analyze_team result when the team differs from the previous one by one member.
+
+    The routing call writes the new team without explaining whom it took out, and
+    the narration call used to justify a different member (#46). The note makes the
+    swap a fact of the tool result. Registered last: AfterToolCallEvent callbacks run
+    in reverse, so the trace hooks (SSE, evidence) see the annotated result.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import AfterToolCallEvent
+
+        registry.add_callback(AfterToolCallEvent, self._on_result)
+
+    @staticmethod
+    def _on_result(event) -> None:
+        use = event.tool_use
+        result = event.result
+        if use.get("name") != "analyze_team" or not isinstance(result, dict) or result.get("status") != "success":
+            return
+        current = (use.get("input") or {}).get("pokemon_names")
+        before = previous_team(getattr(event.agent, "messages", []) or [], use.get("toolUseId", ""))
+        if not isinstance(current, list) or not before:
+            return
+        removed = [n for n in before if n not in current]
+        added = [n for n in current if n not in before]
+        if len(removed) != 1 or len(added) != 1:
+            return
+        note = {"text": TEAM_SWAP_NOTE.format(out=removed[0], inc=added[0])}
+        event.result = {**result, "content": [*result.get("content", []), note]}
+
+
 def create_agent(
     conversation_id: str,
     *,
@@ -205,7 +255,7 @@ def create_agent(
         # "auto" preset, which never fired here and cost a retrieve_context tool.
         context_manager=build_context_manager(),
         session={"id": conversation_id, "dir": SESSIONS_DIR},
-        hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or [])],
+        hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or []), AnnotateTeamSwap()],
         callback_handler=None,
     )
     # The session snapshot persists the system prompt and restores it on init,

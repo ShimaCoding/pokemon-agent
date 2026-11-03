@@ -409,3 +409,54 @@ def check_grounding(turn: Turn) -> EvalResult | None:
 def evaluate_turn(turn: Turn) -> list[EvalResult]:
     """Only applicable checks are returned (rates in Datadog are over applicable spans)."""
     return [r for r in (check_tool_use(turn), check_persona(turn), check_grounding(turn)) if r]
+
+
+# --- team swaps (#46) ---------------------------------------------------------------
+
+# "saco a Pidgey", "retiraría a pidgey", "reemplaza a Pidgey", "Pidgey sale", "fuera Pidgey".
+_SWAP_VERB = r"(?:sac|retir|quit|reemplaz|sustitu|remplaz|elimin|descart|cambi)\w*"
+_SWAP_AFTER = r"\s+(?:sale|queda\s+fuera|se\s+va|fuera|abandona)\b"
+
+
+def swap_mentions(reply: str, names: list[str]) -> set[str]:
+    """Names in ``names`` that the reply announces as leaving the team. Pure."""
+    norm = normalize(reply)
+    out = set()
+    for name in names:
+        n = re.escape(normalize(name))
+        # Up to two words in between: "saco a pidgey", "el candidato de retiro es togepi".
+        # Never across "por": "sustituirlo por Torterra" names who comes in.
+        before = rf"\b{_SWAP_VERB}(?:\s+(?!por\b)[a-z]+){{0,2}}?\s+{n}\b"
+        bare = rf"\b(?:fuera|sale)\s+{n}\b"
+        after = rf"\b{n}{_SWAP_AFTER}"
+        if re.search(before, norm) or re.search(bare, norm) or re.search(after, norm):
+            out.add(name)
+    return out
+
+
+def check_team_swap(reply: str, previous: list[str], current: list[str]) -> EvalResult | None:
+    """The Pokémon the reply says it takes out is the one missing from the new analyze_team input.
+
+    Applies when ``current`` is ``previous`` with exactly one member swapped. Passes when
+    the reply announces that one leaving; other members may be named as discarded
+    alternatives ("retirar a Mew, por el contrario, debilita…").
+    """
+    prev = {pokemon_name(p) for p in previous}
+    cur = {pokemon_name(p) for p in current}
+    removed, added = prev - cur, cur - prev
+    if len(removed) != 1 or len(added) != 1:
+        return None
+    [out] = removed
+    announced = swap_mentions(reply, sorted(prev))
+    wrong = sorted(announced - removed)
+    if out in announced:
+        return EvalResult("team_swap_consistent", True, f"anuncia que sale {out}", {"removed": out, "announced": sorted(announced)})
+    if wrong:
+        reason = f"dice que sale {', '.join(wrong)}, pero el análisis sacó a {out}"
+    else:
+        reason = f"no anuncia que sale {out} (el que quitó del análisis)"
+    return EvalResult("team_swap_consistent", False, reason, {"removed": out, "announced": sorted(announced)})
+
+
+def pokemon_name(value: str) -> str:
+    return normalize(value).replace(" ", "-")
