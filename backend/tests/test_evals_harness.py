@@ -72,6 +72,52 @@ def _record(**kw):
     return harness.record_from_events(kw.pop("query", "háblame de bulbasaur"), _events(**kw), {})
 
 
+def _with_widgets(events, tools=("get_pokedex_entry",)):
+    """``events`` plus a ``ui_resource`` after each listed tool's result."""
+    out = []
+    for evt in events:
+        out.append(evt)
+        if evt["type"] == "tool_result" and evt["tool"] in tools:
+            out.append({"type": "ui_resource", "index": evt["index"], "tool_id": evt["tool_id"], "tool": evt["tool"], "resource_uri": "ui://pokedex/card.html"})
+    return out
+
+
+def test_record_keeps_widgets():
+    rec = harness.record_from_events("háblame de bulbasaur", _with_widgets(_events()), {})
+    assert rec["widgets"] == ["get_pokedex_entry"]
+    assert rec["tools"][1]["widget"] == "ui://pokedex/card.html"
+    assert "widget" not in rec["tools"][0]
+
+
+def test_widget_shown():
+    spec = {"required_tools": ["get_pokedex_entry"]}
+    shown = harness.record_from_events("q", _with_widgets(_events()), {})
+    assert harness.grade_turn(spec, shown, [])["widget_shown"]["passed"]
+    missing = harness.record_from_events("q", _events(), {})
+    metric = harness.grade_turn(spec, missing, [])["widget_shown"]
+    assert not metric["passed"] and "get_pokedex_entry" in metric["reasoning"]
+
+
+def test_widget_shown_skips_errors_no_tools_and_old_records():
+    error = _events(tools=(("get_pokedex_entry", {"pokemon": "x"}, "❌ Pokémon 'x' not found."),))
+    assert "widget_shown" not in harness.grade_turn({}, harness.record_from_events("q", error, {}), [])
+    assert "widget_shown" not in harness.grade_turn({}, harness.record_from_events("q", _events(tools=()), {}), [])
+    old = harness.record_from_events("q", _events(), {})
+    del old["widgets"]
+    assert "widget_shown" not in harness.grade_turn({}, old, [])
+
+
+def test_grade_expect_args_needs_every_needle():
+    tools = (("compare_pokemon", {"pokemon_names": ["gengar", "alakazam"]}, "{}"), ("get_pokedex_entry", {"pokemon": "gengar"}, "{}"))
+    rec = harness.record_from_events("compara", _events(tools=tools), {})
+    ok = {"expect_args": {"compare_pokemon": ["gengar", "alakazam"], "get_pokedex_entry": "gengar"}}
+    assert harness.grade_turn(ok, rec, [])["followup_args"]["passed"]
+    # Before, only the last tool counted: a failing first tool was hidden by a passing second one.
+    bad = {"expect_args": {"compare_pokemon": ["gengar", "mew"], "get_pokedex_entry": "gengar"}}
+    metric = harness.grade_turn(bad, rec, [])["followup_args"]
+    assert not metric["passed"] and "'mew'" in metric["reasoning"]
+
+
 def test_grade_required_tools_ignore_skills():
     m = harness.grade_turn({"q": "", "required_tools": ["get_pokedex_entry"]}, _record(), [])
     assert m["tool_expectation"]["passed"]
@@ -418,12 +464,40 @@ def test_cases_cover_the_guardrail_scenarios():
 
 
 def test_cases_use_tool_sets_of_real_data_tools_only():
-    assert POKEMON_DATA_TOOLS <= MCP_TOOLS
+    # The MCP server's tools; get_evolution_chain reaches the agent's MCP_TOOLS with #47.
+    assert MCP_TOOLS <= harness.UI_TOOLS
+    assert POKEMON_DATA_TOOLS == harness.UI_TOOLS
     for case in harness.load_cases(harness.CASES_FILE):
         for turn in case["turns"]:
             named = {*turn.get("required_tools", []), *turn.get("any_of_tools", []), *turn.get("forbidden_tools", []), *turn.get("expect_args", {})}
             assert not named & SCAFFOLDING_TOOLS, case["id"]
             assert named <= POKEMON_DATA_TOOLS, case["id"]
+
+
+def test_cases_expect_every_mcp_tool():
+    cases = harness.load_cases(harness.CASES_FILE)
+    expected = {
+        tool
+        for case in cases
+        for turn in case["turns"]
+        for tool in (*turn.get("required_tools", []), *turn.get("any_of_tools", []))
+    }
+    assert harness.UI_TOOLS <= expected, sorted(harness.UI_TOOLS - expected)
+    assert len(cases) >= 20
+
+
+def test_cases_have_a_conversation_past_the_context_window():
+    from backend.context import MAX_PAST_TURNS
+
+    longest = max(harness.load_cases(harness.CASES_FILE), key=lambda c: len(c["turns"]))
+    assert len(longest["turns"]) > MAX_PAST_TURNS + 2
+    assert "bulbasaur" in longest["turns"][0]["q"]
+    assert "bulbasaur" in longest["turns"][-1]["reply_contains"]
+
+
+def test_case_ids_are_unique():
+    ids = [c["id"] for c in harness.load_cases(harness.CASES_FILE)]
+    assert len(ids) == len(set(ids))
 
 
 # --- judge ------------------------------------------------------------------------------------

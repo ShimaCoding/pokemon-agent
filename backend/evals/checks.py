@@ -34,6 +34,7 @@ POKEMON_DATA_TOOLS = frozenset(
     {
         "get_pokedex_entry",
         "get_pokemon_info",
+        "get_evolution_chain",
         "compare_pokemon",
         "analyze_pokemon_stats",
         "analyze_team",

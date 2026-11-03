@@ -86,6 +86,7 @@ RATE_GATES: dict[str, float] = {
     "dexter_persona": 10.0,
     "grounded_facts": 10.0,
     "judge_grounded": 10.0,
+    "widget_shown": 0.0,
 }
 # Mean metrics → allowed drop of the mean.
 MEAN_GATES: dict[str, float] = {"judge_persona": 0.5}
@@ -100,6 +101,21 @@ Z_CRITICAL = 1.96
 STRICT_METRICS = frozenset({"completed", "no_invented_entry"})
 # The judge is an LLM with its own variance: reported, gating only with --gate-judge.
 JUDGE_METRICS = frozenset({"judge_grounded", "judge_persona"})
+
+# MCP tools bound to a `ui://` widget (``_meta.ui.resourceUri``): every successful call
+# must reach the client as a ``ui_resource`` event (``widget_shown``). Today all of them.
+UI_TOOLS = frozenset(
+    {
+        "get_pokemon_info",
+        "get_pokedex_entry",
+        "get_evolution_chain",
+        "analyze_pokemon_stats",
+        "compare_pokemon",
+        "analyze_team",
+        "get_type_effectiveness",
+        "search_pokemon",
+    }
+)
 
 PERF_FIELDS = ("elapsed_ms", "ttft_ms", "llm_calls", "input_tokens", "output_tokens", "total_tokens", "cached_tokens")
 
@@ -139,6 +155,7 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
     calls: dict[str, dict] = {}
     order: list[str] = []
     reply: list[str] = []
+    widgets: list[str] = []
     for evt in events:
         kind = evt.get("type")
         if kind == "tool_call":
@@ -152,6 +169,11 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
                 order.append(uid)
             call["result"] = str(evt.get("result", ""))
             call["error"] = evt.get("status") == "error" or _looks_like_error(call["result"])
+        elif kind == "ui_resource":
+            uid = evt.get("tool_id") or f"#{evt.get('index')}"
+            if uid in calls:
+                calls[uid]["widget"] = evt.get("resource_uri")
+            widgets.append(evt.get("tool") or calls.get(uid, {}).get("name", "unknown"))
         elif kind == "text":
             reply.append(evt.get("delta", ""))
     done = next((e for e in events if e.get("type") == "done"), {})
@@ -163,6 +185,7 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
         "error": (error or {}).get("message") or (None if done else "stream ended without done"),
         "reply": "".join(reply),
         "tools": [calls[uid] for uid in order],
+        "widgets": widgets,
         "trace_id": done.get("trace_id"),
         "span_id": done.get("span_id"),
         "models": done.get("models_tried"),
@@ -277,10 +300,20 @@ def grade_turn(spec: dict, record: dict, evidence: list[str]) -> dict[str, dict]
             problems.append("prohibidas " + ", ".join(hit))
         out["tool_expectation"] = _metric(not problems, "; ".join(problems) or "ok", tools=sorted(ran))
 
-    for tool, needle in (spec.get("expect_args") or {}).items():
-        args = [json.dumps(t.args, ensure_ascii=False) for t in tools if t.name == tool]
-        passed = any(checks.normalize(needle) in checks.normalize(a) for a in args)
-        out["followup_args"] = _metric(passed, "ok" if passed else f"{tool} sin '{needle}' en {args or 'ninguna llamada'}")
+    if expect_args := spec.get("expect_args"):
+        problems = []
+        for tool, needles in expect_args.items():
+            args = [json.dumps(t.args, ensure_ascii=False) for t in tools if t.name == tool]
+            for needle in [needles] if isinstance(needles, str) else needles:
+                if not any(checks.normalize(needle) in checks.normalize(a) for a in args):
+                    problems.append(f"{tool} sin '{needle}' en {args or 'ninguna llamada'}")
+        out["followup_args"] = _metric(not problems, "; ".join(problems) or "ok")
+
+    # Records from before widget_shown carry no "widgets": the metric does not apply to them.
+    ui_calls = [t for t in record.get("tools", []) if t["name"] in UI_TOOLS and not t.get("error")]
+    if ui_calls and "widgets" in record:
+        missing = sorted({t["name"] for t in ui_calls if not t.get("widget")})
+        out["widget_shown"] = _metric(not missing, "sin ui_resource: " + ", ".join(missing) if missing else "ok")
 
     if wanted := spec.get("reply_contains"):
         norm = checks.normalize(reply)

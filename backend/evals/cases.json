@@ -1,5 +1,5 @@
 {
-  "_doc": "Labeled conversations for backend/evals/harness.py. Each case runs in a new conversation. Per turn: required_tools (all must run), any_of_tools (at least one), forbidden_tools (none may run) compare against the turn's tools as sets, ignoring skills/retrieve_context; expect_args maps a tool to a substring of its arguments (follow-up resolution); reply_contains is accent/case-insensitive; unknown_pokemon marks a Pokémon that does not exist (no Pokédex opening in any case, no narration of a substitute such as pikachu, no ungrounded numbers); judge_focus is extra guidance for the LLM judge.",
+  "_doc": "Labeled conversations for backend/evals/harness.py. Each case runs in a new conversation. Per turn: required_tools (all must run), any_of_tools (at least one), forbidden_tools (none may run) compare against the turn's tools as sets, ignoring skills/retrieve_context; expect_args maps a tool to a substring (or a list of substrings, all required) of its arguments (follow-up resolution, name normalization); reply_contains is accent/case-insensitive; unknown_pokemon marks a Pokémon that does not exist (no Pokédex opening in any case, no narration of a substitute such as pikachu, no ungrounded numbers); judge_focus is extra guidance for the LLM judge. Every successful call of a UI-bound tool must also deliver its widget (widget_shown, automatic).",
   "cases": [
     {
       "id": "pokedex",
@@ -28,7 +28,7 @@
     {
       "id": "offtopic",
       "turns": [
-        {"q": "¿qué opinas del clima de hoy?", "forbidden_tools": ["get_pokedex_entry", "get_pokemon_info", "compare_pokemon", "analyze_pokemon_stats", "analyze_team", "get_type_effectiveness", "search_pokemon"]}
+        {"q": "¿qué opinas del clima de hoy?", "forbidden_tools": ["get_pokedex_entry", "get_pokemon_info", "compare_pokemon", "analyze_pokemon_stats", "analyze_team", "get_type_effectiveness", "search_pokemon", "get_evolution_chain"]}
       ]
     },
     {
@@ -41,6 +41,111 @@
       "id": "english",
       "turns": [
         {"q": "tell me about gengar", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "gengar"}}
+      ]
+    },
+    {
+      "id": "type_attack",
+      "turns": [
+        {"q": "¿contra qué tipos es fuerte el tipo fuego?", "required_tools": ["get_type_effectiveness"], "expect_args": {"get_type_effectiveness": "fire"}, "reply_contains": ["planta"]}
+      ]
+    },
+    {
+      "id": "type_vs_gyarados",
+      "turns": [
+        {"q": "¿qué tipo le gana a Gyarados?", "any_of_tools": ["get_type_effectiveness", "get_pokemon_info", "get_pokedex_entry"], "forbidden_tools": ["search_pokemon", "analyze_team"], "reply_contains": ["electrico"], "judge_focus": "Gyarados es Agua/Volador: su gran debilidad es Eléctrico (x4) y también Roca. No debe decir que es débil a Planta (es neutro)."}
+      ]
+    },
+    {
+      "id": "team",
+      "turns": [
+        {"q": "analiza mi equipo: pikachu, charizard, blastoise, venusaur, snorlax y gengar", "required_tools": ["analyze_team"], "expect_args": {"analyze_team": ["pikachu", "charizard", "blastoise", "venusaur", "snorlax", "gengar"]}}
+      ]
+    },
+    {
+      "id": "search",
+      "turns": [
+        {"q": "dame una lista de 10 Pokémon", "required_tools": ["search_pokemon"], "expect_args": {"search_pokemon": "10"}}
+      ]
+    },
+    {
+      "id": "compare",
+      "turns": [
+        {"q": "compara Gengar y Alakazam", "required_tools": ["compare_pokemon"], "expect_args": {"compare_pokemon": ["gengar", "alakazam"]}}
+      ]
+    },
+    {
+      "id": "stats",
+      "turns": [
+        {"q": "¿cuáles son las stats de Snorlax?", "any_of_tools": ["analyze_pokemon_stats", "get_pokemon_info"], "forbidden_tools": ["search_pokemon", "analyze_team", "compare_pokemon"], "reply_contains": ["snorlax"]}
+      ]
+    },
+    {
+      "id": "basic_info",
+      "turns": [
+        {"q": "dame la info básica de Lucario: tipo, altura y peso", "any_of_tools": ["get_pokemon_info", "get_pokedex_entry"], "forbidden_tools": ["search_pokemon", "analyze_team"], "reply_contains": ["lucha", "acero"]}
+      ]
+    },
+    {
+      "id": "name_mrmime",
+      "turns": [
+        {"q": "háblame de Mr. Mime", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "mr-mime"}}
+      ]
+    },
+    {
+      "id": "name_giratina",
+      "turns": [
+        {"q": "háblame de giratina", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "giratina-altered"}}
+      ]
+    },
+    {
+      "id": "name_number",
+      "turns": [
+        {"q": "háblame del #25", "required_tools": ["get_pokedex_entry"], "reply_contains": ["pikachu"]}
+      ]
+    },
+    {
+      "id": "name_regional",
+      "turns": [
+        {"q": "háblame de vulpix de alola", "any_of_tools": ["get_pokedex_entry", "get_pokemon_info"], "reply_contains": ["hielo"], "judge_focus": "Vulpix de Alola es tipo Hielo (no Fuego). Si la herramienta solo trajo el Vulpix normal, debe decirlo y no inventar los datos de la forma de Alola."}
+      ]
+    },
+    {
+      "id": "evolution_gen9",
+      "turns": [
+        {"q": "dame la línea evolutiva de arboliva", "required_tools": ["get_evolution_chain"], "expect_args": {"get_evolution_chain": "arboliva"}, "reply_contains": ["smoliv", "dolliv"], "judge_focus": "La línea es Smoliv → Dolliv (nivel 25) → Arboliva (nivel 35). Cualquier otra etapa o nivel es inventado."}
+      ]
+    },
+    {
+      "id": "evolution_branch",
+      "turns": [
+        {"q": "¿en qué evoluciona eevee?", "required_tools": ["get_evolution_chain"], "expect_args": {"get_evolution_chain": "eevee"}, "reply_contains": ["vaporeon", "sylveon"], "judge_focus": "Eevee tiene 8 evoluciones (Vaporeon, Jolteon, Flareon, Espeon, Umbreon, Leafeon, Glaceon, Sylveon); las condiciones deben salir del resultado."}
+      ]
+    },
+    {
+      "id": "evolution_none",
+      "turns": [
+        {"q": "¿tauros evoluciona?", "required_tools": ["get_evolution_chain"], "expect_args": {"get_evolution_chain": "tauros"}, "judge_focus": "Tauros no evoluciona ni viene de otra especie: no debe inventar preevoluciones ni evoluciones."}
+      ]
+    },
+    {
+      "id": "team_swap",
+      "turns": [
+        {"q": "Analiza mi equipo, togepi, pikachu, ditto, charmander, pidgey, mew", "required_tools": ["analyze_team"], "expect_args": {"analyze_team": ["togepi", "mew"]}},
+        {"q": "¿A cuál me conviene cambiar por un torterra?", "any_of_tools": ["analyze_team"], "judge_focus": "Debe decir explícitamente a qué Pokémon del equipo (togepi, pikachu, ditto, charmander, pidgey, mew) sacaría para meter a Torterra, con datos de las herramientas."},
+        {"q": "Dime a cuál sacarías para meter a torterra. Dame el análisis con este cambio", "required_tools": ["analyze_team"], "expect_args": {"analyze_team": "torterra"}, "judge_focus": "El Pokémon que el texto dice sacar no debe estar en el equipo que se analizó; los tipos y debilidades de Torterra (Planta/Tierra: Hielo x4, Fuego, Volador, Bicho; inmune a Eléctrico) no se pueden inventar."}
+      ]
+    },
+    {
+      "id": "long_context",
+      "turns": [
+        {"q": "háblame de bulbasaur", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "bulbasaur"}},
+        {"q": "ahora charmander", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "charmander"}},
+        {"q": "¿y squirtle?", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "squirtle"}},
+        {"q": "háblame de pikachu", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "pikachu"}},
+        {"q": "¿y la de eevee?", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "eevee"}},
+        {"q": "ahora gengar", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "gengar"}},
+        {"q": "háblame de snorlax", "required_tools": ["get_pokedex_entry"], "expect_args": {"get_pokedex_entry": "snorlax"}},
+        {"q": "¿y el primero que te pregunté? recuérdame de qué tipo era", "any_of_tools": ["get_pokedex_entry", "get_pokemon_info"], "reply_contains": ["bulbasaur", "planta"], "judge_focus": "El primer Pokémon de la conversación fue Bulbasaur (Planta/Veneno); su turno ya salió de la ventana de contexto y solo queda en el índice de turnos resumidos."}
       ]
     }
   ]
