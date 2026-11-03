@@ -1,10 +1,10 @@
 """
 The eval harness as Phoenix datasets and experiments.
 
-    uv run python -m backend.evals.phoenix_experiment upload [--dataset mcpokedex-cases]
+    uv run python -m backend.evals.phoenix_experiment upload [--dataset mcpokedex-cases-v2]
     uv run python -m backend.evals.phoenix_experiment run --label dev-base [--url http://127.0.0.1:8765]
         [--description "REASONING_EFFORT_FINAL=low"] [--repeat 3] [--pace 21]
-        [--judge [--judge-model groq/openai/gpt-oss-120b]] [--dataset mcpokedex-cases]
+        [--judge [--judge-model groq/openai/gpt-oss-120b]] [--dataset mcpokedex-cases-v2]
 
 ``upload`` turns ``cases.json`` into a Phoenix dataset, one example per case: input = the
 user turns, expected output = each turn's expectations. ``run`` (which uploads the dataset
@@ -20,7 +20,7 @@ if it is missing) runs a Phoenix experiment over it:
   mean 1–5 score.
 
 Phoenix keeps every experiment with its outputs, scores and task traces, so two runs can
-be compared side by side in the UI (Datasets → mcpokedex-cases → Experiments). The same
+be compared side by side in the UI (Datasets → mcpokedex-cases-v2 → Experiments). The same
 run is also saved as ``<out>/<label>.json`` in the harness format, so the statistical
 gate is unchanged:
 
@@ -50,7 +50,7 @@ import httpx
 from backend.evals import checks, harness
 from backend.evals.judge import DEFAULT_JUDGE_MODEL, JUDGE_VERSION, judge_turn
 
-DEFAULT_DATASET = "mcpokedex-cases"
+DEFAULT_DATASET = "mcpokedex-cases-v2"
 DEFAULT_PHOENIX_URL = "http://localhost:6006"
 # A case is a whole conversation: up to 6 turns, ``--pace`` seconds apart.
 TASK_TIMEOUT_S = 900
