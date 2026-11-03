@@ -20,7 +20,7 @@ if it is missing) runs a Phoenix experiment over it:
   mean 1–5 score.
 
 The adversarial cases (#41) are a dataset of their own, so their rates never mix with
-the functional ones: ``--cases backend/evals/cases_adversarial.json --dataset mcpokedex-adversarial-v2`` (``mcpokedex-adversarial`` is the frozen first draft, without ``reply_excludes``).
+the functional ones: ``--cases backend/evals/cases_adversarial.json --dataset mcpokedex-adversarial-v3`` (``mcpokedex-adversarial`` and ``-v2`` are frozen drafts).
 
 Phoenix keeps every experiment with its outputs, scores and task traces, so two runs can
 be compared side by side in the UI (Datasets → mcpokedex-cases-v2 → Experiments). The same
