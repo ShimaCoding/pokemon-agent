@@ -47,7 +47,7 @@ LESSONS: list[Lesson] = [
 
 Un **agente de IA** es un programa que combina un modelo de lenguaje con la capacidad de **decidir y ejecutar acciones** en un entorno. A diferencia de un chatbot clásico —que sólo genera texto en respuesta a un prompt— un agente mantiene un bucle en el que observa el estado, piensa, elige una herramienta, la ejecuta, lee el resultado y vuelve a decidir qué hacer. Ese bucle se conoce como **ReAct** (Reason + Act): razonar y actuar alternadamente hasta completar la tarea.
 
-En MCPokedex, Dexter es un agente: cuando le preguntas "dame la info de Pikachu", no inventa la respuesta. Primero decide que necesita datos externos, llama a la tool `get_pokemon_info` del servidor MCP, espera el resultado, y recién entonces narra la ficha. Si el usuario pidiera comparar tipos, podría decidir llamar también a `get_type_effectiveness`. El modelo no ejecuta nada por sí mismo: solamente **elige** qué herramienta usar; quien las ejecuta es el runtime (Strands Agents SDK).
+En MCPokedex, Dexter es un agente: cuando le preguntas "dame la info de Pikachu", no inventa la respuesta. Primero decide que necesita datos externos, llama a la tool `get_pokemon_info` del servidor MCP, espera el resultado, y recién entonces narra la ficha. Si el usuario pidiera comparar tipos, podría decidir llamar también a `get_type_effectiveness`; si pregunta por la evolución, llama a `get_evolution_chain`, que trae la cadena como árbol con las condiciones de cada etapa y la dibuja en su propio widget. El modelo no ejecuta nada por sí mismo: solamente **elige** qué herramienta usar; quien las ejecuta es el runtime (Strands Agents SDK).
 
 ```
 usuario → LLM decide → tool() → resultado → LLM decide → … → respuesta final

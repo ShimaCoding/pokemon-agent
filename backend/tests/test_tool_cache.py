@@ -387,3 +387,28 @@ def test_cached_entry_survives_mcp_or_pokeapi_failure(pokedex, monkeypatch, mode
     # Not cached: the failure reaches the agent as usual.
     result, _ = _ask("bulbasaur")
     assert result["status"] == "error"
+
+
+# --- get_evolution_chain (#47) -----------------------------------------------------------
+
+
+def _chain_result(root: dict) -> dict:
+    return {"status": "success", "toolUseId": "x", "content": [{"text": json.dumps({"queried": "arboliva", "stages": 3, "root": root, "evolutions": []})}]}
+
+
+def _stage(name: str, id_: int | None, *children: dict) -> dict:
+    node = {"name": name, "evolves_to": list(children)}
+    if id_ is not None:
+        node["id"] = id_
+    return node
+
+
+def test_evolution_chain_is_cacheable_only_when_every_stage_has_an_id():
+    full = _stage("smoliv", 928, _stage("dolliv", 929, _stage("arboliva", 930)))
+    assert tool_cache.is_cacheable("get_evolution_chain", _chain_result(full))
+    assert tool_cache.is_cacheable("get_evolution_chain", _chain_result(_stage("tauros", 128)))
+    hole = _stage("smoliv", 928, _stage("dolliv", 929, _stage("arboliva", None)))
+    assert not tool_cache.is_cacheable("get_evolution_chain", _chain_result(hole))
+    not_found = {"status": "error", "toolUseId": "x", "content": [{"text": "❌ Pokémon 'x' not found."}]}
+    assert not tool_cache.is_cacheable("get_evolution_chain", not_found)
+    assert "get_evolution_chain" in tool_cache.CACHEABLE_TOOLS

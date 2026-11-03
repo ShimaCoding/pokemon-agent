@@ -34,7 +34,7 @@ from strands.middleware import ExecuteToolContext, ToolResultEvent
 
 logger = logging.getLogger(__name__)
 
-CACHEABLE_TOOLS = frozenset({"get_pokedex_entry"})
+CACHEABLE_TOOLS = frozenset({"get_pokedex_entry", "get_evolution_chain"})
 STATE_KEY = "mcpokedex:tool_cache"
 
 
@@ -82,12 +82,24 @@ def is_cacheable(name: str, result: dict[str, Any]) -> bool:
         entry = json.loads(result["content"][0]["text"])
     except (KeyError, IndexError, TypeError, ValueError):
         return False
-    if not isinstance(entry, dict) or "id" not in entry:
+    if not isinstance(entry, dict):
+        return False
+    if name == "get_evolution_chain":
+        return isinstance(entry.get("root"), dict) and _complete_tree(entry["root"])
+    if "id" not in entry:
         return False
     if name == "get_pokedex_entry":
         chain = entry.get("evolution_chain")
         return isinstance(chain, list) and bool(chain) and all(isinstance(s, dict) and "id" in s for s in chain)
     return True
+
+
+def _complete_tree(node: Any) -> bool:
+    """Every stage of an evolution tree has its ``id`` (PokeAPI answered for all of them)."""
+    if not isinstance(node, dict) or "id" not in node:
+        return False
+    children = node.get("evolves_to", [])
+    return isinstance(children, list) and all(_complete_tree(c) for c in children)
 
 
 def _get(key: tuple[str, str]) -> tuple[dict[str, Any], bool] | None:

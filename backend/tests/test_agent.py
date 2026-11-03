@@ -205,9 +205,11 @@ def test_system_prompt_budget():
     # already covers the tone rules of the old SKILL.md. The unknown-name rules
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
-    assert len(protocol) <= 1850
+    # +45 for the genus_lang rule of #47 (PokeAPI has no Spanish genus for Gen IX).
+    assert len(protocol) <= 1870
     # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 3750
+    # +350 for get_evolution_chain routing and narration (#47, ~90 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 4100
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -282,3 +284,12 @@ def test_restores_legacy_snapshot_and_compacts_it(harness_env, monkeypatch, tmp_
     assert restored.messages[-1]["content"] == [{"text": "MEWTWO. El Pokémon Genético."}]
     assert not any("reasoningContent" in b for m in restored.messages for b in m["content"])
     assert restored.state.get(TURN_STATE_KEY) == 7
+
+
+def test_prompt_routes_evolution_questions_to_get_evolution_chain():
+    from backend.agent import POKEMON_NAME_ARGS, SYSTEM_PROMPT
+
+    assert "get_evolution_chain" in MCP_TOOLS
+    assert "pokemon" in POKEMON_NAME_ARGS  # get_evolution_chain(pokemon) is slugged
+    assert "get_evolution_chain" in SYSTEM_PROMPT
+    assert "nunca des etapas ni niveles de memoria" in SYSTEM_PROMPT
