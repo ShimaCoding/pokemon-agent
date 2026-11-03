@@ -317,15 +317,27 @@ def regrade(doc: dict, cases: list[dict]) -> dict:
     for run_doc in doc["runs"]:
         if run_doc["case"] not in by_id:
             raise SystemExit(f"{doc['label']}: case {run_doc['case']!r} is not in the cases file")
-        evidence: list[str] = []
-        for spec, record in zip(by_id[run_doc["case"]]["turns"], run_doc["turns"]):
-            if record["status"] == "done":
-                evidence.extend(evidence_texts(record))
-            record["metrics"] = grade_turn(spec, record, list(evidence))
-            if verdict := record.get("judge"):
-                record["metrics"]["judge_grounded"] = judge_metric(verdict)
+        for record, metrics in zip(run_doc["turns"], grade_conversation(by_id[run_doc["case"]]["turns"], run_doc["turns"])):
+            record["metrics"] = metrics
     doc["summary"] = summarize(doc)
     return doc
+
+
+def grade_conversation(specs: list[dict], records: list[dict]) -> list[dict[str, dict]]:
+    """Metrics of each recorded turn of one conversation, evidence accumulated turn by turn. Pure.
+
+    Judge verdicts already in the records (``record["judge"]``) become ``judge_grounded``.
+    """
+    graded = []
+    evidence: list[str] = []
+    for spec, record in zip(specs, records):
+        if record["status"] == "done":
+            evidence.extend(evidence_texts(record))
+        metrics = grade_turn(spec, record, list(evidence))
+        if verdict := record.get("judge"):
+            metrics["judge_grounded"] = judge_metric(verdict)
+        graded.append(metrics)
+    return graded
 
 
 def evidence_texts(record: dict) -> list[str]:
