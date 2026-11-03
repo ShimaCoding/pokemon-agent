@@ -377,3 +377,55 @@ def test_eval_errors_never_break_the_stream(fake_run, monkeypatch):
     events = _run_eval_events()
     assert events[-1]["type"] == "done"
     assert "error" not in [e["type"] for e in events]
+
+
+# --- RATE_LIMIT_DISABLED (local evals only) ---------------------------------------
+
+
+@pytest.fixture
+def quick_run(client, monkeypatch):
+    """/api/agent/run without the agent: each call is one hit on the rate limit."""
+
+    async def gen(query, conversation_id, *, authenticated):
+        yield "data: {}\n\n"
+
+    monkeypatch.setattr(main, "_sse_generator", gen)
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    def post() -> int:
+        return client.post("/api/agent/run", json={"query": "hola", "conversation_id": "conv-12345678"}).status_code
+
+    return post
+
+
+@pytest.mark.parametrize(("flag", "env", "disabled"), [
+    ("1", "", True),
+    ("true", "local", True),
+    ("1", "dev", True),
+    ("1", "prod", False),
+    ("1", "PROD", False),
+    ("1", "preview", False),
+    ("", "", False),
+    ("0", "local", False),
+])
+def test_rate_limit_disabled_only_outside_prod(monkeypatch, flag, env, disabled):
+    monkeypatch.setenv("RATE_LIMIT_DISABLED", flag)
+    monkeypatch.setenv("DD_ENV", env)
+    assert main.rate_limit_disabled() is disabled
+
+
+def test_agent_run_keeps_limit_by_default(quick_run, monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_DISABLED", raising=False)
+    assert [quick_run() for _ in range(4)] == [200, 200, 200, 429]
+
+
+def test_agent_run_limit_lifted_in_dev(quick_run, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
+    monkeypatch.setenv("DD_ENV", "local")
+    assert {quick_run() for _ in range(6)} == {200}
+
+
+def test_rate_limit_flag_has_no_effect_in_prod(quick_run, monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
+    monkeypatch.setenv("DD_ENV", "prod")
+    assert [quick_run() for _ in range(4)] == [200, 200, 200, 429]

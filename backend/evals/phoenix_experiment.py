@@ -11,7 +11,8 @@ user turns, expected output = each turn's expectations. ``run`` (which uploads t
 if it is missing) runs a Phoenix experiment over it:
 
 - the task plays the case as one new conversation against a backend with the harness's
-  SSE client (``harness.run_turn``), ``--pace`` seconds between requests, and with
+  SSE client (``harness.run_turn``), ``--pace`` seconds between requests (``--pace 0``
+  with a local backend started with ``RATE_LIMIT_DISABLED=1``), and with
   ``--judge`` asks the LLM judge about each turn, exactly like ``harness run``;
 - every harness metric is an evaluator (``EVALUATORS``): score = share of the case's
   turns where it passed, label pass/fail, the failing turns' reasons as explanation;
@@ -258,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--description", default="", help="what this run changes, shown in Phoenix (e.g. REASONING_EFFORT_FINAL=low)")
     r.add_argument("--url", default=os.environ.get("EVALS_URL", harness.DEFAULT_URL))
     r.add_argument("--repeat", type=int, default=1)
-    r.add_argument("--pace", type=float, default=21.0, help="seconds between requests (anonymous limit = 3/min)")
+    r.add_argument("--pace", type=float, default=21.0, help="seconds between requests (anonymous limit = 3/min; 0 for a local backend with RATE_LIMIT_DISABLED=1)")
     r.add_argument("--judge", action="store_true", help="grade replies with an LLM judge (Groq, costs tokens)")
     r.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     r.add_argument("--out", default=str(harness.DEFAULT_OUT))

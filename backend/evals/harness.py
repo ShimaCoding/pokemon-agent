@@ -10,7 +10,10 @@ Offline eval harness: the quality gate for prompt, model and context changes (#1
 ``run`` is a plain SSE client of ``POST /api/agent/run``: start any branch's backend
 (anonymous, so the 20b model as in prod) and point ``--url`` at it. Every case in
 ``cases.json`` runs ``--repeat`` times, each in a new conversation, with ``--pace``
-seconds between requests (anonymous limit: 3 req/min). Each turn is graded by:
+seconds between requests (anonymous limit: 3 req/min). Against a local backend started
+with ``RATE_LIMIT_DISABLED=1`` (ignored when ``DD_ENV`` is prod/preview) use ``--pace 0``:
+only Groq's own limit remains, and its 429s are retried after ``Retry-After``.
+Each turn is graded by:
 
 - the case expectations: ``tool_expectation`` (required tools must succeed, at least
   one any-of tool must run, no forbidden tool may run; ``skills``/``retrieve_context``
@@ -721,7 +724,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--label", required=True)
     r.add_argument("--url", default=os.environ.get("EVALS_URL", DEFAULT_URL))
     r.add_argument("--repeat", type=int, default=1)
-    r.add_argument("--pace", type=float, default=21.0, help="seconds between requests (anonymous limit = 3/min)")
+    r.add_argument("--pace", type=float, default=21.0, help="seconds between requests (anonymous limit = 3/min; 0 for a local backend with RATE_LIMIT_DISABLED=1)")
     r.add_argument("--only", nargs="*", help="subset of case ids")
     r.add_argument("--out", default=str(DEFAULT_OUT))
     r.add_argument("--cases", default=str(CASES_FILE))

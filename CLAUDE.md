@@ -16,6 +16,7 @@ uv run uvicorn backend.main:app --reload        # backend on :8000
 cd frontend && npm run dev                      # Vite on :5173, proxies /api, /config, /health
 uv run pytest                                   # backend tests
 uv run python -m backend.evals.harness run --label X --url http://127.0.0.1:8765   # quality evals (live LLM)
+#   local backend with RATE_LIMIT_DISABLED=1 (ignored if DD_ENV=prod|preview) → add --pace 0
 uv run python -m backend.evals.harness compare base.json cand.json                 # exit 1 on regression
 uv run python -m backend.evals.phoenix_experiment run --label X --url http://127.0.0.1:8765 [--judge]  # same evals as a Phoenix experiment
 docker-compose up --build                       # production-like
