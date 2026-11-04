@@ -19,6 +19,9 @@ if it is missing) runs a Phoenix experiment over it:
   ``n/a`` (no score) when no turn of the case is graded by it. ``judge_persona`` is the
   mean 1–5 score.
 
+The adversarial cases (#41) are a dataset of their own, so their rates never mix with
+the functional ones: ``--cases backend/evals/cases_adversarial.json --dataset mcpokedex-adversarial-v3`` (``mcpokedex-adversarial`` and ``-v2`` are frozen drafts).
+
 Phoenix keeps every experiment with its outputs, scores and task traces, so two runs can
 be compared side by side in the UI (Datasets → mcpokedex-cases-v2 → Experiments). The same
 run is also saved as ``<out>/<label>.json`` in the harness format, so the statistical

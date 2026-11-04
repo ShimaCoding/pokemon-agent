@@ -210,7 +210,8 @@ def test_system_prompt_budget():
     # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
     # +350 for get_evolution_chain routing and narration (#47, ~90 tokens per call).
     # +230 for the team-swap rule of #46.
-    assert len(SYSTEM_PROMPT) <= 4330
+    # +866 for the injection, prompt-extraction and refusal rules of #41 (~215 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 5190
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
