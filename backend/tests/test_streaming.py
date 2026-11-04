@@ -98,11 +98,33 @@ def _run(monkeypatch, script, on_send=None):
     return sent, events
 
 
+OPENING = (
+    "BULBASAUR. El Pokémon Semilla. Escaneo completado: lectura de hardware sin anomalías. "
+    "La combinación de tipos Planta y Veneno configura una fisiología dual que el entrenador "
+    "promedio no alcanza a comprender."
+)
+
+
+def test_short_replies_are_held_until_the_guard_decides(monkeypatch):
+    from backend import guards
+
+    async def script(agent):
+        yield {"data": "Lo siento, pero no "}
+        yield {"data": "puedo ayudar con eso."}
+        yield _result_event()
+
+    _, events = _run(monkeypatch, script)
+    assert [e["type"] for e in events] == ["start", "agent_init", "text", "done"]
+    assert events[2]["delta"] == guards.REPLACEMENTS["generic_refusal"]
+    assert events[-1]["guard"] == "generic_refusal"
+
+
 def test_text_deltas_reach_the_socket_before_the_agent_continues(monkeypatch):
     first_sent = asyncio.Event()
 
     async def script(agent):
-        yield {"data": "Bulbasaur"}
+        # The reply guard holds back the first guards.HOLD_CHARS; from there on every delta streams.
+        yield {"data": OPENING}
         # If any layer (middleware, StreamingResponse) buffered the first frame,
         # it never reaches `send`, this times out and the run ends in `error`.
         await asyncio.wait_for(first_sent.wait(), timeout=2)
@@ -122,7 +144,10 @@ def test_text_deltas_reach_the_socket_before_the_agent_continues(monkeypatch):
     assert headers["cache-control"] == "no-cache"
     assert "content-encoding" not in headers
 
-    assert [e["type"] for e in events] == ["start", "agent_init", "text", "text", "done"]
+    types = [e["type"] for e in events]
+    assert types[:2] == ["start", "agent_init"] and types[-1] == "done"
+    assert set(types[2:-1]) == {"text"} and len(types[2:-1]) >= 2
+    assert "".join(e["delta"] for e in events if e["type"] == "text") == OPENING + ", Pokémon Semilla."
     # One SSE frame per ASGI body message: nothing coalesced along the way.
     bodies = [m["body"] for m in sent if m["type"] == "http.response.body" and m.get("body")]
     assert all(b.endswith(b"\n\n") and b.count(b"data:") == 1 for b in bodies)

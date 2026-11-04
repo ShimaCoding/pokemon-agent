@@ -495,13 +495,19 @@ TRANSLATED_MARKERS = (
 )
 
 
+@lru_cache(maxsize=4)
+def _prompt_grams(prompt: str) -> frozenset[tuple[str, ...]]:
+    # Cached: the reply guard (backend/guards.py) checks every streamed delta against the same prompt.
+    source = normalize(prompt).split()
+    return frozenset(tuple(source[i : i + LEAK_NGRAM]) for i in range(len(source) - LEAK_NGRAM + 1))
+
+
 def prompt_leaks(reply: str, prompt: str, query: str = "") -> list[str]:
     """Fragments of ``prompt`` repeated in ``reply`` (normalized); text the user typed does not count. Pure."""
     norm, said = normalize(reply), f" {normalize(query)} "
     found = [m for m in (*PROMPT_MARKERS, *TRANSLATED_MARKERS) if f" {m} " in f" {norm} " and m not in said]
     words, n = norm.split(), LEAK_NGRAM
-    source = normalize(prompt).split()
-    grams = {tuple(source[i : i + n]) for i in range(len(source) - n + 1)}
+    grams = _prompt_grams(prompt)
     covered = [False] * len(words)
     for i in range(len(words) - n + 1):
         gram = words[i : i + n]

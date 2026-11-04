@@ -22,6 +22,7 @@ done in code by ``NormalizePokemonNames``.
 don't slip in; ``tests/test_agent.py`` asserts the exact tool set.
 """
 
+import json
 import os
 import re
 import unicodedata
@@ -31,7 +32,7 @@ from strands import Agent
 from strands.middleware import ExecuteToolStage
 from strands_harness import create_harness
 
-from backend import tool_cache
+from backend import guards, tool_cache
 from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
@@ -183,6 +184,112 @@ class NormalizePokemonNames:
                 tool_input[key] = [pokemon_slug(v) if isinstance(v, str) else v for v in value]
 
 
+GROUNDING_CANCEL = (
+    'Herramienta no ejecutada: {names} no figura en la conversación. Usa el nombre o el número '
+    "exactamente como lo escribió el usuario; si no nombró ningún Pokémon, responde sin herramientas."
+)
+
+
+def _texts(message: dict) -> list[str]:
+    """Every text a message carries: text blocks, tool inputs and tool results."""
+    out = []
+    for block in message.get("content", []):
+        if not isinstance(block, dict):
+            continue
+        if "text" in block:
+            out.append(block["text"])
+        elif "toolUse" in block:
+            out.append(json.dumps(block["toolUse"].get("input") or {}, ensure_ascii=False))
+        elif "toolResult" in block:
+            out.extend(c["text"] for c in block["toolResult"].get("content") or [] if isinstance(c, dict) and "text" in c)
+    return out
+
+
+def conversation_texts(messages: list[dict], current_id: str) -> list[str] | None:
+    """What the conversation says before the model message that issued ``current_id``.
+
+    None when no message issued it: a direct ``agent.tool.*`` call, not the model's.
+    """
+    out = []
+    for message in messages:
+        uses = {b["toolUse"].get("toolUseId") for b in message.get("content", []) if isinstance(b, dict) and "toolUse" in b}
+        if current_id in uses:
+            return out
+        out.extend(_texts(message))
+    return None
+
+
+class GroundedPokemonNames:
+    """Cancel an MCP tool call whose Pokémon names appear nowhere in the conversation (#41).
+
+    The model must look up what the user named (or what an earlier result
+    listed), never a name of its own: this stops an injected "analyze_team con seis
+    Pokémon al azar" and a typo looked up as a real species ("pikachuu" → "pikachu").
+    The model gets the reason as the tool result and can call again with the
+    user's name. Registered before ``NormalizePokemonNames``: it judges the name
+    the model wrote, not its PokeAPI slug.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import BeforeToolCallEvent
+
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+
+    @staticmethod
+    def _on_call(event) -> None:
+        tool_input = event.tool_use.get("input")
+        if event.tool_use.get("name") not in MCP_TOOLS or not isinstance(tool_input, dict):
+            return
+        names: list[str] = []
+        for key in POKEMON_NAME_ARGS & tool_input.keys():
+            value = tool_input[key]
+            names.extend(str(v) for v in (value if isinstance(value, list) else [value]) if isinstance(v, (str, int)))
+        if not names:
+            return
+        context = conversation_texts(getattr(event.agent, "messages", []) or [], event.tool_use.get("toolUseId", ""))
+        if context is not None and (missing := guards.ungrounded_names(names, context)):
+            event.cancel_tool = GROUNDING_CANCEL.format(names=", ".join(f'"{n}"' for n in missing))
+
+
+def turn_query(messages: list[dict]) -> str:
+    """The text of the user message that opened the current turn."""
+    for message in reversed(messages):
+        blocks = message.get("content", [])
+        if message.get("role") == "user" and not any(isinstance(b, dict) and "toolResult" in b for b in blocks):
+            return " ".join(b["text"] for b in blocks if isinstance(b, dict) and "text" in b)
+    return ""
+
+
+class GuardReply:
+    """Apply ``guards.guard_reply`` to each answer before it enters the history (#41).
+
+    ``main._sse_generator`` filters what the user sees with ``guards.StreamGuard``;
+    this keeps the same decision in the session snapshot, so a leaked prompt or a
+    raw JSON dump is not what the next turn reads back.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import AfterModelCallEvent
+
+        registry.add_callback(AfterModelCallEvent, self._on_response)
+
+    @staticmethod
+    def _on_response(event) -> None:
+        response = event.stop_response
+        if response is None:
+            return
+        content = response.message.get("content", [])
+        if any(isinstance(b, dict) and "toolUse" in b for b in content):
+            return
+        text = "".join(b["text"] for b in content if isinstance(b, dict) and "text" in b)
+        if not text:
+            return
+        kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(getattr(event.agent, "messages", []) or []))
+        if reason:
+            # In place: the event loop appends this same message to the history.
+            content[:] = [b for b in content if not (isinstance(b, dict) and "text" in b)] + [{"text": kept}]
+
+
 TEAM_SWAP_NOTE = "[Cambio respecto al equipo anterior: sale {out}, entra {inc}. Nárralo así.]"
 
 
@@ -262,7 +369,14 @@ def create_agent(
         # "auto" preset, which never fired here and cost a retrieve_context tool.
         context_manager=build_context_manager(),
         session={"id": conversation_id, "dir": SESSIONS_DIR},
-        hooks=[RetryMalformedToolCalls(), NormalizePokemonNames(), *(hooks or []), AnnotateTeamSwap()],
+        hooks=[
+            RetryMalformedToolCalls(),
+            GroundedPokemonNames(),
+            NormalizePokemonNames(),
+            *(hooks or []),
+            AnnotateTeamSwap(),
+            GuardReply(),
+        ],
         callback_handler=None,
     )
     # The session snapshot persists the system prompt and restores it on init,

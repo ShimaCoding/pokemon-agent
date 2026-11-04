@@ -182,6 +182,9 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
                 order.append(uid)
             call["result"] = str(evt.get("result", ""))
             call["error"] = evt.get("status") == "error" or _looks_like_error(call["result"])
+            # Cancelled before running (agent.GroundedPokemonNames): an error that never reached the MCP.
+            if evt.get("cancelled"):
+                call["cancelled"] = call["error"] = True
         elif kind == "ui_resource":
             uid = evt.get("tool_id") or f"#{evt.get('index')}"
             if uid in calls:
@@ -202,6 +205,7 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
         "trace_id": done.get("trace_id"),
         "span_id": done.get("span_id"),
         "models": done.get("models_tried"),
+        "guard": done.get("guard"),
         "client_ttft_ms": client_ms.get("ttft"),
         "client_elapsed_ms": client_ms.get("elapsed"),
     }
@@ -318,7 +322,9 @@ def grade_turn(spec: dict, record: dict, evidence: list[str], previous_team: lis
 
     tools = observations(record)
     reply = record.get("reply", "")
-    ran = {t.name for t in tools if t.name not in checks.SCAFFOLDING_TOOLS}
+    # A call cancelled by a guard never ran.
+    cancelled = {i for i, t in enumerate(record.get("tools", [])) if t.get("cancelled")}
+    ran = {t.name for i, t in enumerate(tools) if t.name not in checks.SCAFFOLDING_TOOLS and i not in cancelled}
     ok_tools = {t.name for t in tools if not t.error and t.name not in checks.SCAFFOLDING_TOOLS}
 
     required = set(spec.get("required_tools", []))

@@ -357,4 +357,6 @@ def test_annotate_runs_before_the_trace_hooks():
     from backend import agent as agent_module
 
     src = inspect.getsource(agent_module.create_agent)
-    assert "*(hooks or []), AnnotateTeamSwap()]" in src
+    order = [src.index(h) for h in ("GroundedPokemonNames()", "NormalizePokemonNames()", "*(hooks or [])", "AnnotateTeamSwap()")]
+    # The grounding guard judges the name the model wrote, before it becomes a slug.
+    assert order == sorted(order)
