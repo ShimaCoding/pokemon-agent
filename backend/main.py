@@ -45,7 +45,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import build_info, mcp_gateway, telemetry, tool_cache
+from backend import build_info, guards, mcp_gateway, telemetry, tool_cache
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.evals import checks
 from backend.feedback import registry as feedback_registry
@@ -420,7 +420,8 @@ class _ToolTrace:
         duration = getattr(event, "duration", None)
         duration_ms = round(duration * 1000, 2) if duration is not None else None
         self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display,
-                    "cached": cache in ("hit", "stale"), "duration_ms": duration_ms})
+                    "cached": cache in ("hit", "stale"), "duration_ms": duration_ms,
+                    "cancelled": getattr(event, "cancel_message", None) is not None})
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
             input_data=dict(event.tool_use.get("input") or {}),
@@ -521,12 +522,14 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
       {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
       {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int,
-                                "cached": bool, "duration_ms": float | None}
+                                "cached": bool, "duration_ms": float | None, "cancelled": bool}
+                                # cancelled: never ran (agent.GroundedPokemonNames); result is the reason
       {"type": "ui_resource",   "index": int, "tool_id": str, "tool": str, "resource_uri": str,
                                 "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
-      {"type": "text",          "delta": str}
+      {"type": "text",          "delta": str}  # filtered by guards.StreamGuard: the first ~200 chars are held back
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
+                                "guard": str | None,  # guards.REPLACEMENTS key when a guard replaced or cut the reply
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
@@ -601,10 +604,12 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
             "cached_tokens": usage.get("cacheReadInputTokens", 0),
             "llm_calls": llm_calls,
             "ttft_ms": ttft_ms,
+            "guard": guard.reason if guard else None,
         }
 
     agent = None
     agent_span_opened = False
+    guard: guards.StreamGuard | None = None
     async with conversation_lock(conversation_id):
         try:
             logger.info("[MCP] Conectando al servidor MCP y restaurando la sesión…")
@@ -630,7 +635,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                 }
             )
 
-            reply: list[str] = []
+            guard = guards.StreamGuard(SYSTEM_PROMPT, query)
             with telemetry.agent_span(conversation_id) as agent_obs:
                 agent_span_opened = True
                 prompt = await _expand_prompt(query)
@@ -641,14 +646,19 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
                     text_delta = event.get("data")
                     if text_delta:
+                        # Model TTFT: the guard may hold the first characters back a little longer.
                         if ttft_ms is None:
                             ttft_ms = elapsed_ms()
-                        reply.append(text_delta)
-                        yield _sse({"type": "text", "delta": text_delta})
+                        if shown := guard.feed(text_delta):
+                            yield _sse({"type": "text", "delta": shown})
 
                     if event.get("result") is not None:
                         for frame in drain():
                             yield frame
+                        if tail := guard.finish():
+                            yield _sse({"type": "text", "delta": tail})
+                        if guard.reason:
+                            logger.warning("[GUARD] Respuesta reemplazada o cortada: %s", guard.reason)
                         usage: dict = {}
                         with suppress(Exception):
                             usage = event["result"].metrics.accumulated_usage or {}
@@ -679,7 +689,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                         telemetry.annotate(
                             agent_obs,
                             input_data=query,
-                            output_data="".join(reply),
+                            output_data=guard.shown,
                             # Timed from request arrival (MCP connect included), not from span start.
                             metadata={
                                 "request_elapsed_ms": done["elapsed_ms"],
@@ -689,6 +699,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 # Compaction bounds the history, so the turn tells how deep the session is.
                                 "turn": turn,
                                 "history_messages": len(agent.messages),
+                                "guard": guard.reason,
                             },
                             metrics={
                                 "input_tokens": done["input_tokens"],
@@ -707,7 +718,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                         # enqueue. If the client disconnected, GeneratorExit is raised at
                         # the yield above and they are skipped.
                         if ids:
-                            _submit_rule_evals(ids, query, "".join(reply), tool_trace, agent.messages)
+                            _submit_rule_evals(ids, query, guard.shown, tool_trace, agent.messages)
 
         except Exception as exc:
             logger.exception("Agent run failed: %s", exc)
