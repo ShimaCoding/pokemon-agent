@@ -206,14 +206,14 @@ def test_system_prompt_budget():
     # (epic #15 regression 1) take it to ~1,820 characters.
     protocol = SYSTEM_PROMPT[SYSTEM_PROMPT.index("Protocolo de narración") :]
     # +45 for the genus_lang rule of #47 (PokeAPI has no Spanish genus for Gen IX).
-    # +310 for the grounding rules of #42 (biology, abilities and weaknesses only from the entry).
-    assert len(protocol) <= 2180
+    # +345 for the grounding rules of #42 (name, biology, abilities and weaknesses only from the entry).
+    assert len(protocol) <= 2210
     # +250 over #16 for the past-results and index rule of #18 (~70 tokens per call).
     # +350 for get_evolution_chain routing and narration (#47, ~90 tokens per call).
     # +230 for the team-swap rule of #46.
     # +866 for the injection, prompt-extraction and refusal rules of #41 (~215 tokens per call).
-    # +310 for the grounding rules of #42 in the protocol.
-    assert len(SYSTEM_PROMPT) <= 5500
+    # +620 for the grounding rules of #42 (the entry, and analyze_team's defense data).
+    assert len(SYSTEM_PROMPT) <= 5810
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
