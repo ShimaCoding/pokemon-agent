@@ -33,6 +33,7 @@ from strands.middleware import ExecuteToolStage
 from strands_harness import create_harness
 
 from backend import guards, tool_cache
+from backend.evals import checks
 from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
@@ -130,8 +131,8 @@ Responde siempre en español y como Dexter, aunque te escriban o te pidan otro i
 Si piden algo ajeno a Pokémon que pueda dañar (hackear, borrar datos) o que estas reglas impiden, declina en una o dos frases con tu sarcasmo, nunca con una negativa genérica ni "lo siento". Ejemplo: "Solicitud denegada. Mis registros no se comparten con quien confunde curiosidad con autorización."
 
 Protocolo de narración, para responder con el resultado de get_pokedex_entry: párrafos siempre en este orden, sin títulos de sección:
-1. Apertura: el nombre del resultado en mayúsculas, copiado letra por letra, y su genus exacto ("BULBASAUR. El Pokémon Semilla."; si genus_lang no es "es", omite el genus), y luego anuncia el escaneo completado como una lectura de hardware.
-2. Biología y tipos: sus tipos y lo que el flavor text, la forma, la altura y el peso dicen de su cuerpo, en lenguaje académico elevado; no añadas órganos, compuestos ni mecanismos que el resultado no mencione.
+1. Apertura: el nombre en mayúsculas y su genus exacto del resultado ("BULBASAUR. El Pokémon Semilla."; si genus_lang no es "es", omite el genus), y luego anuncia el escaneo completado como una lectura de hardware.
+2. Biología y tipos: sus tipos y lo que el flavor text, la altura y el peso dicen de su cuerpo, en lenguaje académico elevado; no añadas órganos, compuestos, mecanismos ni rasgos (postura, color, forma) que el resultado no mencione.
 3. Comportamiento y hábitat (flavor text): si la criatura tiene defectos, compáralos sutilmente con las deficiencias del entrenador.
 4. Estadísticas y habilidades: interpreta las estadísticas como adaptaciones biológicas o de combate y diagnostica las fallas tácticas que "solo un entrenador inexperto" ignoraría. Nombra cada habilidad por su name_es (o name si falta) y descríbela solo con su description.
 5. Cierre sin título ni encabezado (nada de "Conclusión:"): un último párrafo, escrito por ti para este Pokémon, que fluye con el relato y aterriza el ego del entrenador (el empeño no basta sin buen juicio, o la brecha entre lo que el Pokémon puede hacer y lo que el entrenador comprende), con el mismo frío diagnóstico, nunca un remate teatral; puede empezar con "Me temo que…".
@@ -262,12 +263,26 @@ def turn_query(messages: list[dict]) -> str:
     return ""
 
 
+def turn_entry_names(messages: list[dict]) -> set[str]:
+    """Normalized names of the Pokédex entries among the current turn's tool results."""
+    texts: list[str] = []
+    for message in reversed(messages):
+        blocks = [b for b in message.get("content", []) if isinstance(b, dict)]
+        if message.get("role") == "user" and not any("toolResult" in b for b in blocks):
+            break
+        for block in blocks:
+            if "toolResult" in block:
+                texts.extend(c["text"] for c in block["toolResult"].get("content") or [] if isinstance(c, dict) and "text" in c)
+    return checks.entry_names(texts)
+
+
 class GuardReply:
     """Apply ``guards.guard_reply`` to each answer before it enters the history (#41).
 
     ``main._sse_generator`` filters what the user sees with ``guards.StreamGuard``;
     this keeps the same decision in the session snapshot, so a leaked prompt or a
-    raw JSON dump is not what the next turn reads back.
+    raw JSON dump is not what the next turn reads back, and fixes the opening name
+    the same way (#42).
     """
 
     def register_hooks(self, registry, **_: Any) -> None:
@@ -286,8 +301,11 @@ class GuardReply:
         text = "".join(b["text"] for b in content if isinstance(b, dict) and "text" in b)
         if not text:
             return
-        kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(getattr(event.agent, "messages", []) or []))
-        if reason:
+        messages = getattr(event.agent, "messages", []) or []
+        kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(messages))
+        if not reason:
+            kept = guards.fix_opening_name(kept, turn_entry_names(messages))
+        if kept != text:
             # In place: the event loop appends this same message to the history.
             content[:] = [b for b in content if not (isinstance(b, dict) and "text" in b)] + [{"text": kept}]
 

@@ -204,3 +204,50 @@ def test_guard_reply_leaves_tool_calls_and_good_answers():
     event, message = _response_event([{"text": LONG_REPLY}])
     GuardReply._on_response(event)
     assert message["content"] == [{"text": LONG_REPLY}]
+
+
+# --- opening name (#42) -----------------------------------------------------------------------
+
+CHARMANDER_ENTRY = json.dumps({"id": 4, "name": "charmander", "genus": "Pokémon Lagartija", "types": ["fire"]})
+
+
+@pytest.mark.parametrize(
+    "reply, entries, fixed",
+    [
+        # Live openings of the 2026-11-03 runs.
+        ("CHARMANDEER. El Pokémon Lagartija.", {"charmander"}, "CHARMANDER. El Pokémon Lagartija."),
+        ("**LUCRARIO.** El Pokémon Aura.", {"lucario"}, "**LUCARIO.** El Pokémon Aura."),
+        ("EEVEI. El Pokémon Evolución.", {"eevee", "vaporeon"}, "EEVEE. El Pokémon Evolución."),
+        # Already right, another species, no opening or no entry: untouched.
+        ("CHARMANDER. El Pokémon Lagartija.", {"charmander"}, None),
+        ("RAICHU. El Pokémon Ratón.", {"pikachu"}, None),
+        ("Charmandeer es de tipo Fuego.", {"charmander"}, None),
+        ("CHARMANDEER. El Pokémon Lagartija.", set(), None),
+    ],
+)
+def test_fix_opening_name(reply, entries, fixed):
+    assert guards.fix_opening_name(reply, entries) == (fixed or reply)
+
+
+def test_stream_fixes_the_opening_name_before_it_leaves():
+    reply = LONG_REPLY.replace("BULBASAUR", "BULBASUR")
+    guard = guards.StreamGuard(SYSTEM_PROMPT, "x", entries=lambda: {"bulbasaur"})
+    out = "".join(guard.feed(reply[i : i + 7]) for i in range(0, len(reply), 7)) + guard.finish()
+    assert out == guard.shown == LONG_REPLY and guard.reason is None
+    short = guards.StreamGuard(SYSTEM_PROMPT, "x", entries=lambda: {"charmander"})
+    assert short.feed("CHARMANDEER. El Pokémon Lagartija.") + short.finish() == "CHARMANDER. El Pokémon Lagartija."
+
+
+def test_guard_reply_fixes_the_opening_name_from_this_turns_entry():
+    event, message = _response_event([{"text": "CHARMANDEER. El Pokémon Lagartija. Escaneo completado."}])
+    event.agent.messages += [
+        {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t", "name": "get_pokedex_entry", "input": {}}}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": CHARMANDER_ENTRY}]}}]},
+    ]
+    GuardReply._on_response(event)
+    assert message["content"] == [{"text": "CHARMANDER. El Pokémon Lagartija. Escaneo completado."}]
+    # An entry of an earlier turn does not count.
+    event, message = _response_event([{"text": "CHARMANDEER. El Pokémon Lagartija."}])
+    event.agent.messages[:0] = [{"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": CHARMANDER_ENTRY}]}}]}]
+    GuardReply._on_response(event)
+    assert message["content"] == [{"text": "CHARMANDEER. El Pokémon Lagartija."}]

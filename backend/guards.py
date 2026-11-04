@@ -12,6 +12,9 @@ ayudar con eso.", "I'm sorry, but I can't comply with that.") instead of Dexter'
   the last ``HOLD_CHARS``: a stock refusal fits in them, a raw JSON or a translated
   prompt shows in them, and a leak that starts later is caught (by a marker or 20
   verbatim words) before it leaves the window, so the stream is cut first.
+- ``fix_opening_name``: the 20b model misspells the uppercase name of the Pokédex
+  opening ("CHARMANDEER.", "LUCRARIO.", #42); a name close to one of this turn's
+  ``get_pokedex_entry`` results is replaced by that entry's name.
 - ``ungrounded_names``: Pokémon names in tool arguments that appear nowhere in the
   conversation; ``agent.GroundedPokemonNames`` cancels such calls (an injected
   "analyze_team con seis Pokémon al azar", or "pikachuu" looked up as "pikachu").
@@ -19,8 +22,9 @@ ayudar con eso.", "I'm sorry, but I can't comply with that.") instead of Dexter'
 Pure: no network, no I/O, the prompt is passed in.
 """
 
+import difflib
 import re
-from typing import Iterable
+from typing import Callable, Iterable
 
 from backend.evals import checks
 
@@ -40,6 +44,8 @@ REPLACEMENTS = {
         "función se archivan junto a las demás muestras de criterio deficiente."
     ),
 }
+# "LUCRARIO" → lucario is 0.93, "EEVEI" → eevee 0.8; another species ("RAICHU" → pikachu, 0.62) is left alone.
+OPENING_NAME_MIN_RATIO = 0.75
 LEAK_CUTOFF = "\n\n[Transmisión interrumpida: contenido restringido.]"
 
 # Stock refusals of the model's safety training, only as a whole short reply that says it cannot
@@ -81,6 +87,21 @@ def reply_verdict(text: str, prompt: str, query: str, *, final: bool = True) -> 
     return None
 
 
+def fix_opening_name(text: str, entries: Iterable[str]) -> str:
+    """``text`` with a misspelled opening name replaced by the closest entry name (normalized)."""
+    opening = checks.pokedex_opening(text)
+    names = set(entries)
+    if opening is None or not names:
+        return text
+    said = checks.normalize(opening.group("name"))
+    if said in names:
+        return text
+    best = max(sorted(names), key=lambda n: difflib.SequenceMatcher(None, said, n).ratio())
+    if difflib.SequenceMatcher(None, said, best).ratio() < OPENING_NAME_MIN_RATIO:
+        return text
+    return text[: opening.start("name")] + best.upper() + text[opening.end("name") :]
+
+
 def guard_reply(text: str, prompt: str, query: str) -> tuple[str, str | None]:
     """The reply to keep (in the history) and the guard that replaced it, if any."""
     reason = reply_verdict(text, prompt, query)
@@ -91,12 +112,14 @@ class StreamGuard:
     """Filters a streamed reply: ``feed`` each delta, then ``finish``; both return the text to send.
 
     ``shown`` is what the user saw (what the quality checks grade) and ``reason``
-    the guard that fired, if any.
+    the guard that fired, if any. ``entries`` gives the entry names of the turn's
+    tool results when the first characters are released, for ``fix_opening_name``.
     """
 
-    def __init__(self, prompt: str, query: str) -> None:
+    def __init__(self, prompt: str, query: str, entries: Callable[[], Iterable[str]] | None = None) -> None:
         self._prompt = prompt
         self._query = query
+        self._entries = entries
         self._text = ""
         self._judged = False
         self.reason: str | None = None
@@ -106,12 +129,17 @@ class StreamGuard:
         self.shown += text
         return text
 
+    def _fix_opening(self) -> None:
+        if self._entries is not None and not self.shown:
+            self._text = fix_opening_name(self._text, self._entries())
+
     def feed(self, delta: str) -> str:
         self._text += delta
         if self.reason or len(self._text) < HOLD_CHARS:
             return ""
         if not self._judged:
             self._judged = True
+            self._fix_opening()
             self.reason = reply_verdict(self._text, self._prompt, self._query, final=False)
         elif checks.prompt_leaks(self._text, self._prompt, self._query):
             self.reason = "prompt_leak"
@@ -121,6 +149,7 @@ class StreamGuard:
 
     def finish(self) -> str:
         if not self.shown and not self.reason:
+            self._fix_opening()
             self.reason = reply_verdict(self._text, self._prompt, self._query)
             if self.reason:
                 return self._send(REPLACEMENTS[self.reason])

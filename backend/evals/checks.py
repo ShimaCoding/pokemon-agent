@@ -247,6 +247,11 @@ def _collect(texts: Iterable[str]) -> _Evidence:
     return ev
 
 
+def entry_names(texts: Iterable[str]) -> set[str]:
+    """Normalized names of the Pokédex entries (name + genus) among tool result ``texts``."""
+    return set(_collect(texts).entries)
+
+
 def _turn_texts(turn: Turn) -> list[str]:
     tool_texts = [t.text for t in turn.tools if t.name not in SCAFFOLDING_TOOLS]
     return [*turn.evidence, *tool_texts, turn.query]

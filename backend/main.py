@@ -533,7 +533,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
-    from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent
+    from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_entry_names
     from backend.context import next_turn
 
     start_time = time.time()
@@ -635,7 +635,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                 }
             )
 
-            guard = guards.StreamGuard(SYSTEM_PROMPT, query)
+            guard = guards.StreamGuard(SYSTEM_PROMPT, query, entries=lambda: turn_entry_names(agent.messages))
             with telemetry.agent_span(conversation_id) as agent_obs:
                 agent_span_opened = True
                 prompt = await _expand_prompt(query)
