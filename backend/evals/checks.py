@@ -53,6 +53,13 @@ SCAFFOLDING_TOOLS = frozenset({"skills", "retrieve_context"})
 # narrates their Pokédex opening still triggers pokemon_tool_used.
 _SPECIES_STOPLIST = frozenset({"abra", "paras", "golem", "onix"})
 
+# Form and variety words a tool argument may add to a species the user named ("vulpix de alola"
+# → "vulpix-alola", "giratina" → "giratina-altered"): they never name a species on their own.
+FORM_WORDS = frozenset(
+    "alola alolan galar galarian hisui hisuian paldea paldean mega gmax x y f m male female "
+    "origin altered therian incarnate standard normal shield".split()
+)
+
 # SKILL.md 2.1: "BULBASAUR. El Pokémon Semilla." (the "El" is optional in practice). Markdown
 # emphasis may wrap the name and the genus separately: "**BULBASAUR**. *El Pokémon Semilla.*".
 _EMPHASIS = r"(?:\*\*?|__?)?"
@@ -193,6 +200,12 @@ def entry_opening(reply: str) -> re.Match | None:
     if m and sum(c.isalpha() for c in m.group("name")) >= 2:
         return m
     return None
+
+
+def species_name(name: str) -> str:
+    """Normalized ``name`` without its form words: "giratina-altered" → "giratina"."""
+    words = normalize(name).split()
+    return " ".join(w for w in words if w not in FORM_WORDS) or " ".join(words)
 
 
 def _genus(text: str) -> str:
@@ -391,6 +404,8 @@ def check_grounding(turn: Turn) -> EvalResult | None:
     if opening is not None:
         name, genus = normalize(opening.group("name")), _genus(opening.group("genus"))
         known = ev.entries.get(name)
+        if known is None:  # "GIRATINA." for the giratina-altered entry
+            known = next((g for n, g in ev.entries.items() if species_name(n) == name), None)
         if known is None:
             mismatch = f"apertura de {name} sin datos de get_pokedex_entry"
         elif known != genus:

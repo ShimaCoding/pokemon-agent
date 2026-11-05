@@ -161,18 +161,10 @@ class StreamGuard:
         return self._send(REPLACEMENTS[self.reason] if not self.shown else LEAK_CUTOFF)
 
 
-# Form and variety words a tool argument may add to a species the user named ("vulpix de alola"
-# → "vulpix-alola", "giratina" → "giratina-altered"): they never name a species on their own.
-FORM_WORDS = frozenset(
-    "alola alolan galar galarian hisui hisuian paldea paldean mega gmax x y f m male female "
-    "origin altered therian incarnate standard normal shield".split()
-)
-
-
 def ungrounded_names(names: Iterable[str], conversation: Iterable[str]) -> list[str]:
     """``names`` with a word that is neither in ``conversation`` nor a form word. Pure.
 
     Exact words, not prefixes: "pikachu" is not grounded by "pikachuu".
     """
     words = {w for text in conversation for w in checks.normalize(text).split()}
-    return [n for n in names if not all(w in words or w in FORM_WORDS for w in checks.normalize(n).split())]
+    return [n for n in names if not all(w in words or w in checks.FORM_WORDS for w in checks.normalize(n).split())]
