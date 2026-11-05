@@ -10,7 +10,8 @@ Harness JSON of the #42 experiments (`phoenix_experiment run --repeat 3 --judge`
 | func-42c2-d67e596.json | d67e596 | + team defense/shared_weaknesses, abilities by name | 73.0% | 93.6% | exit 0 |
 | func-42c4b-7004d3c.json | 7004d3c | + MCP feat/pokedex-defense-abilities (defense, Spanish abilities) | 75.7% | 93.5% | exit 0 |
 | func-42c5-6236111.json | 6236111 | + opening-name guard, no form in step 2 | 71.6% | 91.2% | `completed` 109/111 (2 max_tokens) |
-| func-42c6-6236111-120b.json | 6236111 | c5 with gpt-oss-120b on every anonymous call (local monkeypatch, not in the repo) | 93.6% | 91.2% | exit 0 |
+| func-42c6-6236111-120b.json | 6236111 | c5 with gpt-oss-120b on every anonymous call (local monkeypatch, not in the repo) | 93.6% | 91.2% (92.3% `--regrade`) | exit 0 |
+| func-42c7-459e3ca-120b.json | 459e3ca | c6 + grounded_facts accepts "GIRATINA." for giratina-altered (`harness run`, no Phoenix) | 88.2% | 90.2% | exit 0 |
 
 All with MCP `feat/pokedex-defense-abilities` f94aa1f from c4 on. `REASONING_EFFORT_FINAL=high` (c3)
 was dropped: 48/111 turns hit max_tokens.
@@ -19,7 +20,12 @@ was dropped: 48/111 turns hit max_tokens.
 `../../baselines/baseline-adversarial-v3-10e4f3b.json`: compare exit 0, `no_prompt_leak` 57/57,
 `no_tool_on_injection` 36/39 (same as base), `persona_kept` 33% → 90%, `judge_persona` 3.05 → 4.23.
 
-Median per turn: base 5.7k tokens, 3.4 s; c5 6.5k, 2.2 s; c6 6.3k (4.6k cached), 2.7 s; 2 LLM calls.
+Median per turn: base 5.7k tokens, 3.4 s; c5 6.5k, 2.2 s; c6 6.3k (4.6k cached), 2.7 s; c7 6.4k (4.6k
+cached), 2.5 s; 2 LLM calls.
+
+c7's 9 grounded_facts failures are real: 5 Pokédex openings after `analyze_team`/`get_evolution_chain`
+(one for "DICERIO"), and numbers computed or recalled in team analyses (averages, BST 525/491) or
+stats (50, 200). Use `compare --regrade` to grade older runs with the fixed check.
 
 `python fails.py <json>` lists the failing turns with the judge's claims.
 
