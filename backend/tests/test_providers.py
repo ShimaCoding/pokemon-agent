@@ -25,8 +25,8 @@ def _shipped_effort(monkeypatch):
     monkeypatch.setattr(providers, "REASONING_EFFORT_FINAL", providers.DEFAULT_REASONING_EFFORT["final"])
 
 
-def test_public_requests_only_get_the_small_model():
-    assert model_ids(authenticated=False) == ["groq/openai/gpt-oss-20b"]
+def test_public_requests_get_the_large_model_with_fallback():
+    assert model_ids(authenticated=False) == ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
 
 
 def test_authenticated_requests_prefer_the_large_model():

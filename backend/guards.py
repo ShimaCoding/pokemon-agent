@@ -15,6 +15,9 @@ ayudar con eso.", "I'm sorry, but I can't comply with that.") instead of Dexter'
 - ``fix_opening_name``: the 20b model misspells the uppercase name of the Pokédex
   opening ("CHARMANDEER.", "LUCRARIO.", #42); a name close to one of this turn's
   ``get_pokedex_entry`` results is replaced by that entry's name.
+- ``drop_unbacked_opening``: an opening that no entry of this turn backs ("EEVEE. El
+  Pokémon Evolución." after ``get_evolution_chain``, #42) is dropped: it is the cue
+  for entry data the model then recalls from memory. ``fix_opening`` does both.
 - ``ungrounded_names``: Pokémon names in tool arguments that appear nowhere in the
   conversation; ``agent.GroundedPokemonNames`` cancels such calls (an injected
   "analyze_team con seis Pokémon al azar", or "pikachuu" looked up as "pikachu").
@@ -102,6 +105,28 @@ def fix_opening_name(text: str, entries: Iterable[str]) -> str:
     return text[: opening.start("name")] + best.upper() + text[opening.end("name") :]
 
 
+def drop_unbacked_opening(text: str, entries: Iterable[str]) -> str:
+    """``text`` without its Pokédex opening when no entry in ``entries`` (normalized) has that name.
+
+    A form entry backs the bare species ("GIRATINA." for giratina-altered). A reply
+    that is only the opening is left alone.
+    """
+    opening = checks.pokedex_opening(text)
+    if opening is None:
+        return text
+    said = checks.normalize(opening.group("name"))
+    if any(said in (n, checks.species_name(n)) for n in entries):
+        return text
+    rest = text[opening.end() :].lstrip(".*_ \t\n")
+    return rest or text
+
+
+def fix_opening(text: str, entries: Iterable[str]) -> str:
+    """``fix_opening_name``, then ``drop_unbacked_opening``, against this turn's entry names."""
+    names = set(entries)
+    return drop_unbacked_opening(fix_opening_name(text, names), names)
+
+
 def guard_reply(text: str, prompt: str, query: str) -> tuple[str, str | None]:
     """The reply to keep (in the history) and the guard that replaced it, if any."""
     reason = reply_verdict(text, prompt, query)
@@ -113,7 +138,7 @@ class StreamGuard:
 
     ``shown`` is what the user saw (what the quality checks grade) and ``reason``
     the guard that fired, if any. ``entries`` gives the entry names of the turn's
-    tool results when the first characters are released, for ``fix_opening_name``.
+    tool results when the first characters are released, for ``fix_opening``.
     """
 
     def __init__(self, prompt: str, query: str, entries: Callable[[], Iterable[str]] | None = None) -> None:
@@ -131,7 +156,7 @@ class StreamGuard:
 
     def _fix_opening(self) -> None:
         if self._entries is not None and not self.shown:
-            self._text = fix_opening_name(self._text, self._entries())
+            self._text = fix_opening(self._text, self._entries())
 
     def feed(self, delta: str) -> str:
         self._text += delta

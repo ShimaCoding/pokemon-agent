@@ -202,6 +202,8 @@ def test_guard_reply_leaves_tool_calls_and_good_answers():
     GuardReply._on_response(event)
     assert message["content"] == content
     event, message = _response_event([{"text": LONG_REPLY}])
+    entry = json.dumps({"id": 1, "name": "bulbasaur", "genus": "Pokémon Semilla"})
+    event.agent.messages.append({"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": entry}]}}]})
     GuardReply._on_response(event)
     assert message["content"] == [{"text": LONG_REPLY}]
 
@@ -227,6 +229,37 @@ CHARMANDER_ENTRY = json.dumps({"id": 4, "name": "charmander", "genus": "Pokémon
 )
 def test_fix_opening_name(reply, entries, fixed):
     assert guards.fix_opening_name(reply, entries) == (fixed or reply)
+
+
+@pytest.mark.parametrize(
+    "reply, entries, kept",
+    [
+        # Live c7 openings (2026-11-04) after get_evolution_chain / analyze_team: no entry this turn.
+        ("EEVEE. El Pokémon Evolutivo. Escaneo completado.", set(), "Escaneo completado."),
+        ("**DICERIO.** El Pokémon Hada.\n\nEscaneo completado.", {"charmander"}, "Escaneo completado."),
+        # Backed by this turn's entry, also through its form; prose and a bare opening untouched.
+        ("CHARMANDER. El Pokémon Lagartija. Escaneo completado.", {"charmander"}, None),
+        ("GIRATINA. El Pokémon Renegado. Escaneo completado.", {"giratina altered"}, None),
+        ("Eevee. El Pokémon más versátil del equipo es Eevee.", set(), None),
+        ("EEVEE. El Pokémon Evolutivo.", set(), None),
+    ],
+)
+def test_drop_unbacked_opening(reply, entries, kept):
+    assert guards.drop_unbacked_opening(reply, entries) == (kept or reply)
+
+
+def test_fix_opening_fixes_the_name_before_judging_it():
+    assert guards.fix_opening("CHARMANDEER. El Pokémon Lagartija. Fuego.", {"charmander"}) == (
+        "CHARMANDER. El Pokémon Lagartija. Fuego."
+    )
+    assert guards.fix_opening("RAICHU. El Pokémon Ratón. Fuego.", {"pikachu"}) == "Fuego."
+
+
+def test_stream_drops_an_unbacked_opening_before_it_leaves():
+    guard = guards.StreamGuard(SYSTEM_PROMPT, "x", entries=lambda: set())
+    reply = "TOGEPI. El Pokémon Hada. " + LONG_REPLY
+    out = "".join(guard.feed(reply[i : i + 7]) for i in range(0, len(reply), 7)) + guard.finish()
+    assert out == guard.shown == LONG_REPLY and guard.reason is None
 
 
 def test_stream_fixes_the_opening_name_before_it_leaves():

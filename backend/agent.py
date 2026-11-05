@@ -281,8 +281,8 @@ class GuardReply:
 
     ``main._sse_generator`` filters what the user sees with ``guards.StreamGuard``;
     this keeps the same decision in the session snapshot, so a leaked prompt or a
-    raw JSON dump is not what the next turn reads back, and fixes the opening name
-    the same way (#42).
+    raw JSON dump is not what the next turn reads back, and fixes or drops the
+    opening the same way (#42).
     """
 
     def register_hooks(self, registry, **_: Any) -> None:
@@ -304,7 +304,7 @@ class GuardReply:
         messages = getattr(event.agent, "messages", []) or []
         kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(messages))
         if not reason:
-            kept = guards.fix_opening_name(kept, turn_entry_names(messages))
+            kept = guards.fix_opening(kept, turn_entry_names(messages))
         if kept != text:
             # In place: the event loop appends this same message to the history.
             content[:] = [b for b in content if not (isinstance(b, dict) and "text" in b)] + [{"text": kept}]
