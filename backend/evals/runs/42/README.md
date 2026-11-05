@@ -23,9 +23,9 @@ was dropped: 48/111 turns hit max_tokens.
 Median per turn: base 5.7k tokens, 3.4 s; c5 6.5k, 2.2 s; c6 6.3k (4.6k cached), 2.7 s; c7 6.4k (4.6k
 cached), 2.5 s; 2 LLM calls.
 
-c7's 9 grounded_facts failures are real: 5 Pokédex openings after `analyze_team`/`get_evolution_chain`
-(one for "DICERIO"), and numbers computed or recalled in team analyses (averages, BST 525/491) or
-stats (50, 200). Use `compare --regrade` to grade older runs with the fixed check.
+c7's 9 grounded_facts failures are real: 6 turns open with the Pokédex protocol after `analyze_team`
+or `get_evolution_chain` (one for "DICERIO") and recall entry data (heights, weights, BST); the rest are
+numbers computed or recalled in team analyses (491, 525) and stats (50). Use `compare --regrade` to grade older runs with the fixed check.
 
 `python fails.py <json>` lists the failing turns with the judge's claims.
 
