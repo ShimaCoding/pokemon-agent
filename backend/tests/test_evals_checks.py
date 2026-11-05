@@ -180,6 +180,26 @@ def test_wrong_genus_in_opening_fails():
     assert "lagartija" in r.metadata["opening_mismatch"]
 
 
+def test_opening_without_form_words_matches_the_form_entry():
+    # Live c6 opening (2026-11-04): the entry is giratina-altered, Dexter says GIRATINA.
+    entry = json.dumps({"id": 487, "name": "giratina-altered", "genus": "Pokémon Renegado", "types": ["ghost", "dragon"]})
+    giratina = ToolObservation("get_pokedex_entry", {"pokemon": "giratina-altered"}, entry)
+    for reply in ("GIRATINA. El Pokémon Renegado.", "GIRATINA-ALTERED. El Pokémon Renegado."):
+        assert checks.check_grounding(Turn("háblame de giratina", reply, [giratina])).passed
+    r = checks.check_grounding(Turn("háblame de giratina", "GIRATINA. El Pokémon Lagartija.", [giratina]))
+    assert "lagartija" in r.metadata["opening_mismatch"]
+    r = checks.check_grounding(Turn("háblame de giratina", "PALKIA. El Pokémon Renegado.", [giratina]))
+    assert "palkia" in r.metadata["opening_mismatch"]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [("giratina-altered", "giratina"), ("Vulpix Alola", "vulpix"), ("mr-mime", "mr mime"), ("normal", "normal")],
+)
+def test_species_name(name, expected):
+    assert checks.species_name(name) == expected
+
+
 def test_invented_entry_for_unknown_pokemon_fails():
     error = ToolObservation("get_pokedex_entry", {"pokemon": "pikachuzard"}, "❌ Pokémon 'pikachuzard' not found.", True)
     reply = "PIKACHUZARD. El Pokémon Dragón Eléctrico. Ataque 120 y velocidad 110."

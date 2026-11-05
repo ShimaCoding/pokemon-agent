@@ -143,7 +143,7 @@ model = ModelRouter([
 agent = Agent(model=model, ...)
 ```
 
-En MCPokédex las consultas anónimas usan solo `gpt-oss-20b`; las autenticadas prueban primero `gpt-oss-120b` y caen a `gpt-oss-20b` si falla. Cada intento emite un `llm_call` y luego un `model_attempt` con `status: "success" | "failed"`, así que en las trazas ves exactamente qué modelo respondió.
+En MCPokédex todas las consultas prueban primero `gpt-oss-120b` y caen a `gpt-oss-20b` si falla (las anónimas usaban solo el 20b hasta #42). Cada intento emite un `llm_call` y luego un `model_attempt` con `status: "success" | "failed"`, así que en las trazas ves exactamente qué modelo respondió.
 """,
     ),
     Lesson(

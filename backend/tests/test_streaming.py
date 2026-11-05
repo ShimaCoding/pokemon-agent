@@ -98,6 +98,11 @@ def _run(monkeypatch, script, on_send=None):
     return sent, events
 
 
+def _entry_result(name: str, genus: str) -> dict:
+    entry = json.dumps({"name": name, "genus": genus})
+    return {"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": entry}]}}]}
+
+
 OPENING = (
     "BULBASAUR. El Pokémon Semilla. Escaneo completado: lectura de hardware sin anomalías. "
     "La combinación de tipos Planta y Veneno configura una fisiología dual que el entrenador "
@@ -123,6 +128,8 @@ def test_text_deltas_reach_the_socket_before_the_agent_continues(monkeypatch):
     first_sent = asyncio.Event()
 
     async def script(agent):
+        # This turn's entry backs the opening (guards.fix_opening drops one without it).
+        agent.messages = [{"role": "user", "content": [{"text": "x"}]}, _entry_result("bulbasaur", "Pokémon Semilla")]
         # The reply guard holds back the first guards.HOLD_CHARS; from there on every delta streams.
         yield {"data": OPENING}
         # If any layer (middleware, StreamingResponse) buffered the first frame,

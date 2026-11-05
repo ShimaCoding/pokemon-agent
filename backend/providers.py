@@ -39,10 +39,10 @@ logger = logging.getLogger(__name__)
 PROVIDER_LABEL = "Groq"
 API_KEY_ENV = "GROQ_API_KEY"
 
-# Only the cheapest model is exposed to anonymous users to avoid burning quota.
-MODELS_PUBLIC = ["groq/openai/gpt-oss-20b"]
-# Authenticated requests: preferred model first, then fallbacks in order.
+# Preferred model first, then fallbacks in order. Anonymous requests get the 120b
+# too since #42: with the 20b the narration stayed under 76 % grounded (judge).
 MODELS_AUTHENTICATED = ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
+MODELS_PUBLIC = list(MODELS_AUTHENTICATED)
 # Both gpt-oss models have a 131k-token window on Groq; the harness context
 # manager uses it to decide when to compress the conversation.
 CONTEXT_WINDOW = 131_072
