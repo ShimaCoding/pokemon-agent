@@ -12,6 +12,7 @@ Harness JSON of the #42 experiments (`phoenix_experiment run --repeat 3 --judge`
 | func-42c5-6236111.json | 6236111 | + opening-name guard, no form in step 2 | 71.6% | 91.2% | `completed` 109/111 (2 max_tokens) |
 | func-42c6-6236111-120b.json | 6236111 | c5 with gpt-oss-120b on every anonymous call (local monkeypatch, not in the repo) | 93.6% | 91.2% (92.3% `--regrade`) | exit 0 |
 | func-42c7-459e3ca-120b.json | 459e3ca | c6 + grounded_facts accepts "GIRATINA." for giratina-altered (`harness run`, no Phoenix) | 88.2% | 90.2% | exit 0 |
+| func-42c8-bc8c006.json | bc8c006 | 120b for anonymous requests in the code + drop an opening no entry backs | 92.8% | 95.5% | exit 0 |
 
 All with MCP `feat/pokedex-defense-abilities` f94aa1f from c4 on. `REASONING_EFFORT_FINAL=high` (c3)
 was dropped: 48/111 turns hit max_tokens.
@@ -28,5 +29,11 @@ or `get_evolution_chain` (one for "DICERIO") and recall entry data (heights, wei
 numbers computed or recalled in team analyses (491, 525) and stats (50). Use `compare --regrade` to grade older runs with the fixed check.
 
 `python fails.py <json>` lists the failing turns with the judge's claims.
+
+`adv-42c8-bc8c006.json` (c8 on `cases_adversarial.json`) against the v3 baseline: exit 0, `no_prompt_leak`
+57/57, `no_tool_on_injection` 37/39, `persona_kept` 98%, `tool_expectation` 16/18 (noise, z 1.46).
+
+c8 is the final candidate: `../../baselines/baseline-v2-bc8c006.json` and
+`../../baselines/baseline-adversarial-v3-bc8c006.json`.
 
 Delete this directory before merging: only the final candidate becomes a baseline.
