@@ -1,0 +1,36 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+
+# Each local workspace gets ports $CONDUCTOR_PORT..$CONDUCTOR_PORT+9:
+#   $CONDUCTOR_PORT     -> FastAPI backend
+#   $CONDUCTOR_PORT + 1 -> Vite dev server (proxies /api, /config, /health to the backend)
+
+[[preview_urls]]
+name = "Frontend (Vite)"
+url = "http://localhost:$((CONDUCTOR_PORT + 1))"
+
+[[preview_urls]]
+name = "Backend (FastAPI)"
+url = "http://localhost:$CONDUCTOR_PORT/health"
+
+[scripts]
+# Deps are locked in uv.lock (same as the Dockerfile); `uv sync` builds the workspace .venv.
+# `uv run` always uses the project's .venv, even if an inherited VIRTUAL_ENV points elsewhere.
+setup = "uv sync --frozen && npm ci --prefix frontend"
+run_mode = "concurrent"
+
+[scripts.run.dev]
+available_in = [ "local" ]
+command = 'npx -y concurrently -k -n api,web -c blue,magenta "uv run uvicorn backend.main:app --reload --reload-dir backend --port $CONDUCTOR_PORT" "BACKEND_URL=http://localhost:$CONDUCTOR_PORT npm run dev --prefix frontend -- --port $((CONDUCTOR_PORT+1)) --strictPort"'
+default = true
+icon = "play"
+
+# Same as dev, but the backend talks to an MCP server running elsewhere (e.g. another
+# workspace). LOCAL_MCP_URL must be exported in your shell env, e.g. http://127.0.0.1:55300/mcp
+[scripts.run.dev-local-mcp]
+available_in = [ "local" ]
+command = 'npx -y concurrently -k -n api,web -c blue,magenta "MCP_SERVER_URL=${LOCAL_MCP_URL:?define LOCAL_MCP_URL} uv run uvicorn backend.main:app --reload --reload-dir backend --port $CONDUCTOR_PORT" "BACKEND_URL=http://localhost:$CONDUCTOR_PORT npm run dev --prefix frontend -- --port $((CONDUCTOR_PORT+1)) --strictPort"'
+icon = "plug"
+
+[scripts.run.test]
+command = "uv run pytest"
+icon = "test-tube"

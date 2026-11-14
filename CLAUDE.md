@@ -24,6 +24,22 @@ docker-compose up --build                       # production-like
 
 `.env` needs `GROQ_API_KEY`. For a local MCP server set `MCP_SERVER_URL=http://localhost:8001/mcp`. Dependencies are locked: update with `uv lock --upgrade-package X`, never with open ranges.
 
+## Branches and deploy
+
+- `development` is the integration branch: feature branches start from `origin/development` and PR into it.
+- `main` is production: promote with a PR `development` → `main` (merge commit, never squash, so `main` stays an ancestor of `development`). Hotfixes merged into `main` go back into `development` right away.
+- Dokploy compose app `mcpokedex` builds from `main`. Pushing does not deploy: trigger the compose webhook (see the deploy runbook) and check that `https://mcpokedex.com/health` reports the merged SHA in `version`.
+- Conductor workspaces are created from the repository base branch (set in the Conductor app, not in this repo); keep it on `development`.
+
+## Desarrollo con Conductor
+
+`.conductor/settings.toml` makes each Conductor workspace self-contained (`run_mode = "concurrent"`). Conductor reads it from `main` on the remote, so changes take effect once promoted.
+
+- Ports: backend on `$CONDUCTOR_PORT`, Vite on `$CONDUCTOR_PORT+1`. Vite proxies `/api`, `/config`, `/health` to `BACKEND_URL` (defaults to `http://localhost:8000`).
+- `setup`: `uv sync --frozen` + `npm ci --prefix frontend`.
+- Run scripts: `dev` (default, local only; backend + Vite via `concurrently -k`), `dev-local-mcp` (same, with `MCP_SERVER_URL=$LOCAL_MCP_URL`), `test` (`uv run pytest`).
+- SQLite (`DB_PATH`) and `SESSIONS_DIR` are relative, so each workspace has its own.
+
 ## Architecture
 
 - **`backend/providers.py`** — Groq model lists and `build_model()`, which returns a `ModelRouter` of `TracedLiteLLMModel`s. `TracedLiteLLMModel` reports each attempt (`llm_call`, `model_attempt`) to a per-request trace sink. Nothing in litellm is patched.
