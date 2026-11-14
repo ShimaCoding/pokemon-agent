@@ -37,6 +37,19 @@ export interface ModelAttemptEvent {
   error?: string
 }
 
+/** Classifier routing (#61, MODEL_CLASSIFIER_ENABLED): which model opens the turn and why. */
+export interface ModelRouteEvent {
+  type: 'model_route'
+  model: string | null
+  /** classifier: it chose; fallback: it failed and the 120b opens; cooldown: a model was paused, no call. */
+  source: 'classifier' | 'fallback' | 'cooldown'
+  classifier_model: string
+  classify_ms: number
+  reason?: string
+  error?: string
+  timestamp_ms: number
+}
+
 export interface ToolCallEvent {
   type: 'tool_call'
   index: number
@@ -92,6 +105,7 @@ export interface DoneEvent {
   cached_tokens?: number
   llm_calls?: number
   ttft_ms?: number | null
+  route?: Pick<ModelRouteEvent, 'model' | 'source' | 'classify_ms'> | null
   /** LLM Observability ids of the agent span; only when Datadog is on. Used by 👍/👎. */
   trace_id?: string | null
   span_id?: string | null
@@ -107,6 +121,7 @@ export type SseEvent =
   | AgentInitEvent
   | LlmCallEvent
   | ModelAttemptEvent
+  | ModelRouteEvent
   | ToolCallEvent
   | ToolResultEvent
   | UiResourceEvent
@@ -115,7 +130,13 @@ export type SseEvent =
   | ErrorEvent
 
 /** Events kept for the "ver cómo lo pensó" panel. */
-export type TraceEvent = AgentInitEvent | LlmCallEvent | ModelAttemptEvent | ToolCallEvent | ToolResultEvent
+export type TraceEvent =
+  | AgentInitEvent
+  | LlmCallEvent
+  | ModelAttemptEvent
+  | ModelRouteEvent
+  | ToolCallEvent
+  | ToolResultEvent
 
 // ── Chat ─────────────────────────────────────────────────────────
 

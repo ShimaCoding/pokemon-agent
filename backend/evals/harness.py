@@ -206,6 +206,8 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
         "span_id": done.get("span_id"),
         "models": done.get("models_tried"),
         "guard": done.get("guard"),
+        # Classifier routing (#61): {model, source, classify_ms}, None with the flag off.
+        "route": done.get("route"),
         "client_ttft_ms": client_ms.get("ttft"),
         "client_elapsed_ms": client_ms.get("elapsed"),
     }
@@ -798,9 +800,11 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                         failed = [m for m, r in record["metrics"].items() if not r["passed"]]
                         judge = record.get("judge")
                         judged = f" judge={judge['persona']}/{judge['grounded']}" if judge else ""
+                        route = record.get("route")
+                        routed = f"route={route['source']}:{str(route['model']).rsplit('-', 1)[-1]} " if route else ""
                         print(
                             f"[{rep}/{args.repeat} {case['id']} t{i}] {spec['q']!r:<36} {record['status']} "
-                            f"llm={record.get('llm_calls')} elapsed={record.get('elapsed_ms')}ms "
+                            f"llm={record.get('llm_calls')} elapsed={record.get('elapsed_ms')}ms {routed}"
                             f"tools={[t['name'] for t in record['tools']]} "
                             f"{'FAIL ' + ','.join(failed) if failed else 'ok'}{judged}",
                             flush=True,

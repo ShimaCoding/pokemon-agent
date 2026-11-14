@@ -520,6 +520,11 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "call_role": "routing"|"final", "reasoning_effort": str}
                                 # routing: opens the turn (picks a tool or answers directly); final: after tool results
       {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
+      {"type": "model_route",   "model": str, "source": "classifier"|"fallback"|"cooldown", "classifier_model": str,
+                                "classify_ms": int, "reason": str?, "error": str?, tokens?, "timestamp_ms": int}
+                                # once per turn, before the first llm_call, only with MODEL_CLASSIFIER_ENABLED:
+                                # which model opens the turn and why (#61). Its tokens count in done's totals,
+                                # not in llm_calls.
       {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
       {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int,
                                 "cached": bool, "duration_ms": float | None, "cancelled": bool}
@@ -530,6 +535,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
                                 "guard": str | None,  # guards.REPLACEMENTS key when a guard replaced or cut the reply
+                                "route": {"model", "source", "classify_ms"} | None,  # model_route, when classifying
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
     """
@@ -563,6 +569,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     pending: list[dict] = []
     models_tried: list[str] = []
     llm_calls = 0
+    route: dict | None = None  # the model_route event, when the classifier router is on
     # Time to first streamed text delta, i.e. what the user perceives as latency.
     ttft_ms: int | None = None
 
@@ -572,8 +579,11 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
         pending.append({**evt, "timestamp_ms": elapsed_ms()})
 
     def on_model_event(evt: dict) -> None:
-        nonlocal llm_calls
-        if evt["type"] == "llm_call":
+        nonlocal llm_calls, route
+        if evt["type"] == "model_route":
+            # Not a model attempt of the agent loop: keep it out of models_tried and llm_calls.
+            route = evt
+        elif evt["type"] == "llm_call":
             llm_calls += 1
             evt = {**evt, "call_index": llm_calls}
         else:
@@ -592,19 +602,23 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     yield _sse({"type": "start", "provider": PROVIDER_LABEL, "conversation_id": conversation_id})
 
     def done_event(usage: dict) -> dict:
+        # The classifier's tokens land in the request's invocation context, not in the
+        # agent loop's accumulated_usage: add them so done (and the agent span) cover the turn.
+        extra = route or {}
         return {
             "type": "done",
             "total_tool_calls": tool_trace.count,
             "elapsed_ms": elapsed_ms(),
             "models_tried": list(dict.fromkeys(models_tried)),
-            "input_tokens": usage.get("inputTokens", 0),
-            "output_tokens": usage.get("outputTokens", 0),
-            "total_tokens": usage.get("totalTokens", 0),
+            "input_tokens": usage.get("inputTokens", 0) + extra.get("input_tokens", 0),
+            "output_tokens": usage.get("outputTokens", 0) + extra.get("output_tokens", 0),
+            "total_tokens": usage.get("totalTokens", 0) + extra.get("total_tokens", 0),
             # Populated by Strands from usage.prompt_tokens_details.cached_tokens.
             "cached_tokens": usage.get("cacheReadInputTokens", 0),
             "llm_calls": llm_calls,
             "ttft_ms": ttft_ms,
             "guard": guard.reason if guard else None,
+            "route": {k: route.get(k) for k in ("model", "source", "classify_ms")} if route else None,
         }
 
     agent = None
@@ -700,6 +714,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "turn": turn,
                                 "history_messages": len(agent.messages),
                                 "guard": guard.reason,
+                                "route": done["route"],
                             },
                             metrics={
                                 "input_tokens": done["input_tokens"],
@@ -707,7 +722,15 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 "total_tokens": done["total_tokens"],
                                 "cache_read_input_tokens": done["cached_tokens"],
                             },
-                            tags={"authenticated": str(authenticated).lower()},
+                            tags={
+                                "authenticated": str(authenticated).lower(),
+                                # Latency per routed model in Datadog/Phoenix (only with the classifier on).
+                                **(
+                                    {"route_source": route["source"], "route_model": str(route["model"])}
+                                    if route
+                                    else {}
+                                ),
+                            },
                         )
                         ids = telemetry.export_ids(agent_obs)
                         if ids:

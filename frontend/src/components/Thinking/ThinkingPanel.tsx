@@ -24,6 +24,8 @@ function liveStep(traces: TraceEvent[]): string | null {
   switch (last.type) {
     case 'agent_init':
       return 'preparando herramientas'
+    case 'model_route':
+      return `abriendo con ${(last.model ?? '').split('/').pop()}`
     case 'llm_call':
       return `pensando con ${last.model.split('/').pop()}`
     case 'model_attempt':

@@ -6,6 +6,10 @@ get the larger model first and fall back to the small one. Failover is handled
 by ``strands.models.ModelRouter`` with ``routing.CooldownFallbackStrategy``
 (ordered failover that also skips a model for a while after it is rate limited),
 so nothing in litellm is patched.
+
+With ``MODEL_CLASSIFIER_ENABLED`` on, ``routing.ClassifiedCooldownStrategy`` lets a
+small classifier call (``ClassifierLiteLLMModel`` on the 20b) pick the model that
+opens each turn (#61).
 """
 
 import importlib.metadata as _meta
@@ -30,12 +34,13 @@ if _litellm_version in ("1.82.7", "1.82.8"):
         "any keys that may have been exposed."
     )
 
+import litellm  # noqa: E402
 from strands.models import ModelRouter  # noqa: E402
 from strands.models.routing import RoutingCandidate  # noqa: E402
 from strands.models.litellm import LiteLLMModel  # noqa: E402
 
 from backend import telemetry  # noqa: E402
-from backend.routing import CooldownFallbackStrategy  # noqa: E402
+from backend.routing import CANDIDATE_DESCRIPTIONS, ClassifiedCooldownStrategy, CooldownFallbackStrategy  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +80,25 @@ def _effort_from_env(name: str, default: str) -> str:
 
 REASONING_EFFORT_ROUTING = _effort_from_env("REASONING_EFFORT_ROUTING", DEFAULT_REASONING_EFFORT["routing"])
 REASONING_EFFORT_FINAL = _effort_from_env("REASONING_EFFORT_FINAL", DEFAULT_REASONING_EFFORT["final"])
+
+
+# Classifier routing (#61): off by default; the evals decide whether it ships.
+CLASSIFIER_MODEL = "groq/openai/gpt-oss-20b"
+DEFAULT_CLASSIFIER_TIMEOUT_SECONDS = 2.0
+
+
+def classifier_enabled() -> bool:
+    """``MODEL_CLASSIFIER_ENABLED`` (1/true/on/yes), read per request so it can be flipped without a rebuild."""
+    return os.environ.get("MODEL_CLASSIFIER_ENABLED", "").strip().lower() in ("1", "true", "on", "yes")
+
+
+def classifier_timeout() -> float:
+    raw = os.environ.get("MODEL_CLASSIFIER_TIMEOUT_SECONDS", "").strip()
+    try:
+        value = float(raw) if raw else DEFAULT_CLASSIFIER_TIMEOUT_SECONDS
+    except ValueError:
+        value = DEFAULT_CLASSIFIER_TIMEOUT_SECONDS
+    return value if 0 < value < 60 else DEFAULT_CLASSIFIER_TIMEOUT_SECONDS
 
 
 def groq_configured() -> bool:
@@ -261,6 +285,84 @@ class TracedLiteLLMModel(LiteLLMModel):
         self._emit({"type": "model_attempt", "model": model_id, "status": "success"})
 
 
+class ClassifierLiteLLMModel(LiteLLMModel):
+    """The routing classifier's model: one non-streamed structured-output call, traced.
+
+    ``LiteLLMModel.structured_output`` sends neither ``params`` (so no ``reasoning_effort``)
+    nor usage back, so this overrides it: ``response_format`` = the classifier's schema,
+    ``reasoning_effort=low``, a small ``max_tokens``, an ``llm`` span tagged
+    ``call_role: classifier``, and a ``stop`` event with the usage. ``last`` keeps the
+    reasoning, tokens and error of the latest call for the ``model_route`` event.
+    """
+
+    MAX_TOKENS = 512
+    REASONING_CHARS = 300
+
+    def __init__(self, *, request_timeout: float | None = None, **config: Any) -> None:
+        super().__init__(**config)
+        self._request_timeout = request_timeout
+        self.last: dict[str, Any] = {}
+
+    @staticmethod
+    def _flatten(prompt: list[dict[str, Any]], system_prompt: str | None) -> list[dict[str, str]]:
+        messages = [{"role": "system", "content": system_prompt}] if system_prompt else []
+        for msg in prompt:
+            text = "\n".join(block["text"] for block in msg.get("content", []) if "text" in block)
+            messages.append({"role": msg.get("role", "user"), "content": text})
+        return messages
+
+    async def structured_output(self, output_model, prompt, system_prompt=None, **kwargs):  # type: ignore[override]
+        model_id = self.get_config()["model_id"]
+        messages = self._flatten(prompt, system_prompt)
+        self.last = {}
+        request: dict[str, Any] = {
+            **self.client_args,
+            "model": model_id,
+            "messages": messages,
+            "response_format": output_model,
+            "reasoning_effort": "low",
+            "max_tokens": self.MAX_TOKENS,
+            "stream": False,
+        }
+        if self._request_timeout:
+            request["timeout"] = self._request_timeout
+        with telemetry.llm_span(model_id) as span:
+            content, reasoning, metrics = "", "", {}
+            try:
+                response = await litellm.acompletion(**request)
+                message = response.choices[0].message
+                content = message.content or ""
+                reasoning = (getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None) or "").strip()
+                if usage := getattr(response, "usage", None):
+                    metrics = {
+                        "input_tokens": usage.prompt_tokens or 0,
+                        "output_tokens": usage.completion_tokens or 0,
+                        "total_tokens": usage.total_tokens or 0,
+                    }
+                self.last = {"reasoning": reasoning[: self.REASONING_CHARS], **metrics}
+                result = output_model.model_validate_json(content)
+            except BaseException as exc:  # CancelledError included: the strategy's timeout cancels us
+                self.last.setdefault("error", type(exc).__name__)
+                raise
+            finally:
+                telemetry.annotate(
+                    span,
+                    input_data=messages[-1:] if messages else [],
+                    output_data=[{"role": "assistant", "content": content}],
+                    metrics=metrics,
+                    metadata={"call_role": "classifier", "reasoning_effort": "low", "reasoning": reasoning[:500]},
+                    tags={"call_role": "classifier", "reasoning_effort": "low"},
+                )
+        usage_event = {
+            "inputTokens": metrics.get("input_tokens", 0),
+            "outputTokens": metrics.get("output_tokens", 0),
+            "totalTokens": metrics.get("total_tokens", 0),
+        }
+        yield {"output": result}
+        # Same shape as the SDK's ModelStopReason: ClassifierStrategy adds the usage to the request.
+        yield {"stop": ("end_turn", {"role": "assistant", "content": [{"text": content}]}, usage_event, {"latencyMs": 0})}
+
+
 class RetryMalformedToolCalls:
     """Retry a model call that Groq rejected because the model mangled a tool call.
 
@@ -304,19 +406,35 @@ def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRou
     A fresh router and fresh model instances per request keep the trace sink
     request-scoped; model health across requests lives in CooldownFallbackStrategy.
 
+    With ``MODEL_CLASSIFIER_ENABLED`` the candidates carry a description (big/small)
+    and ``ClassifiedCooldownStrategy`` picks the opening model; ``trace`` also gets
+    its ``model_route`` event. Off, it is plain ``CooldownFallbackStrategy``.
+
     Raises:
         RuntimeError: If GROQ_API_KEY is not set.
     """
     if not groq_configured():
         raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    ids = model_ids(authenticated)
+    classify = classifier_enabled() and len(ids) > 1
+
+    def description(index: int) -> str | None:
+        if not classify:
+            return None
+        return CANDIDATE_DESCRIPTIONS["big" if index == 0 else "small"]
+
     # Candidate name = model id: CooldownFallbackStrategy keys its process-wide table on it.
-    return ModelRouter(
-        [
-            RoutingCandidate(
-                model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
-                name=m,
-            )
-            for m in model_ids(authenticated)
-        ],
-        strategy=CooldownFallbackStrategy(),
-    )
+    candidates = [
+        RoutingCandidate(
+            model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
+            name=m,
+            description=description(i),
+        )
+        for i, m in enumerate(ids)
+    ]
+    if not classify:
+        return ModelRouter(candidates, strategy=CooldownFallbackStrategy())
+    timeout = classifier_timeout()
+    # Its own instance (not the 20b candidate's): different call shape and state.
+    classifier = ClassifierLiteLLMModel(model_id=CLASSIFIER_MODEL, request_timeout=timeout)
+    return ModelRouter(candidates, strategy=ClassifiedCooldownStrategy(classifier, timeout=timeout, on_route=trace))

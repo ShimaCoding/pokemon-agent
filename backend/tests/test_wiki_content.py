@@ -14,6 +14,7 @@ SSE_EVENT_TYPES: set[str] = {
     "agent_init",
     "llm_call",
     "model_attempt",
+    "model_route",
     "tool_call",
     "tool_result",
     "ui_resource",

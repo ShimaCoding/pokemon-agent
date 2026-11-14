@@ -127,7 +127,7 @@ En MCPokedex, los hooks son cómo capturamos cada `tool_call` con sus argumentos
         title="LiteLLM y el ModelRouter de Strands",
         level="intermediate",
         tags=["litellm", "router", "fallback"],
-        related_events=["llm_call", "model_attempt"],
+        related_events=["llm_call", "model_attempt", "model_route"],
         related_nodes=["llm_router"],
         body_md="""### LiteLLM y el ModelRouter de Strands
 
@@ -144,6 +144,8 @@ agent = Agent(model=model, ...)
 ```
 
 En MCPokédex todas las consultas prueban primero `gpt-oss-120b` y caen a `gpt-oss-20b` si falla (las anónimas usaban solo el 20b hasta #42). Cada intento emite un `llm_call` y luego un `model_attempt` con `status: "success" | "failed"`, así que en las trazas ves exactamente qué modelo respondió.
+
+Con `MODEL_CLASSIFIER_ENABLED` el orden deja de ser fijo: antes de la primera llamada del turno, un `ClassifierStrategy` (una llamada corta al 20b con salida estructurada) lee tu último mensaje y elige qué modelo abre. Lo que toca datos de Pokémon va al 120b; un saludo o una pregunta sobre Dexter, al 20b. Lo ves en el evento `model_route`. Si el elegido falla, el fallback de siempre pasa al otro; si el clasificador falla, abre el 120b.
 """,
     ),
     Lesson(
@@ -355,6 +357,21 @@ EVENTS_CATALOG: dict = {
             "**model_attempt** — el LiteLLM Router está probando un modelo "
             "específico. `status=success` = respondió; `status=failed` = el "
             "Router pasa al siguiente del fallback."
+        ),
+        "related_lesson_id": "litellm_router",
+        "related_node_id": "llm_router",
+    },
+    "model_route": {
+        "description_md": (
+            "**model_route** — solo con `MODEL_CLASSIFIER_ENABLED`: antes de la "
+            "primera llamada del turno, un clasificador (`gpt-oss-20b`, "
+            "`reasoning_effort: low`) lee el último mensaje y elige qué modelo lo "
+            "abre: el 120b para todo lo que toca datos de Pokémon, el 20b para "
+            "saludos, preguntas sobre Dexter o temas ajenos. `source` dice quién "
+            "decidió: `classifier`, `fallback` (el clasificador falló y abre el "
+            "120b) o `cooldown` (un modelo estaba en pausa y no se clasificó). "
+            "`classify_ms` es lo que tardó y `reason` su razonamiento. Si el "
+            "elegido falla, el fallback de siempre pasa al otro."
         ),
         "related_lesson_id": "litellm_router",
         "related_node_id": "llm_router",

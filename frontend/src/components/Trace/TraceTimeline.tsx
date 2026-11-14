@@ -51,6 +51,19 @@ function summarize(step: Step, next: Step | undefined, finished: boolean): Summa
       return { icon: '●', tone: 'init', label: `Preparó ${e.mcp_tools_count} herramientas`, sub, pending: false }
     }
 
+    case 'route': {
+      const e = step.event
+      const model = e.model ? shortModel(e.model) : '—'
+      const label =
+        e.source === 'classifier'
+          ? `Router: el clasificador eligió ${model}`
+          : e.source === 'fallback'
+            ? `Router: el clasificador falló, abre ${model}`
+            : `Router: ${model} (modelo en pausa, sin clasificar)`
+      const sub = [e.classify_ms ? formatMs(e.classify_ms) : null, e.reason ?? e.error].filter(Boolean).join(' · ')
+      return { icon: '◇', tone: e.source === 'fallback' ? 'fail' : 'think', label, sub, pending: false }
+    }
+
     case 'think': {
       const current = step.attempts[step.attempts.length - 1]
       const model = shortModel(current.model)
@@ -137,6 +150,17 @@ function StepDetail({ step }: { step: Step }) {
             </>
           )}
           <LessonLink eventType="agent_init" />
+        </>
+      )
+    }
+
+    case 'route': {
+      const e = step.event
+      return (
+        <>
+          <div className={styles.field}>Clasificador ({shortModel(e.classifier_model)})</div>
+          <JsonViewer data={e} maxHeight="200px" />
+          <LessonLink eventType="model_route" />
         </>
       )
     }

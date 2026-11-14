@@ -1,4 +1,4 @@
-import type { AgentInitEvent, ToolCallEvent, ToolResultEvent, TraceEvent } from '../../types'
+import type { AgentInitEvent, ModelRouteEvent, ToolCallEvent, ToolResultEvent, TraceEvent } from '../../types'
 
 // Folds the raw SSE trace into the few steps a person cares about:
 // a model call plus its failovers is one "think" step, and a batch of
@@ -18,6 +18,7 @@ export interface ToolRun {
 
 export type Step =
   | { kind: 'init'; at: number; event: AgentInitEvent }
+  | { kind: 'route'; at: number; event: ModelRouteEvent }
   | { kind: 'think'; at: number; attempts: ModelAttempt[] }
   | { kind: 'tools'; at: number; runs: ToolRun[] }
   | { kind: 'skill'; at: number; run: ToolRun }
@@ -33,6 +34,10 @@ export function buildSteps(traces: TraceEvent[]): Step[] {
     switch (e.type) {
       case 'agent_init':
         steps.push({ kind: 'init', at: e.timestamp_ms, event: e })
+        break
+
+      case 'model_route':
+        steps.push({ kind: 'route', at: e.timestamp_ms, event: e })
         break
 
       case 'llm_call': {

@@ -429,3 +429,78 @@ def test_rate_limit_flag_has_no_effect_in_prod(quick_run, monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
     monkeypatch.setenv("DD_ENV", "prod")
     assert [quick_run() for _ in range(4)] == [200, 200, 200, 429]
+
+
+# --- model_route (#61) ----------------------------------------------------------------
+
+
+class _RoutedAgent:
+    """Emits what the classifier router and the model wrapper emit, then a short reply."""
+
+    tool_names = ["get_pokedex_entry"]
+
+    def __init__(self, trace):
+        self._trace = trace
+        self.messages = []
+
+    async def stream_async(self, prompt):
+        self._trace(
+            {
+                "type": "model_route",
+                "model": "groq/openai/gpt-oss-20b",
+                "source": "classifier",
+                "classifier_model": "groq/openai/gpt-oss-20b",
+                "classify_ms": 310,
+                "reason": "saludo",
+                "input_tokens": 500,
+                "output_tokens": 40,
+                "total_tokens": 540,
+            }
+        )
+        self._trace({"type": "llm_call", "model": "groq/openai/gpt-oss-20b", "call_role": "routing"})
+        self._trace({"type": "model_attempt", "model": "groq/openai/gpt-oss-20b", "status": "success"})
+        self.messages.append({"role": "user", "content": [{"text": prompt}]})
+        yield {"data": "Saludo registrado."}
+        usage = {"inputTokens": 1000, "outputTokens": 60, "totalTokens": 1060}
+        yield {"result": SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=usage))}
+
+    def cleanup(self):
+        pass
+
+
+def test_model_route_event_feeds_done_and_the_agent_span(client, monkeypatch):
+    from backend import agent as agent_module
+    from backend import telemetry
+
+    annotations: list[dict] = []
+    monkeypatch.setattr(agent_module, "create_agent", lambda *a, **kw: _RoutedAgent(kw["trace"]))
+    monkeypatch.setattr(main, "log_query", lambda **kwargs: None)
+    monkeypatch.setattr(telemetry, "annotate", lambda span, **fields: annotations.append(fields))
+
+    events = _sse_events(client.post("/api/agent/run", json={"query": "hola", "conversation_id": "route-test-1234"}))
+    types = [e["type"] for e in events]
+    assert types.index("model_route") < types.index("llm_call")
+    route = next(e for e in events if e["type"] == "model_route")
+    assert route["reason"] == "saludo" and "timestamp_ms" in route
+
+    done = events[-1]
+    # The route is not a model attempt of the agent loop...
+    assert done["models_tried"] == ["groq/openai/gpt-oss-20b"]
+    assert done["llm_calls"] == 1
+    # ...but its tokens are part of the turn.
+    assert (done["input_tokens"], done["output_tokens"], done["total_tokens"]) == (1500, 100, 1600)
+    assert done["route"] == {"model": "groq/openai/gpt-oss-20b", "source": "classifier", "classify_ms": 310}
+    assert annotations[-1]["metadata"]["route"] == done["route"]
+    assert annotations[-1]["tags"]["route_source"] == "classifier"
+    assert annotations[-1]["tags"]["route_model"] == "groq/openai/gpt-oss-20b"
+
+
+def test_done_route_is_null_without_classifier(client, monkeypatch):
+    from backend import agent as agent_module
+
+    stub = _StubAgent([])
+    monkeypatch.setattr(agent_module, "create_agent", lambda *args, **kwargs: stub)
+    monkeypatch.setattr(main, "log_query", lambda **kwargs: None)
+    events = _sse_events(client.post("/api/agent/run", json={"query": "hola", "conversation_id": "route-test-5678"}))
+    assert "model_route" not in [e["type"] for e in events]
+    assert events[-1]["route"] is None

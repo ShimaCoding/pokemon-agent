@@ -97,6 +97,7 @@ export async function sendChatMessage(rawQuery: string): Promise<void> {
         case 'agent_init':
         case 'llm_call':
         case 'model_attempt':
+        case 'model_route':
         case 'tool_call':
         case 'tool_result':
           c.addTrace(id, evt)
