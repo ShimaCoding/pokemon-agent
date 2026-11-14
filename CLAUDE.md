@@ -27,8 +27,8 @@ docker-compose up --build                       # production-like
 ## Branches and deploy
 
 - `development` is the integration branch: feature branches start from `origin/development` and PR into it.
-- `main` is production: promote with a PR `development` → `main` (merge commit, never squash, so `main` stays an ancestor of `development`). Hotfixes merged into `main` go back into `development` right away.
-- Dokploy compose app `mcpokedex` builds from `main`. Pushing does not deploy: trigger the compose webhook (see the deploy runbook) and check that `https://mcpokedex.com/health` reports the merged SHA in `version`.
+- `main` is production: promote with a PR `development` → `main` merged with a merge commit (never squash or rebase). Then fast-forward `development` to it (`git push origin origin/main:refs/heads/development`) so `main` stays an ancestor of `development`. Hotfixes merged into `main` go back into `development` right away.
+- Dokploy compose app `mcpokedex` builds from `main` (`customGitBranch`). Pushing does not deploy: call the Dokploy API `compose.deploy` for the app (or its webhook) and check that `https://mcpokedex.com/health` reports the merged SHA in `version` (~3 min).
 - Conductor workspaces are created from the repository base branch (set in the Conductor app, not in this repo); keep it on `development`.
 
 ## Desarrollo con Conductor
