@@ -3,8 +3,9 @@ LLM configuration: Groq only, routed with strands' native ModelRouter.
 
 Anonymous requests get the cheapest model; requests authenticated with API_KEY
 get the larger model first and fall back to the small one. Failover is handled
-by ``strands.models.ModelRouter`` (``FallbackStrategy``), so nothing in litellm
-is patched.
+by ``strands.models.ModelRouter`` with ``routing.CooldownFallbackStrategy``
+(ordered failover that also skips a model for a while after it is rate limited),
+so nothing in litellm is patched.
 """
 
 import importlib.metadata as _meta
@@ -30,9 +31,11 @@ if _litellm_version in ("1.82.7", "1.82.8"):
     )
 
 from strands.models import ModelRouter  # noqa: E402
+from strands.models.routing import RoutingCandidate  # noqa: E402
 from strands.models.litellm import LiteLLMModel  # noqa: E402
 
 from backend import telemetry  # noqa: E402
+from backend.routing import CooldownFallbackStrategy  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -299,16 +302,21 @@ def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRou
     """Build a ModelRouter over the Groq models allowed for this request.
 
     A fresh router and fresh model instances per request keep the trace sink
-    request-scoped.
+    request-scoped; model health across requests lives in CooldownFallbackStrategy.
 
     Raises:
         RuntimeError: If GROQ_API_KEY is not set.
     """
     if not groq_configured():
         raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    # Candidate name = model id: CooldownFallbackStrategy keys its process-wide table on it.
     return ModelRouter(
         [
-            TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW)
+            RoutingCandidate(
+                model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
+                name=m,
+            )
             for m in model_ids(authenticated)
-        ]
+        ],
+        strategy=CooldownFallbackStrategy(),
     )
