@@ -11,18 +11,6 @@ El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SP
 
 ---
 
-## Capturas de pantalla
-
-| Herramientas MCP descubiertas dinámicamente | Respuesta con narración Dexter |
-|:---:|:---:|
-| ![MCP Tools panel](Screenshot%202026-03-29%20at%2011.56.32%E2%80%AFPM.png) | ![Dexter narration](Screenshot%202026-03-29%20at%2011.50.58%E2%80%AFPM.png) |
-
-| Trazas del LLM Router con fallback | Admin dashboard |
-|:---:|:---:|
-| ![Router fallback traces](Screenshot%202026-03-29%20at%2011.55.30%E2%80%AFPM.png) | ![Admin dashboard](Screenshot%202026-03-29%20at%2011.57.25%E2%80%AFPM.png) |
-
----
-
 ## Conceptos agénticos que ilustra el proyecto
 
 | Concepto | Descripción |
@@ -60,12 +48,39 @@ Abre **http://localhost:8000** en el navegador.
 ### Desarrollo local
 
 ```bash
-# Backend
-python -m uvicorn backend.main:app --reload
+# Una vez: crea .venv (uv sync) e instala dependencias de backend y frontend
+make setup
+
+# Backend (http://localhost:8000; otro puerto: make backend PORT=8010)
+make backend
 
 # Frontend (en otra terminal)
-cd frontend && npm install && npm run dev
+make frontend
 ```
+
+### Desarrollo con Conductor
+
+El repo trae `.conductor/settings.toml`, así que cada workspace de [Conductor](https://conductor.build) arranca su propio backend y frontend sin chocar puertos (`run_mode = "concurrent"`). El `.env` se copia solo a cada workspace.
+
+| Puerto | Servicio |
+|--------|----------|
+| `$CONDUCTOR_PORT` | Backend FastAPI (`uvicorn --reload`) |
+| `$CONDUCTOR_PORT + 1` | Vite dev server (proxy de `/api`, `/config`, `/health` al backend vía `BACKEND_URL`) |
+
+Scripts:
+
+- **setup**: crea `.venv` con `uv sync --frozen` (versiones de `uv.lock`) y corre `npm ci` en `frontend/`.
+- **dev** (por defecto, solo local): backend + Vite en el mismo grupo de procesos con `concurrently`.
+- **dev-local-mcp**: igual que `dev`, pero fuerza `MCP_SERVER_URL=$LOCAL_MCP_URL` (exporta `LOCAL_MCP_URL` en tu shell).
+- **test**: `uv run pytest` (pytest viene del grupo `dev` de `uv.lock`).
+
+Para apuntar a un MCP server local (por ejemplo, el de otro workspace), pon en el `.env` del workspace:
+
+```bash
+MCP_SERVER_URL=http://127.0.0.1:<puerto>/mcp
+```
+
+El `settings.toml` compartido solo surte efecto en Conductor una vez mergeado a `main`.
 
 ---
 

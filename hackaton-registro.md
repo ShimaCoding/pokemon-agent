@@ -43,12 +43,6 @@ https://github.com/ShimaCoding/pokemon-agent
 
 <!-- Arrastra aquí las imágenes de la carpeta del proyecto al crear el issue en GitHub -->
 
-> **Sugerencia:** usa las capturas ya disponibles en el repo:
-> - `Screenshot 2026-03-29 at 11.49.51 PM.png` — pantalla de inicio / intro modal
-> - `Screenshot 2026-03-29 at 11.52.02 PM.png` — respuesta completa con análisis de Pokémon
-> - `Screenshot 2026-03-29 at 11.55.30 PM.png` — trazas del LLM Router con fallback de proveedores
-> - `Screenshot 2026-03-29 at 11.57.25 PM.png` — panel admin del MCPokedex Agent
-
 ---
 
 ### ☁️ ¿Cómo has utilizado CubePath?
