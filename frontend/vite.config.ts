@@ -30,7 +30,6 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': backendUrl,
-      '/providers': backendUrl,
       '/config': backendUrl,
       '/health': backendUrl,
     },

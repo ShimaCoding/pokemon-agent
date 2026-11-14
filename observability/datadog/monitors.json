@@ -1,0 +1,170 @@
+[
+  {
+    "name": "[MCPokédex] Latencia p95 del agente > 5 s",
+    "type": "llm-observability alert",
+    "query": "formula(\"slow / clamp_min(all, 20) * 100\").last(\"1h\") > 5",
+    "message": "{{#is_alert}}Más del 5% de las consultas al agente Dexter tardaron más de 5 s en la última hora (equivale a p95 > 5 s). Valor: {{value}}% (con menos de 20 consultas/hora el denominador se fija en 20, así que hacen falta al menos 2 consultas lentas).\n\nRevisar: modelo de fallback (models_tried), llamadas LLM por consulta, latencia de tools MCP.\n{{/is_alert}}\n{{#is_recovery}}La latencia p95 del agente volvió a estar bajo 5 s.{{/is_recovery}}\n\nDashboard: https://app.datadoghq.com/dashboard/795-e3v-q9e\nTrazas: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Amcpokedexagent%20%40meta.span.kind%3Aagent%20%40duration%3A%3E5000000000",
+    "tags": [
+      "service:mcpokedexagent",
+      "ml_app:mcpokedexagent",
+      "env:prod",
+      "epic:15",
+      "managed_by:repo"
+    ],
+    "priority": 3,
+    "options": {
+      "thresholds": {
+        "critical": 5
+      },
+      "notify_no_data": false,
+      "on_missing_data": "resolve",
+      "require_full_window": false,
+      "renotify_interval": 0,
+      "include_tags": true,
+      "notify_audit": false,
+      "evaluation_delay": 300,
+      "variables": [
+        {
+          "data_source": "llm_observability",
+          "name": "slow",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent @duration:>5000000000"
+          },
+          "group_by": []
+        },
+        {
+          "data_source": "llm_observability",
+          "name": "all",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent"
+          },
+          "group_by": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "[MCPokédex] % errores del agente > 5%",
+    "type": "llm-observability alert",
+    "query": "formula(\"err / clamp_min(all, 20) * 100\").last(\"1h\") > 5",
+    "message": "{{#is_alert}}Más del 5% de las consultas al agente Dexter terminaron en error en la última hora. Valor: {{value}}% (con menos de 20 consultas/hora el denominador se fija en 20, así que hacen falta al menos 2 errores).\n\nRevisar la lista 'Errores del agente' del dashboard: Groq (rate limit / tool_use_failed), servidor MCP caído (tag failure_stage:setup), restauración de sesión. Las desconexiones del navegador no cuentan como error (tag client_disconnected:true).\n{{/is_alert}}\n{{#is_recovery}}El % de errores del agente volvió a estar bajo 5%.{{/is_recovery}}\n\nDashboard: https://app.datadoghq.com/dashboard/795-e3v-q9e\nTrazas: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Amcpokedexagent%20%40meta.span.kind%3Aagent%20%40status%3Aerror",
+    "tags": [
+      "service:mcpokedexagent",
+      "ml_app:mcpokedexagent",
+      "env:prod",
+      "epic:15",
+      "managed_by:repo"
+    ],
+    "priority": 2,
+    "options": {
+      "thresholds": {
+        "critical": 5
+      },
+      "notify_no_data": false,
+      "on_missing_data": "resolve",
+      "require_full_window": false,
+      "renotify_interval": 0,
+      "include_tags": true,
+      "notify_audit": false,
+      "evaluation_delay": 300,
+      "variables": [
+        {
+          "data_source": "llm_observability",
+          "name": "err",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent @status:error"
+          },
+          "group_by": []
+        },
+        {
+          "data_source": "llm_observability",
+          "name": "all",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent"
+          },
+          "group_by": []
+        }
+      ]
+    }
+  },
+  {
+    "name": "[MCPokédex] Tokens por consulta p95 > 15k",
+    "type": "llm-observability alert",
+    "query": "formula(\"big / clamp_min(all, 20) * 100\").last(\"1h\") > 5",
+    "message": "{{#is_alert}}Más del 5% de las consultas al agente Dexter usaron más de 15.000 tokens (input + output, suma de todas las llamadas LLM de la consulta) en la última hora (equivale a p95 > 15k). Valor: {{value}}% (con menos de 20 consultas/hora el denominador se fija en 20, así que hacen falta al menos 2 consultas grandes).\n\nCausa típica: crecimiento del historial en sesiones largas (issue 18) o un bucle de tools con muchas llamadas LLM.\n{{/is_alert}}\n{{#is_recovery}}Los tokens p95 por consulta volvieron a estar bajo 15k.{{/is_recovery}}\n\nDashboard: https://app.datadoghq.com/dashboard/795-e3v-q9e\nTrazas: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Amcpokedexagent%20%40meta.span.kind%3Aagent%20%40metrics.total_tokens%3A%3E15000",
+    "tags": [
+      "service:mcpokedexagent",
+      "ml_app:mcpokedexagent",
+      "env:prod",
+      "epic:15",
+      "managed_by:repo"
+    ],
+    "priority": 3,
+    "options": {
+      "thresholds": {
+        "critical": 5
+      },
+      "notify_no_data": false,
+      "on_missing_data": "resolve",
+      "require_full_window": false,
+      "renotify_interval": 0,
+      "include_tags": true,
+      "notify_audit": false,
+      "evaluation_delay": 300,
+      "variables": [
+        {
+          "data_source": "llm_observability",
+          "name": "big",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent @metrics.total_tokens:>15000"
+          },
+          "group_by": []
+        },
+        {
+          "data_source": "llm_observability",
+          "name": "all",
+          "indexes": [
+            "*"
+          ],
+          "compute": {
+            "aggregation": "count"
+          },
+          "search": {
+            "query": "@ml_app:mcpokedexagent env:prod @meta.span.kind:agent"
+          },
+          "group_by": []
+        }
+      ]
+    }
+  }
+]

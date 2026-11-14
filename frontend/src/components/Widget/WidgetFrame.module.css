@@ -1,0 +1,32 @@
+.widget { margin: 2px 0; width: 100%; }
+
+.frame {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color-scheme: light;
+  transition: height 120ms steps(4);
+}
+
+.skeleton {
+  display: grid;
+  place-items: center;
+  height: 200px;
+  border: 2px dashed var(--gbc-mid);
+  background: var(--gbc-bg);
+}
+.skeleton::after {
+  content: 'CARGANDO WIDGET...';
+  font-size: 11px;
+  color: var(--gbc-mid);
+  animation: blink 1s step-start infinite;
+}
+
+.error {
+  padding: 8px 12px;
+  border: 2px dashed var(--gbc-mid);
+  color: var(--gbc-mid);
+  font-size: 11px;
+  line-height: 1.8;
+}

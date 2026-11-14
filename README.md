@@ -20,7 +20,7 @@ El backend es **FastAPI + Strands Agents SDK** (Python). El frontend es una **SP
 | **Streaming agéntico con SSE** | El frontend consume un flujo `start → tool_call → tool_result → text → done`, mostrando el razonamiento antes de que la respuesta final esté lista. |
 | **Fallback multi-proveedor** | LiteLLM Router con monkey-patch: Groq → Gemini → OpenAI de forma transparente, sin modificar el SDK de Strands. |
 | **Panel de trazas en vivo** | Cada tool call aparece con spinner → resultado crudo + tiempo transcurrido. Didáctico para entender el ciclo de vida agéntico. |
-| **Dexter narration skill** | Skill de narración que convierte las respuestas del agente en el estilo formal y sarcástico de la Pokédex del Dr. Dexter. |
+| **Protocolo de narración de Dexter** | Incluido en el system prompt (sin llamada extra al LLM): convierte las respuestas del agente en el estilo formal y sarcástico de la Pokédex del Dr. Dexter. |
 | **Admin dashboard** | Panel en `/admin` que registra cada consulta en SQLite: modelos intentados, tokens, latencia, tools usadas y estado del fallback. |
 
 ---
@@ -48,7 +48,7 @@ Abre **http://localhost:8000** en el navegador.
 ### Desarrollo local
 
 ```bash
-# Una vez: crea .venv (Python 3.11) e instala dependencias de backend y frontend
+# Una vez: crea .venv (uv sync) e instala dependencias de backend y frontend
 make setup
 
 # Backend (http://localhost:8000; otro puerto: make backend PORT=8010)
@@ -65,14 +65,14 @@ El repo trae `.conductor/settings.toml`, así que cada workspace de [Conductor](
 | Puerto | Servicio |
 |--------|----------|
 | `$CONDUCTOR_PORT` | Backend FastAPI (`uvicorn --reload`) |
-| `$CONDUCTOR_PORT + 1` | Vite dev server (proxy de `/api`, `/providers`, `/config`, `/health` al backend vía `BACKEND_URL`) |
+| `$CONDUCTOR_PORT + 1` | Vite dev server (proxy de `/api`, `/config`, `/health` al backend vía `BACKEND_URL`) |
 
 Scripts:
 
-- **setup**: crea `.venv` (Python 3.11) con `uv`, instala `requirements.txt` y corre `npm ci` en `frontend/`.
+- **setup**: crea `.venv` con `uv sync --frozen` (versiones de `uv.lock`) y corre `npm ci` en `frontend/`.
 - **dev** (por defecto, solo local): backend + Vite en el mismo grupo de procesos con `concurrently`.
 - **dev-local-mcp**: igual que `dev`, pero fuerza `MCP_SERVER_URL=$LOCAL_MCP_URL` (exporta `LOCAL_MCP_URL` en tu shell).
-- **test**: `pytest backend/tests` (pytest se trae con `uv run --with`, no es dependencia del proyecto).
+- **test**: `uv run pytest` (pytest viene del grupo `dev` de `uv.lock`).
 
 Para apuntar a un MCP server local (por ejemplo, el de otro workspace), pon en el `.env` del workspace:
 
@@ -90,7 +90,6 @@ Solo necesitas **una** para que el agente funcione. El Router hace fallback auto
 
 | Proveedor | Tier gratuito | Obtener key |
 |-----------|---------------|-------------|
-| **OpenRouter** | Sí — multiples modeles completamente gratis | https://platform.openai.com/api-keys |
 | **Groq** | Sí — muy generoso | https://console.groq.com/keys |
 | **Gemini** | Sí — cuota de Google AI Studio | https://aistudio.google.com/app/apikey |
 | **OpenAI** | No — pay-as-you-go | https://platform.openai.com/api-keys |

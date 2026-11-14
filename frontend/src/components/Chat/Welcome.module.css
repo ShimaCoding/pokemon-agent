@@ -1,0 +1,102 @@
+.welcome {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  padding: 16px 0;
+  view-transition-name: dexter-welcome;
+}
+
+/* In-game dialog box, editable: it is the chat input until the first message. */
+.dialog {
+  position: relative;
+  padding: 18px 22px 24px;
+  background: #fff;
+  border: 4px solid var(--gbc-border);
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 5px var(--gbc-light), 4px 4px 0 rgba(0, 0, 0, 0.2);
+  cursor: text;
+}
+.dialog:focus-within { border-color: var(--gbc-dark); }
+.line { font-size: 14px; line-height: 2.1; }
+.line + .line { margin-top: 6px; }
+
+.inputRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--gbc-light);
+}
+.prompt { font-size: 11px; line-height: 2.5; color: var(--gbc-red); }
+.dialog:focus-within .prompt { animation: blink 1s step-start infinite; }
+.input {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  resize: none;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  line-height: 2.1;
+  color: #000;
+  caret-color: var(--gbc-red);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0 20px 0 0;
+  /* Flies into the first "TÚ" bubble on send (MessageItem.module.css). */
+  view-transition-name: dexter-query;
+}
+.input::placeholder { color: var(--gbc-mid); font-size: 13px; }
+
+/* The blinking "advance" arrow doubles as the send button. */
+.more {
+  position: absolute;
+  right: 12px;
+  bottom: 4px;
+  padding: 4px;
+  font-size: 11px;
+  color: var(--gbc-red);
+  animation: blink 1s step-start infinite;
+}
+.more:disabled { animation: none; opacity: 0.3; }
+
+.status { margin-top: 8px; font-size: 12px; color: var(--gbc-mid); }
+
+/* Pokémon-style option menu */
+.menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  row-gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--gbc-bg);
+  border: 2px solid var(--gbc-border);
+  transition: background 0.1s, box-shadow 0.1s;
+}
+.option:hover, .option:focus-visible { background: #fff; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.18); outline: none; }
+
+.cursor { grid-row: 1 / span 2; font-size: 11px; color: var(--gbc-red); line-height: 1.6; }
+.optionTitle { font-size: 11px; color: var(--mcp-tool); }
+.optionPrompt { font-size: 12px; line-height: 1.7; color: var(--gbc-dark); }
+
+.hint { font-size: 11px; color: var(--gbc-mid); text-align: center; }
+
+@media (max-width: 640px) {
+  .welcome { gap: 12px; padding: 4px 0; }
+  .dialog { padding: 14px 14px 18px; }
+  .line { font-size: 13px; line-height: 1.9; }
+  /* 16px keeps iOS from zooming into the field on focus. */
+  .input { font-size: 16px; line-height: 1.8; }
+  .input::placeholder { font-size: 12px; }
+  .menu { gap: 6px; }
+  .option { padding: 8px 10px; }
+}

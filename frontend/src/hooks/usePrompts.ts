@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import useStore from '../store/useStore'
+import { useSettings } from '../store/useStore'
 import type { McpPrompt, SlashPrompt } from '../types'
 
 const PROMPT_ARG_DEFAULTS: Record<string, string> = {
@@ -28,7 +28,7 @@ const FALLBACK_PROMPTS: SlashPrompt[] = [
   { group: 'Ejemplos', name: 'Info de Pokémon',   desc: 'Datos técnicos y stats',  template: 'Dame información de Mewtwo' },
   { group: 'Ejemplos', name: 'Análisis de stats', desc: 'Potencial de combate',     template: 'Analiza las estadísticas de Shuckle' },
   { group: 'Ejemplos', name: 'Ventaja de tipo',   desc: 'Fortalezas elementales',   template: 'Contra qué tipos es fuerte el tipo Agua?' },
-  { group: 'Ejemplos', name: 'Comparativa 1v1',   desc: 'Analizar dos Pokémon',     template: '¿Quién tiene mejor ataque: Arcanine o Gyarados? Analiza a ambos.' },
+  { group: 'Ejemplos', name: 'Comparativa',       desc: 'Stats superpuestos',       template: 'Compara a Arcanine, Gyarados y Dragonite' },
 ]
 
 function promptGroupLabel(name: string): string {
@@ -49,8 +49,8 @@ function buildPromptTemplate(
 }
 
 export function usePrompts() {
-  const apiKey   = useStore((s) => s.apiKey)
-  const setPrompts = useStore((s) => s.setPrompts)
+  const apiKey   = useSettings((s) => s.apiKey)
+  const setPrompts = useSettings((s) => s.setPrompts)
 
   useEffect(() => {
     async function load() {

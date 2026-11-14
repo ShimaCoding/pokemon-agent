@@ -1,72 +1,79 @@
-// ── Pokémon Data ────────────────────────────────────────────────
+// ── SSE events (see backend/main.py::_sse_generator) ─────────────
 
-export interface PokemonStat {
-  hp: number
-  atk: number
-  def: number
-  spatk: number
-  spdef: number
-  spd: number
+export interface StartEvent {
+  type: 'start'
+  provider: string
+  conversation_id: string
 }
 
-export interface Weakness {
-  type: string
-  multiplier: number
+export interface AgentInitEvent {
+  type: 'agent_init'
+  mcp_tools_count: number
+  tool_names: string[]
+  skill_loaded: string | null
+  system_prompt_preview: string | null
+  history_messages: number
+  // 1-based turn of the conversation (#18); missing in traces saved before it.
+  turn?: number
+  timestamp_ms: number
 }
-
-export interface EvoStep {
-  name: string
-  sprite: string
-}
-
-export interface MoveEntry {
-  name: string
-  type?: string
-}
-
-export interface PokemonData {
-  name: string
-  number: number
-  types: string[]
-  height: string
-  weight: string
-  sprite: string
-  stats: PokemonStat
-  moves: MoveEntry[]
-  dex_entry: string
-  evolution_chain: EvoStep[]
-  weaknesses: Weakness[]
-}
-
-// ── SSE Event Union ─────────────────────────────────────────────
 
 export interface LlmCallEvent {
   type: 'llm_call'
   call_index: number
+  model: string
   timestamp_ms: number
-  messages: Array<{ role: string; content: string | unknown }>
+  messages: Array<{ role: string; content: string }>
+  /** routing: opens the turn (picks a tool or answers directly); final: after tool results. */
+  call_role?: 'routing' | 'final'
+  reasoning_effort?: string
 }
 
 export interface ModelAttemptEvent {
   type: 'model_attempt'
   model: string
-  status: 'success' | 'fail'
+  status: 'success' | 'failed'
   timestamp_ms: number
   error?: string
 }
 
 export interface ToolCallEvent {
   type: 'tool_call'
+  index: number
+  tool_id: string
   tool: string
   args: Record<string, unknown>
-  index: number
   timestamp_ms: number
 }
 
 export interface ToolResultEvent {
   type: 'tool_result'
-  result: string
   index: number
+  tool_id: string
+  tool: string
+  result: string
+  timestamp_ms: number
+  /** Served from the agent's tool cache, without calling the MCP server. */
+  cached?: boolean
+  duration_ms?: number | null
+}
+
+/** MCP `CallToolResult` wire shape, as handed to widgets. */
+export interface CallToolResult {
+  content: Array<{ type: 'text'; text: string }>
+  structuredContent?: Record<string, unknown>
+  isError?: boolean
+}
+
+export interface UiResourceEvent {
+  type: 'ui_resource'
+  index: number
+  tool_id: string
+  tool: string
+  resource_uri: string
+  tool_input: Record<string, unknown>
+  tool_result: CallToolResult
+  timestamp_ms: number
 }
 
 export interface TextEvent {
@@ -82,6 +89,12 @@ export interface DoneEvent {
   input_tokens?: number
   output_tokens?: number
   total_tokens?: number
+  cached_tokens?: number
+  llm_calls?: number
+  ttft_ms?: number | null
+  /** LLM Observability ids of the agent span; only when Datadog is on. Used by 👍/👎. */
+  trace_id?: string | null
+  span_id?: string | null
 }
 
 export interface ErrorEvent {
@@ -89,29 +102,90 @@ export interface ErrorEvent {
   message?: string
 }
 
-export interface SystemLogEvent {
-  type: 'system_log'
-  message: string
-  level: 'info' | 'warn' | 'success'
-}
-
-export type TraceEvent =
+export type SseEvent =
+  | StartEvent
+  | AgentInitEvent
   | LlmCallEvent
   | ModelAttemptEvent
   | ToolCallEvent
   | ToolResultEvent
+  | UiResourceEvent
   | TextEvent
   | DoneEvent
   | ErrorEvent
-  | SystemLogEvent
 
-// ── Providers & Prompts ─────────────────────────────────────────
+/** Events kept for the "ver cómo lo pensó" panel. */
+export type TraceEvent = AgentInitEvent | LlmCallEvent | ModelAttemptEvent | ToolCallEvent | ToolResultEvent
 
-export interface Provider {
-  name: string
-  label: string
-  available: boolean
+// ── Chat ─────────────────────────────────────────────────────────
+
+/** An assistant reply is an ordered list of text and widget parts, as they streamed in. */
+export type MessagePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'widget'; event: UiResourceEvent }
+
+export interface UserMessage {
+  id: string
+  role: 'user'
+  text: string
 }
+
+export interface AssistantMessage {
+  id: string
+  role: 'assistant'
+  parts: MessagePart[]
+  traces: TraceEvent[]
+  status: 'streaming' | 'done' | 'error'
+  done?: DoneEvent
+  error?: string
+  /** The user's 👍/👎, persisted with the message. */
+  feedback?: FeedbackValue
+}
+
+export type FeedbackValue = 'up' | 'down'
+
+export type ChatMessage = UserMessage | AssistantMessage
+
+// ── MCP Apps ─────────────────────────────────────────────────────
+
+export interface UiResourceCsp {
+  connectDomains?: string[]
+  resourceDomains?: string[]
+  frameDomains?: string[]
+  baseUriDomains?: string[]
+}
+
+/** Response of GET /api/ui-resource. */
+export interface UiResource {
+  uri: string
+  mimeType: string
+  html: string
+  csp: UiResourceCsp
+  permissions: Record<string, unknown>
+  prefersBorder?: boolean | null
+}
+
+// ── Wiki content (lessons shown in the trace panel) ──────────────
+
+export interface WikiLesson {
+  id: string
+  title: string
+  level: string
+  tags: string[]
+  related_events: string[]
+  related_nodes: string[]
+  body_md: string
+}
+
+export interface EventCatalogEntry {
+  description_md: string
+  related_lesson_id: string
+  related_node_id: string
+}
+
+export type EventsCatalog = Record<string, EventCatalogEntry>
+
+// ── MCP capabilities ─────────────────────────────────────────────
 
 export interface PromptArg {
   name: string
@@ -137,6 +211,7 @@ export interface McpTool {
   name: string
   description: string
   input_schema?: Record<string, unknown>
+  ui_resource_uri?: string | null
 }
 
 export interface McpResource {
@@ -145,7 +220,3 @@ export interface McpResource {
   description: string
   mime_type: string
 }
-
-// ── UI ──────────────────────────────────────────────────────────
-
-export type TabKey = 'info' | 'moves' | 'evos' | 'dexter' | 'consola'

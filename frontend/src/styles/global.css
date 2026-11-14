@@ -4,9 +4,10 @@
   src: url('/fonts/PKMN RBYGSC.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
-/* ── CSS Variables ─────────────────────────────────────────────── */
+/* ── CSS Variables (Game Boy Color greyscale) ─────────────────── */
 :root {
   --gbc-bg:        #d4d4d4;
   --gbc-screen:    #a0a0a0;
@@ -16,48 +17,46 @@
   --gbc-cream:     #e8e8e8;
   --gbc-gold:      #555555;
   --gbc-border:    #3a3a3a;
-  --gbc-red:       #4a4a4a;
+  --gbc-red:       #c03028;
 
   --mcp-tool:      #3b6ea5;
   --mcp-resource:  #5a9e5a;
   --mcp-prompt:    #c0547a;
 
   --font-pixel: 'PokemonFont', monospace;
+  /* Pixel font is for labels; long text and data read better in these. */
+  --font-read:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:  ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --chat-width: 920px;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html {
-  overflow-x: hidden;
-  max-width: 100%;
-}
+html { overflow-x: hidden; max-width: 100%; }
 
 body {
   font-family: var(--font-pixel);
   background: #2a2a2a;
   height: 100dvh;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
   color: var(--gbc-dark);
 }
 
-#root {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
+#root { height: 100dvh; display: flex; flex-direction: column; }
 
-/* ── Markdown rendered content (global — ReactMarkdown generates dynamic HTML) */
-.md-content { font-size: 13px; line-height: 2; color: var(--gbc-dark); }
+button { font-family: inherit; color: inherit; cursor: pointer; background: none; border: none; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--gbc-gold); outline-offset: 2px; }
+
+/* ── Markdown rendered content (ReactMarkdown generates dynamic HTML) */
+.md-content { font-size: 13px; line-height: 2; color: var(--gbc-dark); overflow-wrap: anywhere; }
 .md-content p { margin-bottom: 10px; }
-.md-content h1, .md-content h2, .md-content h3 {
+.md-content p:last-child { margin-bottom: 0; }
+.md-content h1, .md-content h2, .md-content h3, .md-content h4 {
   font-family: var(--font-pixel);
+  font-weight: normal;
   color: var(--gbc-dark);
   border-bottom: 2px solid var(--gbc-border);
   padding-bottom: 4px;
@@ -65,20 +64,14 @@ body {
 }
 .md-content h1 { font-size: 18px; }
 .md-content h2 { font-size: 16px; }
-.md-content h3 { font-size: 14px; }
-.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 3px; }
-.md-content em    { font-style: normal; color: var(--gbc-mid); }
-.md-content ul, .md-content ol {
-  margin: 6px 0 10px 20px;
-  line-height: 2.2;
-}
+.md-content h3, .md-content h4 { font-size: 14px; }
+.md-content strong { color: var(--gbc-dark); background: rgba(0,0,0,0.07); padding: 0 3px; font-weight: normal; }
+.md-content em { font-style: normal; color: var(--gbc-mid); }
+.md-content ul, .md-content ol { margin: 6px 0 10px 20px; line-height: 2.2; }
 .md-content li { margin-bottom: 2px; }
 .md-content li::marker { color: var(--gbc-mid); }
-.md-content hr {
-  border: none;
-  border-top: 2px dashed var(--gbc-border);
-  margin: 14px 0;
-}
+.md-content hr { border: none; border-top: 2px dashed var(--gbc-border); margin: 14px 0; }
+.md-content a { color: var(--mcp-tool); }
 .md-content code {
   font-family: monospace;
   font-size: 13px;
@@ -94,27 +87,18 @@ body {
   margin: 10px 0;
 }
 .md-content pre code { border: none; padding: 0; background: none; }
-.md-content table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
-  font-size: 13px;
-}
+.md-content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; display: block; overflow-x: auto; }
 .md-content th {
   background: var(--gbc-dark);
   color: var(--gbc-cream);
   padding: 6px 12px;
   text-align: left;
-  font-family: var(--font-pixel);
+  font-weight: normal;
   font-size: 12px;
   border: 1px solid var(--gbc-border);
 }
-.md-content td {
-  border: 1px solid var(--gbc-border);
-  padding: 6px 12px;
-  background: var(--gbc-bg);
-}
-.md-content tr:nth-child(odd) td  { background: var(--gbc-cream); }
+.md-content td { border: 1px solid var(--gbc-border); padding: 6px 12px; background: var(--gbc-bg); }
+.md-content tr:nth-child(odd) td { background: var(--gbc-cream); }
 .md-content tr:nth-child(even) td { background: var(--gbc-bg); }
 .md-content blockquote {
   border-left: 3px solid var(--gbc-border);
@@ -127,25 +111,50 @@ body {
 /* ── Animations ─────────────────────────────────────────────────── */
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes blink { 50% { opacity: 0; } }
 
 /* ── Scrollbars ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--gbc-bg); }
 ::-webkit-scrollbar-thumb { background: var(--gbc-border); }
 
-/* ── Responsive (mobile) ────────────────────────────────────────── */
-@media (max-width: 640px) {
-  body {
-    padding: 0;
-    justify-content: stretch;
-    align-items: stretch;
-  }
+/* ── Welcome → chat (View Transitions, Welcome.tsx) ─────────────── */
+/* The typed question flies from the dialog into the first "TÚ" bubble, the
+   welcome screen drifts up and fades, and the bottom bar slides in. */
+::view-transition-group(*) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Groups paint in capture order, so lift the question above its new bubble. */
+::view-transition-group(dexter-query) { z-index: 1; }
+/* Same text on both ends: never stretch it, keep it pinned to the top-left. */
+::view-transition-old(dexter-query),
+::view-transition-new(dexter-query) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(dexter-welcome) {
+  animation: welcome-out 200ms ease-out both;
+}
+::view-transition-new(dexter-bubble) {
+  animation: bubble-in 300ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+::view-transition-new(dexter-reply) {
+  animation: reply-in 320ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+::view-transition-new(dexter-bar) {
+  animation: bar-in 380ms 60ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes welcome-out { to { opacity: 0; transform: translateY(-16px) scale(0.98); } }
+@keyframes bubble-in { from { opacity: 0; transform: scale(0.94); } }
+@keyframes reply-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes bar-in { from { transform: translateY(100%); } }
 
-  #root {
-    max-width: 100%;
-  }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }

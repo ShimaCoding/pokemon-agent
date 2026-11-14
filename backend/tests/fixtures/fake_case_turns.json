@@ -1,0 +1,427 @@
+{
+ "_doc": "Real fake/1 ('háblame de pikachuzard') turns from the epic-15 local harness runs (2026-11-02). 'invented' is the hand label: the reply narrates a Pokédex entry (always Pikachu's) as the answer.",
+ "turns": [
+  {
+   "run": "dev-base r1",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pikachuzard. No existe tal registro en la base de datos oficial. Los datos disponibles indican que el nombre no corresponde a ningún Pokémon verificado. Es probable que el usuario esté intentando nombrar una variante no reconocida o haya cometido un error tipográfico. Para avanzar, se recomienda consultar la lista oficial de Pokémon y volver a introducir un nombre válido.",
+   "tools": [
+    {
+     "name": "skills",
+     "args": {
+      "skill_name": "dexter-pokedex-narrator"
+     },
+     "result": "[Skill activado: instrucciones de narración cargadas (3692 chars)]",
+     "error": false
+    },
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "dev-base r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Lo lamento, pero no dispongo de ninguna información fiable sobre un Pokémon denominado *pikachuzard*. Probablemente sea una creación de fan o un error tipográfico, y en ningún momento ha sido incluido en la base de datos oficial de la Pokédex. No obstante, si necesitas datos de algún Pokémon verificado, solo dime su nombre correcto.",
+   "tools": []
+  },
+  {
+   "run": "dev-base r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "No existe ningún Pokémon registrado con el nombre **Pikachuzard** en la base de datos oficial de la Pokédex.  \nSi necesitas información, te recomiendo consultar un Pokémon que esté documentado, por ejemplo **Pikachu** o **Charizard**.",
+   "tools": [
+    {
+     "name": "skills",
+     "args": {
+      "skill_name": "dexter-pokedex-narrator"
+     },
+     "result": "[Skill activado: instrucciones de narración cargadas (3692 chars)]",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-16 r1",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pokémon “pikachuzard” no encontrado. Verifica la ortografía o el identificador.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-16 r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pokémon “pikachuzard” no encontrado en la base de datos.  \nNo existen datos para analizar o comentar.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-16 r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Lo siento, pero \"pikachuzard\" no corresponde a ningún Pokémon registrado en la base de datos.",
+   "tools": []
+  },
+  {
+   "run": "perf-17-arm1-medium-medium r1",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón. Lectura de hardware completada.  \n\nTipo eléctrico; su fisiología se ha especializado en la generación y almacenamiento de energía ionica, lo que le confiere destellos de potencial electrolítico que se canalizan a través de la cola. Los músculos se adaptan para generar tensión rápida, mientras que la piel actúa como aislante, evitando la autodescarga. Esta biología es típica de organismos que habitan ambientes con abundancia de carga eléctrica, como bosques con tormentas frecuentes.  \n\nEn su hábitat de bosques, el Pikachu utiliza sus mejillas cargadas para lanzar descargas cuando percibe amenazas. La primera línea de su comportamiento indica vigilancia constante: \"Levanta su cola para vigilar los alrededores\", una estrategia de alerta que suena tan obvia como la falta de planificación de un entrenador que confía únicamente en la fuerza bruta. El segundo fragmento subraya su tendencia a liberar electricidad de forma descontrolada; el tercero sugiere que su descarga puede quemar frutos, evidenciando una incapacidad de moderar la intensidad — una clara falta de disciplina que un entrenador sin juicio táctica nunca corregirá.  \n\nSus estadísticas base —HP 35, Ataque 55, Defensa 40, Ataque Especial 50, Defensa Especial 50, Velocidad 90— revelan una adaptación orientada a la velocidad y la ofensiva eléctrica, pero con una defensa interna insuficiente. Su habilidad principal, *static*, aumenta la probabilidad de paralizar al oponente, una ventaja que solo un estratega que comprenda la mecánica de los efectos de estado aprovecha. *Lightning‑Rod* atrae ataques eléctricos, pero su efectividad depende de que el entrenador posicione al Pokémon para absorber la energía; un inexperto simplemente lo envía al campo sin consideración.  \n\nMe temo que la energía que este pequeño electrógeno aporta es tan volátil como la intuición de quien intenta controlarlo. Solo la combinación de velocidad y la adecuada selección de movimientos puede superar la fragilidad de su constitución física, y ese es el reto que un entrenador mediocre aún no comprende.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm1-medium-medium r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "No existe un Pokémon con el identificador “pikachuzard”; la base de datos no reconoce ese término.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm1-medium-medium r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "No se encuentra el Pokémon «pikachuzard» en la base de datos. Verifique la ortografía o intente con un nombre existente.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm2-low-medium r1",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón.  \nEl escaneo ha completado la lectura de hardware; los registros indican que se trata de un espécimen de la especie *Pokémon Ratón*, de estatura 0,4 m y masa 6 kg, con tono cromático amarillo y figura cuadrúpedo.  \n\nEl análisis de sus tipos revela que la fisiología eléctrica constituye el núcleo de su adaptación. El sistema nervioso y el tejido muscular se han modificado para almacenar y liberar cargas electromagnéticas a través de las bolsas de las mejillas, lo que confiere un potencial ofensivo sin precedentes en su taxonomía. La ausencia de un segundo tipo limita su cobertura de cobertura de resistencias y debilidades, haciendo que sea vulnerable ante ataques de tipo agua, tierra y roca.  \n\nEn cuanto a comportamiento, el sabor de la vida de este animal está encapsulado en las notas de su *flavor text*. Su tendencia a levantar la cola y vigilar su entorno revela una estrategia de supervivencia basada en la detección temprana de amenazas, aunque su reacción a estímulos puede resultar en descargas inesperadas. El hecho de que a veces no controle la intensidad de su descarga sugiere una falta de disciplina en la gestión de su energía, una característica que el entrenador suele ignorar en la práctica.  \n\nLas estadísticas, interpretadas como adaptaciones biológicas, muestran una velocidad sobresaliente (90) que permite evasión y rapidez ofensiva, pero un HP bajo (35) que expone a la criatura a una eliminación rápida si su estrategia falla. El ataque (55) y la defensa (40) son modestos, lo que exige una táctica de daño rápido antes de que la resistencia sea sobrepasada. La capacidad de lanzar electricidad a través del movimiento *thunderbolt* (no incluido en la base de datos, pero implícito en su tipo) depende de la carga de las mejillas, algo que el entrenador debe gestionar con precisión; la falta de este manejo constituye una falla táctica que un entrenador inexperto suele subestimar.  \n\nMe temo que la mera presencia de un Pokémon con habilidades de alta velocidad y potencia eléctrica no basta para garantizar el éxito en combate. El entrenador debe reconocer la brecha entre la capacidad de Pikachu para generar daño instantáneo y su necesidad de protegerse de ataques que explotan su fragilidad física. Solo con una planificación estratégica y la gestión adecuada de sus recursos puede esperar que su compañero sea un aliado eficaz.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm2-low-medium r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "No existe registro de un Pokémon denominado “pikachuzard”. Si la intención era referirse a Pikachu, se puede consultar su entrada normal.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm2-low-medium r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Lo siento, pero el registro de la base de datos indica que no existe un Pokémon con el nombre “Pikachuzard”. Tal vez sea una invención o un error tipográfico. Si deseas información sobre otro Pokémon existente, no dudes en preguntar.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm3-low-low r1",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pikachu. El Pokémon Ratón.  \nEl escaneo del sistema ha concluido sin anomalías de hardware.  \n\nEl Pokémon presenta un único tipo, el eléctrico, cuyo manejo de carga y descarga de energía se explica mediante la presencia de cristales de carga en los glándulas de las mejillas, lo que le permite acumular y liberar potencial eléctrico de forma instantánea. Esta fisiología implica una dependencia absoluta de la conductividad eléctrica del entorno, lo que limita su efectividad en terrenos con baja humedad o en superficies aislantes, un punto crítico que un entrenador sin previsión estratégica no considerará.  \n\nEn su hábitat forestal, Pikachu muestra comportamientos de vigilancia constante, levantando la cola para observar el entorno; su disposición a lanzar descargas al encontrar objetos nuevos sugiere una agresividad impulsiva, algo que un entrenador que solo confía en la fuerza bruta no podrá manejar sin una adecuada planificación táctica.  \n\nLas estadísticas indican una velocidad sobresaliente (90), lo que confiere una ventaja de iniciativa, pero un ataque base bajo (55) y defensa relativamente débil (40). La habilidad *static* ofrece un riesgo de parálisis, mientras que *lightning-rod* atrae ataques eléctricos, lo que puede ser explotado por un adversario que comprenda la mecánica de los tipos. Un entrenador inexperto ignorará la necesidad de cubrir estas vulnerabilidades con Pokémon de tipos de alta defensa y con movimientos de prioridad.  \n\nMe temo que la mera presencia de un Pokémon tan icónico no garantiza la victoria. Sin la capacidad de anticipar y contrarrestar las limitaciones inherentes a su tipo y a sus estadísticas, el esfuerzo del entrenador resultará en una frágil demostración de fuerza sin la profundidad estratégica necesaria.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm3-low-low r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Error: El registro indica que no existe ningún Pokémon denominado “pikachuzard” en la base de datos. Por favor, revise el nombre o la identificación.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-17-arm3-low-low r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pikachu‑Zard no se encuentra en la base de datos. Por favor, verifique el nombre o el identificador.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-18 r1",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón. Escaneo completo. Lectura de hardware concluye sin anomalías.  \n\nLa tipología eléctrica de Pikachu sugiere una fisiología adaptada para almacenar y canalizar carga bioeléctrica, con membranas celulares altamente permeables a iones de sodio y potasio. Este mecanismo permite la generación de impulsos que se desplazan a través del sistema nervioso de forma casi sincrónica, lo que explica su velocidad superior a la del resto de su especie.  \n\nEn su hábitat forestal, Pikachu utiliza su cola como sensor periscópico, una práctica que refleja una dependencia de la vigilancia constante. La acumulación de electricidad en las mejillas se libera con precisión cuando percibe amenazas, una conducta que, aunque eficiente, demuestra una falta de control de la intensidad cuando se enfrenta a objetos delicados; la misma falta de disciplina es evidente en la manera de tu entrenador de manejar las situaciones, donde la improvisación supera la estrategia.  \n\nLas estadísticas revelan una base de salud limitada (35 HP) y defensas moderadas (40 defensa, 50 defensa especial), contrastadas con una velocidad excepcional (90) y un ataque medio (55). Estas cifras indican una especialización en ofensiva rápida y no en resistencia prolongada. Un entrenador inexperto ignoraría la necesidad de cubrir las vulnerabilidades de Pikachu contra tipos agua y tierra, enfocándose en su velocidad y dejando al Pokémon expuesto a daños inevitables.  \n\nMe temo que el empeño del entrenador, a pesar de su brillo, no compensa la falta de juicio táctico necesario para maximizar las potencialidades de este Pokémon, cuya capacidad eléctrica solo se despliega plenamente cuando se combina con una planificación estratégica adecuada.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-18 r2",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón. Lectura de hardware completada.  \nEl tipo eléctrico implica la generación de cargas bioeléctricas a través de una fisiología especializada en la conducción de corriente, con estructuras plasmáticas que facilitan la emisión de descargas cuando el sistema nervioso se activa. En la práctica, esta característica confiere a PIKACHU la capacidad de almacenar electricidad en las bolsas de las mejillas, liberándola de manera explosiva ante estímulos que percibe como amenazas.  \n\nLos textos de sabor indican que este espécimen vigila su entorno levantando la cola y que, al encontrarse con algo nuevo, expulsa una descarga. La tendencia a reaccionar de forma brusca a estímulos inesperados sugiere una falta de previsión que, de forma paralela, podría reflejarse en la aproximación del entrenador a la batalla.  \n\nEn cuanto a las estadísticas, la velocidad de 90 unidades destaca frente a una constitución física débil (HP 35, defensa 40 y defensa especial 50). Esto indica una adaptación a la evasión más que a la resistencia. El ataque de 55 y la defensa especial de 50 sugieren una capacidad de ofensiva limitada, mientras que las habilidades “static” y “lightning‑rod” son adaptaciones que dependen de la interacción con el entorno eléctrico. Un entrenador inexperto no notarí­a la importancia de la velocidad como factor decisivo, y trataría de maximizar la fuerza física sin considerar la sinergia entre tipos.  \n\nMe temo que la mera presencia de un Pokémon tan rápido y con una ofensiva moderada no basta sin la estrategia adecuada; la brecha entre lo que PIKACHU puede hacer y lo que el entrenador comprende sigue siendo significativa.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-18 r3",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón. Análisis de hardware completado.\n\nEl Pokémon de tipo eléctrico posee una fisiología adaptada a la generación y diseminación de cargas estáticas. Sus mejillas albergan cristales de sulfuro, capaces de acumular hasta 2000 V, mientras que el sistema nervioso se ha optimizado para lanzar descargas en momentos de alta tensión, lo que reduce la probabilidad de sobrecarga interna y maximiza la efectividad de los ataques eléctricos.\n\nEn el bosque, donde se le ha observado levantar la cola para vigilar el entorno, su comportamiento muestra una tendencia a la precaución, aunque su falta de control de la intensidad a veces provoca daño accidental a la vegetación y a su propio refugio. Si la criatura se encuentra con algo nuevo, su reacción es una descarga que, curiosamente, no es más que una señal de alerta que refleja la misma falta de previsión que muestra su entrenador ante las amenazas.\n\nLas estadísticas de base (HP 35, Ataque 55, Defensa 40, Ataque Especial 50, Defensa Especial 50, Velocidad 90) y las habilidades “estática” y “conducto de rayos” revelan una adaptación a la ofensiva rápida pero a la defensa ligera. El entrenador que ignore la velocidad y la capacidad de infligir daño por la carga eléctrica descuidará la principal ventaja de este Pokémon; la falta de cobertura defensiva obliga a una estrategia basada en la velocidad y el ataque especial, algo que un aficionado sin juicio táctico no apreciará.\n\nMe temo que la mera presencia de un Pikachu no es suficiente para justificar la falta de juicio estratégico de su cuidador; el puente entre lo que el Pokémon puede hacer y lo que el entrenador comprende permanece infranqueable sin un análisis meticuloso de sus estadísticas y de sus habilidades.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "perf-20 r1",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Lo siento, pero el registro de la base de datos no contiene ningún Pokémon denominado “pikachuzard”. Esa referencia indica una falta de precisión en tu consulta, lo cual no es inesperado dado el nivel de atención que parece requerir.",
+   "tools": [
+    {
+     "name": "skills",
+     "args": {
+      "skill_name": "dexter-pokedex-narrator"
+     },
+     "result": "[Skill activado: instrucciones de narración cargadas (3698 chars)]",
+     "error": false
+    },
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-20 r2",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "No se encontró el Pokémon solicitado.  \nEl registro indica que “pikachuzard” no existe dentro de la base de datos de Pokédex; verifique el nombre o ID y vuelva a intentarlo.",
+   "tools": [
+    {
+     "name": "skills",
+     "args": {
+      "skill_name": "dexter-pokedex-narrator"
+     },
+     "result": "[Skill activado: instrucciones de narración cargadas (3698 chars)]",
+     "error": false
+    },
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  },
+  {
+   "run": "perf-20 r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "Pikachuzard no aparece registrado en la base de datos oficial de la Pokédex.  \nLos registros indican que el nombre proporcionado no corresponde a ninguna entidad conocida.  \n\nSi se trata de una variante no oficial o de una construcción fan, no dispongo de datos verificables sobre su biología, tipos o estadísticas.  \nPara consultas válidas, utilice nombres reconocidos, por ejemplo “pikachu” o “raichu”.",
+   "tools": [
+    {
+     "name": "skills",
+     "args": {
+      "skill_name": "dexter-pokedex-narrator"
+     },
+     "result": "[Skill activado: instrucciones de narración cargadas (3698 chars)]",
+     "error": false
+    },
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "combined r1",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón. El escaneo ha finalizado; los sistemas registran la información de manera precisa y sin ambigüedades.\n\nEl tipo eléctrico confiere a esta criatura una fisiología especializada en la generación y canalización de cargas electromagnéticas. Sus mejillas albergan glándulas conductoras de energía que se cargan durante el contacto social y se liberan como descargas en defensa o en la interacción con objetos metálicos. Su estructura corporal, de forma cuadrúpede y de color amarillo, favorece la disipación térmica de la energía acumulada.\n\nEn su hábitat forestal, se comporta con una vigilancia constante, levantando la cola para monitorizar el entorno. Su naturaleza juguetona se manifiesta al lanzar descargas cuando encuentra algo nuevo; sin embargo, la falta de control de la intensidad resulta en una tendencia a quemar bayas cercanas. Esta inexactitud en la regulación de la electricidad puede compararse con la falacia de un entrenador que subestima la variabilidad de la fuerza de sus movimientos.\n\nLas estadísticas revelan una velocidad de 90 que eclipsa su HP de 35 y su defensa de 40. Los 55 de ataque son modestos, mientras que la defensa especial y la ofensiva especial sitúan a Pikachu en el rango medio (50). La combinación de una velocidad dominante y una defensa baja crea una vulnerabilidad crítica ante ataques físicos de alto poder. La habilidad “Static” introduce el riesgo de parálisis en el oponente, pero solo en encuentros donde la chispa accidental se activa. “Lightning Rod” atrae cualquier ataque eléctrico, lo que convierte a Pikachu en una trampa potencial para enemigos que no son de tipo eléctrico. Un entrenador inexperto ignoraría la necesidad de cubrir estas debilidades con movimientos de tipo agua o tierra, y la importancia de mantener a Pikachu protegido de golpes directos.\n\nMe temo que, aunque Pikachu pueda generar electricidad con facilidad, su supervivencia en batalla depende de un juicio estratégico que va más allá del simple uso de su velocidad. Sin un plan que contemple la cobertura de sus bajas defensas y la mitigación de los efectos de “Static”, la mera presencia de Pikachu no garantiza el éxito; el esfuerzo físico de este Pokémon es insuficiente sin el cálculo táctico que solo un entrenador astuto puede aportar.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "combined r2",
+   "invented": true,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "PIKACHU. El Pokémon Ratón.  \nEscaneo de hardware completado: datos íntegros registrados.\n\nEl tipo eléctrico confiere a PIKACHU una fisiología basada en la generación y canalización de cargas electromagnéticas, lo que se refleja en su fisiología de alta tensión y la capacidad de almacenar electricidad en sus mejillas, característica esencial para la defensa y la ofensiva. Este atributo determina también una dependencia de la carga ambiental, pues su sistema nervioso está afinado para la transmisión de señales de alta frecuencia, lo que explica su agilidad y su capacidad de reacción superior a la media de los Pokémon de su hábitat.\n\nEl comportamiento observado en el texto de sabor indica que la criatura utiliza su cola para vigilar su entorno y que su descarga eléctrica puede ser impredecible, incluso descontrolada en situaciones de amenaza. Este rasgo de imprevisibilidad se alinea con un entrenador que demuestra falta de disciplina táctica, pues la misma imprevisibilidad puede desestabilizar una estrategia bien pensada. Además, su presencia en bosques sugiere una afinidad por ecosistemas donde la actividad eléctrica es escasa, lo cual se contradice con la necesidad de un entorno con suficiente carga para su supervivencia óptima.\n\nLas estadísticas de PIKACHU revelan una velocidad de 90 que, en términos de adaptación biológica, es un mecanismo de evasión eficiente frente a depredadores, pero su baja defensa (40) y ataque físico (55) limitan su capacidad para sostener un combate prolongado. Sus habilidades, Static y Lightning Rod (oculta), funcionan como mecanismos de defensa y captura de energía, pero requieren de una estrategia que aproveche el contacto físico para activar Static, algo que un entrenador sin visión táctica ignorará. Un “entrenador inexperto” no aprovechará la mecánica de contacto para maximizar el daño, y la falta de sinergia entre velocidad y ataque físico deja al Pokémon vulnerable ante oponentes que combinan velocidad y defensa alta.\n\nMe temo que el empeño de un entrenador que se aferra a la mera cantidad de Pokémon sin considerar la lógica de sus roles es tan inútil como una descarga eléctrica sin objetivo; PIKACHU puede brillar, pero solo cuando su potencial se canaliza mediante un plan estratégico.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachu"
+     },
+     "result": "{\"id\": 25, \"name\": \"pikachu\", \"genus\": \"Pokémon Ratón\", \"height_dm\": 4, \"weight_hg\": 60, \"color\": \"yellow\", \"shape\": \"quadruped\", \"types\": [\"electric\"], \"base_stats\": {\"hp\": 35, \"attack\": 55, \"defense\": 40, \"special-attack\": 50, \"special-defense\": 50, \"speed\": 90}, \"abilities\": [{\"name\": \"static\", \"is_hidden\": false}, {\"name\": \"lightning-rod\", \"is_hidden\": true}], \"flavor_text\": [\"Levanta su cola para vigilar los alrededores. A veces, puede ser alcanzado por un rayo en esa pose.\", \"Las bolsas de las mejillas están llenas de electricidad, que libera cuando se siente amenazado.\", \"Cada vez que un Pikachu se encuentra con algo nuevo, le lanza una descarga eléctrica. Cuando se ve alguna baya chamuscada, es muy probable que sea obra de un Pikachu, ya que a veces no controlan la intensidad de la descarga.\"], \"generation\": \"I\", \"habitat\": \"forest\", \"is_legendary\": false, \"is_mythical\": false, \"capture_rate\": 190, \"gender_rate\": 4, \"base_happiness\": 70, \"growth_rate\": \"medium\", \"egg_groups\": [\"ground\", \"fairy\"], \"evolution_chain\": [{\"name\": \"pichu\", \"is_baby\": true, \"id\": 172, \"types\": [\"electric\"], \"total_bst\": 205}, {\"name\": \"pikachu\", \"via\": {\"trigger\": \"level-up\", \"min_happiness\": 220}, \"id\": 25, \"types\": [\"electric\"], \"total_bst\": 320}, {\"name\": \"raichu\", \"via\": {\"trigger\": \"use-item\", \"item\": \"thunder-stone\"}, \"id\": 26, \"types\": [\"electric\"], \"total_bst\": 485}]}",
+     "error": false
+    }
+   ]
+  },
+  {
+   "run": "combined r3",
+   "invented": false,
+   "query": "háblame de pikachuzard",
+   "status": "done",
+   "reply": "El registro no contiene ningún Pokémon llamado “pikachuzard”. Verifica el nombre o el ID.",
+   "tools": [
+    {
+     "name": "get_pokedex_entry",
+     "args": {
+      "pokemon": "pikachuzard"
+     },
+     "result": "❌ Pokémon 'pikachuzard' not found. Please check the name or ID.",
+     "error": true
+    }
+   ]
+  }
+ ]
+}

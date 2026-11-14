@@ -4,7 +4,7 @@
     {
       "name": "backend",
       "runtimeExecutable": "uv",
-      "runtimeArgs": ["run", "--no-project", "--python", ".venv/bin/python", "uvicorn", "backend.main:app", "--reload", "--port", "8000"],
+      "runtimeArgs": ["run", "uvicorn", "backend.main:app", "--reload", "--port", "8000"],
       "port": 8000
     },
     {

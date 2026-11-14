@@ -1,7 +1,20 @@
+"""
+LLM configuration: Groq only, routed with strands' native ModelRouter.
+
+Anonymous requests get the cheapest model; requests authenticated with API_KEY
+get the larger model first and fall back to the small one. Failover is handled
+by ``strands.models.ModelRouter`` with ``routing.CooldownFallbackStrategy``
+(ordered failover that also skips a model for a while after it is rate limited),
+so nothing in litellm is patched.
+"""
+
 import importlib.metadata as _meta
+import json
+import logging
 import os
 import sys
-from typing import Optional
+from collections.abc import Callable
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -17,183 +30,293 @@ if _litellm_version in ("1.82.7", "1.82.8"):
         "any keys that may have been exposed."
     )
 
-PROVIDERS: dict[str, dict] = {
-    "groq": {
-        # model_ids_public: used when the request is NOT authenticated with API_KEY.
-        # Only the cheapest model is exposed to avoid burning quota for anonymous users.
-        "model_ids_public": [
-            "groq/openai/gpt-oss-20b",
-        ],
-        # model_ids: full list available to authenticated requests.
-        "model_ids": [
-            "groq/openai/gpt-oss-20b",
-            "groq/llama-3.1-8b-instant",
-            "groq/meta-llama/llama-4-scout-17b-16e-instruct",
-        ],
-        "env_var": "GROQ_API_KEY",
-        "label": "Groq",
-        "order": 1,
-    },
-    "gemini": {
-        "model_id": "gemini/gemini-2.5-flash",
-        "env_var": "GEMINI_API_KEY",
-        "label": "Gemini (gemini-2.5-flash)",
-        "order": 2,
-    },
-    "openai": {
-        "model_id": "openai/gpt-4o-mini",
-        "env_var": "OPENAI_API_KEY",
-        "label": "OpenAI (gpt-4o-mini)",
-        "order": 3,
-    },
-    "openrouter": {
-        "model_ids": [
-            "openrouter/stepfun/step-3.5-flash:free",
-            "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
-            "openrouter/z-ai/glm-4.5-air:free",
-            "openrouter/arcee-ai/trinity-mini:free",
-            "openrouter/minimax/minimax-m2.5:free",
-            "openrouter/meta-llama/llama-3.3-70b-instruct:free",
-            "openrouter/openai/gpt-oss-120b:free",
-            "openrouter/openai/gpt-oss-20b:free",
-            "openrouter/qwen/qwen3-next-80b-a3b-instruct:free",
-        ],
-        "env_var": "OPENROUTER_API_KEY",
-        "label": "OpenRouter (free tier)",
-        "order": 4,
-    },
-}
+from strands.models import ModelRouter  # noqa: E402
+from strands.models.routing import RoutingCandidate  # noqa: E402
+from strands.models.litellm import LiteLLMModel  # noqa: E402
+
+from backend import telemetry  # noqa: E402
+from backend.routing import CooldownFallbackStrategy  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+PROVIDER_LABEL = "Groq"
+API_KEY_ENV = "GROQ_API_KEY"
+
+# Preferred model first, then fallbacks in order. Anonymous requests get the 120b
+# too since #42: with the 20b the narration stayed under 76 % grounded (judge).
+MODELS_AUTHENTICATED = ["groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"]
+MODELS_PUBLIC = list(MODELS_AUTHENTICATED)
+# Both gpt-oss models have a 131k-token window on Groq; the harness context
+# manager uses it to decide when to compress the conversation.
+CONTEXT_WINDOW = 131_072
+
+TraceSink = Callable[[dict[str, Any]], None]
+
+# Groq's gpt-oss accepts low | medium | high and defaults to medium. The model
+# reasons before any visible output, so effort is pure latency: the call that
+# opens a turn ("routing") only has to pick a tool, or answer an off-topic
+# question directly, and gets low; the narration after tool results ("final")
+# keeps medium. Both are overridable by env (rollback and the effort A/B).
+REASONING_EFFORTS = ("low", "medium", "high")
+DEFAULT_REASONING_EFFORT = {"routing": "low", "final": "medium"}
 
 
-def get_available_providers() -> list[dict]:
-    """Return providers sorted by order whose API key env var is set."""
-    available = []
-    for name, config in PROVIDERS.items():
-        api_key = os.environ.get(config["env_var"], "").strip()
-        if api_key:
-            available.append({"name": name, **config, "_api_key": api_key})
-    return sorted(available, key=lambda p: p["order"])
+def _effort_from_env(name: str, default: str) -> str:
+    """Read a reasoning effort from env; blank or invalid values fall back to ``default``."""
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
+    if value not in REASONING_EFFORTS:
+        # Groq would reject the request with a 400 that nothing retries.
+        logger.warning("[LLM] %s=%r no es válido (%s); uso %s", name, value, "|".join(REASONING_EFFORTS), default)
+        return default
+    return value
 
 
-def _build_router_model_list(providers: list[dict], authenticated: bool = False) -> tuple[list[dict], list[str]]:
+REASONING_EFFORT_ROUTING = _effort_from_env("REASONING_EFFORT_ROUTING", DEFAULT_REASONING_EFFORT["routing"])
+REASONING_EFFORT_FINAL = _effort_from_env("REASONING_EFFORT_FINAL", DEFAULT_REASONING_EFFORT["final"])
+
+
+def groq_configured() -> bool:
+    return bool(os.environ.get(API_KEY_ENV, "").strip())
+
+
+def model_ids(authenticated: bool) -> list[str]:
+    return list(MODELS_AUTHENTICATED if authenticated else MODELS_PUBLIC)
+
+
+# Per-message cap for the input messages sent to the tracing backends.
+TRACE_MESSAGE_LIMIT = 16_000
+
+
+def _preview_messages(messages: list[dict[str, Any]], limit: int = 800) -> list[dict[str, str]]:
+    """Flatten Strands messages to ``{role, content}`` strings for the trace panel."""
+    preview = []
+    for msg in messages:
+        parts = []
+        for block in msg.get("content", []):
+            if "text" in block:
+                parts.append(block["text"])
+            elif "toolUse" in block:
+                tu = block["toolUse"]
+                parts.append(f"[toolUse {tu.get('name')}({tu.get('input')})]")
+            elif "toolResult" in block:
+                texts = " ".join(c.get("text", "") for c in block["toolResult"].get("content", []))
+                parts.append(f"[toolResult {texts}]")
+        content = "\n".join(parts)
+        if len(content) > limit:
+            content = content[:limit] + "…[truncated]"
+        preview.append({"role": msg.get("role", "?"), "content": content})
+    return preview
+
+
+def _tool_definitions(tool_specs: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Strands tool specs → LLMObs tool definitions (``{name, description, schema}``)."""
+    return [
+        {
+            "name": spec.get("name", ""),
+            "description": spec.get("description", ""),
+            "schema": spec.get("inputSchema", {}).get("json", {}),
+        }
+        for spec in tool_specs or []
+    ]
+
+
+def call_role(messages: list[dict[str, Any]]) -> str:
+    """``"routing"`` when the call opens a turn (last message is the user's text), else ``"final"``.
+
+    A call after tool results is ``"final"`` even if it calls another tool: the
+    higher effort is the safe side. A routing call is also the final answer
+    when no tool is needed (off-topic questions).
     """
-    Expand providers into LiteLLM Router deployment entries.
+    if not messages:
+        return "routing"
+    last = messages[-1]
+    if last.get("role") != "user":
+        return "final"
+    return "final" if any("toolResult" in block for block in last.get("content", [])) else "routing"
 
-    Each provider gets its own model group name (e.g. "groq-models") so that
-    LiteLLM Router's ``fallbacks`` parameter can trigger cross-provider failover.
-    All models within a provider share that provider's group name so the Router
-    can load-balance across them before giving up and moving to the next group.
 
-    Args:
-        authenticated: If True, use the full model list for each provider.
-                       If False, use ``model_ids_public`` when available (e.g. Groq
-                       only exposes its cheapest model to unauthenticated requests).
+class _StreamedOutput:
+    """Collects the text, tool calls and token usage of one streamed model call."""
 
-    Returns:
-        (model_list, group_names) — group_names preserves provider order.
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+        self._calls: list[dict[str, str]] = []
+        self._usage: dict[str, int] = {}
+
+    def add(self, event: dict[str, Any]) -> None:
+        delta = event.get("contentBlockDelta", {}).get("delta", {})
+        if text := delta.get("text"):
+            self._parts.append(text)
+        elif "toolUse" in delta and self._calls:
+            self._calls[-1]["input"] += delta["toolUse"].get("input", "")
+        elif tool_use := event.get("contentBlockStart", {}).get("start", {}).get("toolUse"):
+            self._parts.append(f"\n[toolUse {tool_use.get('name')}]")
+            self._calls.append({"name": tool_use.get("name", ""), "tool_id": tool_use.get("toolUseId", ""), "input": ""})
+        elif usage := event.get("metadata", {}).get("usage"):
+            self._usage = usage
+
+    def text(self) -> str:
+        return "".join(self._parts).strip()
+
+    def tool_calls(self) -> list[dict[str, Any]]:
+        """Tool calls in the LLMObs message shape; arguments arrive as streamed JSON text."""
+        calls = []
+        for call in self._calls:
+            try:
+                arguments = json.loads(call["input"]) if call["input"] else {}
+            except ValueError:
+                arguments = {"raw": call["input"]}
+            calls.append({"name": call["name"], "arguments": arguments, "tool_id": call["tool_id"], "type": "function"})
+        return calls
+
+    def metrics(self) -> dict[str, int]:
+        u = self._usage
+        metrics = {
+            "input_tokens": u.get("inputTokens", 0),
+            "output_tokens": u.get("outputTokens", 0),
+            "total_tokens": u.get("totalTokens", 0),
+        }
+        if "cacheReadInputTokens" in u:
+            metrics["cache_read_input_tokens"] = u["cacheReadInputTokens"]
+        return metrics if u else {}
+
+
+class TracedLiteLLMModel(LiteLLMModel):
+    """LiteLLMModel that reports every model call attempt to a per-request trace sink.
+
+    Emits ``llm_call`` before the request and ``model_attempt`` (success/failed)
+    after it. Under a ModelRouter, a failover shows up as one failed attempt
+    followed by another ``llm_call`` on the next candidate.
+
+    Also sets ``reasoning_effort`` per call from ``call_role(messages)``. It is a
+    pure function of the messages, so retries and fallback candidates of the
+    same call get the same effort.
     """
-    site_url = os.environ.get("OR_SITE_URL", "")
-    app_name = os.environ.get("OR_APP_NAME", "pokemon-agent")
 
-    model_list: list[dict] = []
-    group_names: list[str] = []
-    for p in providers:
-        group_name = f"{p['name']}-models"
-        group_names.append(group_name)
-        if not authenticated and "model_ids_public" in p:
-            model_ids: list[str] = p["model_ids_public"]
-        else:
-            model_ids = p.get("model_ids") or [p["model_id"]]
-        for model_id in model_ids:
-            litellm_params: dict = {
+    def __init__(
+        self,
+        *,
+        trace: TraceSink | None = None,
+        reasoning_effort: dict[str, str] | None = None,
+        **config: Any,
+    ) -> None:
+        super().__init__(**config)
+        self._trace = trace
+        self._effort = reasoning_effort or {"routing": REASONING_EFFORT_ROUTING, "final": REASONING_EFFORT_FINAL}
+
+    def reasoning_effort_for(self, messages: list[dict[str, Any]]) -> str:
+        # An explicit params={"reasoning_effort": ...} wins over the per-role effort.
+        params = self.get_config().get("params") or {}
+        return params.get("reasoning_effort") or self._effort[call_role(messages)]
+
+    def format_request(self, messages, *args, **kwargs):  # type: ignore[override]
+        request = super().format_request(messages, *args, **kwargs)
+        # LiteLLM maps it to Groq's top-level `reasoning_effort` for gpt-oss.
+        request["reasoning_effort"] = self.reasoning_effort_for(messages)
+        return request
+
+    def _emit(self, event: dict[str, Any]) -> None:
+        if self._trace is not None:
+            self._trace(event)
+
+    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):  # type: ignore[override]
+        model_id = self.get_config()["model_id"]
+        role, effort = call_role(messages), self.reasoning_effort_for(messages)
+        self._emit(
+            {
+                "type": "llm_call",
                 "model": model_id,
-                "api_key": p["_api_key"],
+                "call_role": role,
+                "reasoning_effort": effort,
+                "messages": _preview_messages(messages),
             }
-            if p["name"] == "openrouter":
-                extra_headers: dict = {"X-Title": app_name}
-                if site_url:
-                    extra_headers["HTTP-Referer"] = site_url
-                litellm_params["extra_headers"] = extra_headers
-            model_list.append(
-                {"model_name": group_name, "litellm_params": litellm_params}
-            )
-    return model_list, group_names
-
-
-def build_litellm_router(provider_name: Optional[str] = None, authenticated: bool = False):
-    """
-    Build and return a LiteLLM Router.
-
-    If provider_name is given and available, returns a single-provider Router
-    (no cross-provider fallback) with model group name ``"agent-model"``.
-
-    If provider_name is None or unavailable, returns a Router with all available
-    providers using per-provider model group names and explicit ``fallbacks`` so
-    that when one provider exhausts its retries the Router automatically moves to
-    the next provider instead of raising.
-
-    Args:
-        provider_name: Pin to a specific provider key (e.g. "groq"), or None
-                       for all providers with automatic fallback.
-        authenticated: If True, the full model list is used for each provider.
-                       If False (anonymous request), providers expose only their
-                       public/cheap models (e.g. Groq → gpt-oss-20b only) and
-                       fallback across providers is disabled.
-
-    Returns:
-        (Router, primary_model_group, provider_label)
-        primary_model_group is the model group name the caller must pass to
-        router.acompletion() / router.completion().
-
-    Raises RuntimeError if no providers are configured.
-    """
-    from litellm import Router
-
-    available = get_available_providers()
-    if not available:
-        raise RuntimeError(
-            "No LLM providers configured. Set at least one of: "
-            + ", ".join(p["env_var"] for p in PROVIDERS.values())
         )
+        logger.info("[LLM] Llamando a %s (%s, reasoning_effort=%s)", model_id, role, effort)
+        with telemetry.llm_span(model_id) as span:
+            output = _StreamedOutput()
+            try:
+                async for event in super().stream(messages, tool_specs, system_prompt, **kwargs):
+                    output.add(event)
+                    yield event
+            except Exception as exc:
+                logger.warning("[LLM] ✗ Falló %s → %s", model_id, str(exc)[:120])
+                self._emit({"type": "model_attempt", "model": model_id, "status": "failed", "error": str(exc)[:120]})
+                raise
+            finally:
+                system = [{"role": "system", "content": system_prompt}] if system_prompt else []
+                reply: dict[str, Any] = {"role": "assistant", "content": output.text()}
+                if calls := output.tool_calls():
+                    reply["tool_calls"] = calls
+                telemetry.annotate(
+                    span,
+                    input_data=system + _preview_messages(messages, limit=TRACE_MESSAGE_LIMIT),
+                    output_data=[reply],
+                    tool_definitions=_tool_definitions(tool_specs),
+                    metrics=output.metrics(),
+                    metadata={"call_role": role, "reasoning_effort": effort},
+                    tags={"call_role": role, "reasoning_effort": effort},
+                )
+        self._emit({"type": "model_attempt", "model": model_id, "status": "success"})
 
-    # Pin to a specific provider if requested and available
-    if provider_name and provider_name in PROVIDERS:
-        pinned = next((p for p in available if p["name"] == provider_name), None)
-        if pinned:
-            model_list, _ = _build_router_model_list([pinned], authenticated=authenticated)
-            # Rename the single group to the generic alias so callers are uniform
-            for entry in model_list:
-                entry["model_name"] = "agent-model"
-            router = Router(
-                model_list=model_list,
-                num_retries=3,
-                retry_after=2,
-                allowed_fails=1,
-                cooldown_time=3600,
-                routing_strategy="least-busy",
+
+class RetryMalformedToolCalls:
+    """Retry a model call that Groq rejected because the model mangled a tool call.
+
+    gpt-oss on Groq sometimes leaks its channel tokens into the tool name (e.g.
+    ``compare_pokemon<|channel|>analysis``); Groq then fails the request with
+    ``tool_use_failed``. A fresh sample almost always succeeds, so retry it a
+    couple of times per invocation instead of failing the whole reply.
+    """
+
+    MAX_RETRIES = 2
+    _STATE_KEY = "mcpokedex:tool_call_retries"
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import AfterModelCallEvent
+
+        registry.add_callback(AfterModelCallEvent, self._on_model_result)
+
+    @staticmethod
+    def is_malformed_tool_call(exc: BaseException | None) -> bool:
+        while exc is not None:
+            text = str(exc)
+            if "tool_use_failed" in text or "Tool call validation failed" in text:
+                return True
+            exc = exc.__cause__ or exc.__context__
+        return False
+
+    def _on_model_result(self, event) -> None:
+        if event.retry or not self.is_malformed_tool_call(event.exception):
+            return
+        retries = event.invocation_state.get(self._STATE_KEY, 0)
+        if retries >= self.MAX_RETRIES:
+            return
+        event.invocation_state[self._STATE_KEY] = retries + 1
+        logger.warning("[LLM] Tool call malformado por el modelo; reintentando (%d/%d)", retries + 1, self.MAX_RETRIES)
+        event.retry = True
+
+
+def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRouter:
+    """Build a ModelRouter over the Groq models allowed for this request.
+
+    A fresh router and fresh model instances per request keep the trace sink
+    request-scoped; model health across requests lives in CooldownFallbackStrategy.
+
+    Raises:
+        RuntimeError: If GROQ_API_KEY is not set.
+    """
+    if not groq_configured():
+        raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    # Candidate name = model id: CooldownFallbackStrategy keys its process-wide table on it.
+    return ModelRouter(
+        [
+            RoutingCandidate(
+                model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
+                name=m,
             )
-            return router, "agent-model", pinned["label"]
-
-    # Full router with all available providers and explicit cross-provider fallbacks.
-    # Each provider gets its own model group; the first group is the primary target
-    # and the rest are listed as fallbacks so LiteLLM Router actually switches
-    # providers once the primary group exhausts its retries.
-    # Cross-provider fallback is only enabled for authenticated requests.
-    model_list, group_names = _build_router_model_list(available, authenticated=authenticated)
-    primary = group_names[0]
-    if authenticated and len(group_names) > 1:
-        fallbacks = [{primary: group_names[1:]}]
-    else:
-        fallbacks = []
-    router = Router(
-        model_list=model_list,
-        fallbacks=fallbacks,
-        num_retries=3,
-        retry_after=2,
-        allowed_fails=1,
-        cooldown_time=3600,
-        routing_strategy="least-busy",
+            for m in model_ids(authenticated)
+        ],
+        strategy=CooldownFallbackStrategy(),
     )
-    primary_label = available[0]["label"]
-    suffix = " (auto-fallback)" if authenticated and len(group_names) > 1 else ""
-    return router, primary, f"{primary_label}{suffix}"

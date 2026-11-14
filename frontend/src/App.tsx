@@ -1,11 +1,17 @@
-import { useProviders } from './hooks/useProviders'
 import { usePrompts } from './hooks/usePrompts'
 import { useMcpCapabilities } from './hooks/useMcpCapabilities'
-import Layout from './components/Layout/Layout'
+import ChatView from './components/Chat/ChatView'
+import Header from './components/Header/Header'
+import SettingsModal from './components/SettingsModal/SettingsModal'
 
 export default function App() {
-  useProviders()
   usePrompts()
   useMcpCapabilities()
-  return <Layout />
+  return (
+    <>
+      <Header />
+      <ChatView />
+      <SettingsModal />
+    </>
+  )
 }

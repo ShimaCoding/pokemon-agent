@@ -1,9 +1,9 @@
 .PHONY: help setup dev frontend backend build start docker clean
 
 PORT ?= 8000
-# Run through uv against this checkout's .venv, so nothing depends on an activated
-# virtualenv (and an inherited VIRTUAL_ENV from elsewhere is ignored).
-PYTHON_RUN = uv run --no-project --python .venv/bin/python
+# Run through uv against this checkout's .venv (uv.lock), so nothing depends on an
+# activated virtualenv.
+PYTHON_RUN = uv run
 
 help:
 	@echo "Pokemon Agent - Available commands:"
@@ -28,8 +28,7 @@ help:
 
 # Same as the Conductor setup script
 setup:
-	uv venv --python 3.11 --allow-existing
-	uv pip install --python .venv/bin/python -r requirements.txt
+	uv sync --frozen
 	npm ci --prefix frontend
 
 # Development: Frontend + Backend (requires 2 terminal windows or tmux)

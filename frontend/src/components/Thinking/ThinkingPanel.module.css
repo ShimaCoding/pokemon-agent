@@ -1,0 +1,27 @@
+.panel { margin-bottom: 10px; }
+
+.toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px dashed var(--gbc-mid);
+  font-size: 12px;
+  color: var(--gbc-mid);
+  text-align: left;
+}
+.toggle:hover { border-style: solid; color: var(--gbc-dark); border-color: var(--gbc-border); }
+
+.arrow { font-size: 9px; }
+.count { color: var(--gbc-mid); }
+
+.live { color: var(--gbc-gold); }
+.cursor { animation: blink 1s step-start infinite; }
+.step { color: var(--mcp-tool); }
+
+.console {
+  margin-top: 8px;
+  padding: 6px 0;
+  background: var(--gbc-bg);
+  border: 1px solid var(--gbc-light);
+}

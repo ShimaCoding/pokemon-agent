@@ -1,84 +1,72 @@
-.modal {
-  display: block;
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-}
+.modal { position: fixed; inset: 0; z-index: 200; }
 
-.overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-}
+.overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.7); }
 
 .box {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  width: min(440px, 92vw);
+  padding: 18px;
   background: var(--gbc-dark);
   border: 3px solid var(--gbc-border);
-  padding: 16px;
-  min-width: 260px;
-  font-family: var(--font-pixel);
   color: var(--gbc-cream);
 }
 
 .title {
-  font-size: 8px;
-  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: normal;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
   border-bottom: 2px solid var(--gbc-border);
-  padding-bottom: 6px;
 }
 
-.label {
-  font-size: 6px;
-  color: var(--gbc-screen);
-  margin-bottom: 4px;
-  display: block;
-}
+.label { display: block; font-size: 11px; color: var(--gbc-screen); margin-bottom: 6px; }
 
 .input {
-  font-family: var(--font-pixel);
-  font-size: 7px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 10px;
+  font-family: var(--font-pixel);
+  font-size: 13px;
   background: var(--gbc-screen);
   border: 2px solid var(--gbc-mid);
   color: var(--gbc-dark);
   outline: none;
-  margin-bottom: 10px;
 }
 .input:focus { border-color: var(--gbc-cream); }
 
-.hint {
-  font-size: 5px;
-  color: var(--gbc-mid);
-  margin-bottom: 12px;
-  line-height: 1.8;
-}
+.hint { margin-top: 10px; font-size: 10px; line-height: 1.9; color: var(--gbc-mid); }
 
-.actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.spacer { flex: 1; }
 
-.actions button {
-  font-family: var(--font-pixel);
-  font-size: 6px;
-  padding: 5px 10px;
-  background: var(--gbc-screen);
+.primary, .secondary {
+  font-size: 11px;
+  padding: 6px 12px;
   border: 2px solid var(--gbc-mid);
-  color: var(--gbc-dark);
-  cursor: pointer;
 }
-.actions button:hover { background: var(--gbc-light); }
+.primary { background: var(--gbc-screen); color: var(--gbc-dark); }
+.primary:hover { background: var(--gbc-light); }
+.secondary { color: var(--gbc-mid); }
+.secondary:hover { color: var(--gbc-cream); border-color: var(--gbc-cream); }
 
-.clearBtn {
-  margin-right: auto;
-  background: none !important;
-  border-color: var(--gbc-mid) !important;
-  color: var(--gbc-mid) !important;
+/* The header hides these links on mobile, so they live here too. */
+.source {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--gbc-border);
+  font-size: 10px;
+  line-height: 1.9;
+  color: var(--gbc-mid);
 }
-.clearBtn:hover { color: var(--gbc-cream) !important; border-color: var(--gbc-cream) !important; background: none !important; }
+.source a { color: var(--gbc-screen); }
+.source a:hover { color: var(--gbc-cream); }
+
+@media (max-width: 640px) {
+  .box { padding: 14px; }
+  .spacer { display: none; }
+  .primary, .secondary { flex: 1; padding: 8px 4px; }
+  /* iOS zooms into inputs under 16px on focus. */
+  .input { font-size: 16px; }
+}

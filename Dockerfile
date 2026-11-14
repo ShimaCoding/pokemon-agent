@@ -21,14 +21,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 
 # Bring in uv — no pip needed
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Install dependencies into an isolated virtual environment
-COPY requirements.txt .
-RUN uv venv .venv && \
-    uv pip install --python .venv/bin/python -r requirements.txt
+# Install the exact versions from uv.lock into an isolated virtual environment
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
@@ -51,6 +50,10 @@ COPY --chown=appuser:appgroup backend/ ./backend/
 COPY --from=frontend-builder --chown=appuser:appgroup /app/backend/static ./backend/static/
 # Restore admin.html (not part of the React build, gets wiped by the line above)
 COPY --chown=appuser:appgroup backend/static/admin.html ./backend/static/admin.html
+
+# Commit metadata for Datadog `version` (only HEAD/refs, see .dockerignore). The glob makes it
+# optional: builds without a .git directory (worktrees, tarballs) just skip it.
+COPY --chown=appuser:appgroup .gi[t] ./.git/
 
 # Pre-create data dir so the volume mount is writable by appuser
 RUN mkdir -p /app/data && chown appuser:appgroup /app/data

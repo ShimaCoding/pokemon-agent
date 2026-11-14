@@ -1,0 +1,143 @@
+.titlebar {
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+  padding: 8px 16px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  border-bottom: 2px solid var(--gbc-border);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.bottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.titleMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.titleLogo {
+  height: 28px;
+  width: 28px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+
+.mainTitle {
+  font-size: 16px;
+  color: var(--gbc-screen);
+  white-space: nowrap;
+}
+
+.githubLinks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.githubIcon {
+  height: 14px;
+  width: 14px;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+  filter: invert(60%) sepia(0%) saturate(0%) brightness(90%);
+}
+
+.githubLink {
+  font-size: 11px;
+  color: var(--gbc-mid);
+  text-decoration: none;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+
+.githubLink:hover {
+  color: var(--gbc-screen);
+}
+
+.githubSep {
+  font-size: 11px;
+  color: var(--gbc-border);
+}
+
+.mcpBadges {
+  display: flex;
+  gap: 6px;
+}
+
+.settingsBtn {
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  background: none;
+  border: 1px solid var(--gbc-mid);
+  color: var(--gbc-screen);
+  padding: 4px 10px;
+  cursor: pointer;
+  line-height: 1;
+}
+.settingsBtn:hover { border-color: var(--gbc-cream); color: var(--gbc-cream); }
+.settingsBtn.hasKey { border-color: var(--mcp-resource); color: var(--mcp-resource); }
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.newBtn {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  border: 1px solid var(--gbc-mid);
+  color: var(--gbc-screen);
+  padding: 4px 10px;
+  line-height: 1;
+}
+.newBtn:hover:not(:disabled) { border-color: var(--mcp-tool); color: var(--mcp-tool); }
+.newBtn:disabled { opacity: 0.35; }
+
+/* ── Mobile ─────────────────────────────────
+   One compact row (logo · title · actions) plus the MCP badges. The GitHub
+   links move to the settings dialog to save vertical space. */
+@media (max-width: 640px) {
+  .titlebar {
+    padding: 6px 10px 6px;
+    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+    gap: 6px;
+  }
+
+  .topRow { gap: 8px; }
+
+  .titleLogo { height: 22px; width: 22px; }
+  .mainTitle { font-size: 14px; }
+
+  .githubLinks { display: none; }
+
+  .newBtn,
+  .settingsBtn {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .settingsBtn { font-size: 13px; }
+
+  .mcpBadges {
+    width: 100%;
+    gap: 4px;
+  }
+}

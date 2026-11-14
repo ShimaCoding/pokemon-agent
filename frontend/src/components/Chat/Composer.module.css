@@ -1,0 +1,82 @@
+.bottomBar {
+  position: relative;
+  flex: none;
+  background: var(--gbc-dark);
+  border-top: 2px solid var(--gbc-border);
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Slides in when the first message leaves the welcome screen (global.css). */
+  view-transition-name: dexter-bar;
+}
+
+.inner {
+  position: relative;
+  max-width: var(--chat-width);
+  margin: 0 auto;
+}
+
+.form { display: flex; align-items: flex-end; gap: 10px; }
+
+.chatInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  max-height: 160px;
+  resize: none;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--gbc-bg);
+  color: #000;
+  border: 2px solid var(--gbc-border);
+  padding: 9px 14px;
+}
+.chatInput::placeholder { color: var(--gbc-mid); font-size: 13px; }
+.chatInput:focus { outline: 2px solid var(--gbc-gold); outline-offset: 2px; border-color: var(--gbc-gold); }
+
+.thinking {
+  align-self: center;
+  font-size: 13px;
+  color: var(--gbc-screen);
+  animation: blink 1s step-start infinite;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+
+.sendButton {
+  font-size: 13px;
+  background: var(--gbc-gold);
+  color: var(--gbc-cream);
+  padding: 12px 18px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.sendButton:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.sendButton:active:not(:disabled) { transform: translateY(0); }
+.sendButton:disabled { opacity: 0.4; }
+
+.rateLimitBanner {
+  position: absolute;
+  top: -34px;
+  left: 0;
+  right: 0;
+  background: #3a1a1a;
+  border-top: 2px solid #ff6b6b;
+  color: #ff6b6b;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 12px;
+  z-index: 10;
+}
+
+@media (max-width: 640px) {
+  .bottomBar { padding: 8px; padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .form { gap: 8px; }
+  .thinking { display: none; }
+  /* 16px keeps iOS from zooming into the field on focus. */
+  .chatInput { font-size: 16px; line-height: 1.5; min-height: 44px; padding: 9px 10px; }
+  .chatInput::placeholder { font-size: 12px; }
+  .sendButton { width: 44px; height: 44px; padding: 0; font-family: var(--font-read); font-size: 18px; }
+}
