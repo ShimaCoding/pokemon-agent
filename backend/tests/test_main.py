@@ -40,6 +40,87 @@ def test_run_requires_conversation_id(client):
     assert res.status_code == 422
 
 
+# --- trainer_id (#77) ----------------------------------------------------------------
+
+TRAINER = "0f8fad5b-d9cb-469f-a165-70867728950e"
+
+
+@pytest.fixture
+def captured_run(client, monkeypatch):
+    """/api/agent/run without the agent: returns what reached _sse_generator."""
+    seen: list[dict] = []
+
+    async def gen(query, conversation_id, *, authenticated, trainer_id=None):
+        seen.append({"conversation_id": conversation_id, "trainer_id": trainer_id})
+        yield "data: {}\n\n"
+
+    monkeypatch.setattr(main, "_sse_generator", gen)
+    return seen
+
+
+@pytest.mark.parametrize(
+    "trainer_id",
+    [
+        "short-id",  # the conversation pattern (8+) is not enough for a credential
+        "a" * 31,
+        "a" * 65,
+        TRAINER.upper(),
+        "../../../../../../../../../../../etc/passwd",
+        "0f8fad5b d9cb 469f a165 70867728950e",
+        "",
+    ],
+)
+def test_run_rejects_bad_trainer_ids(client, captured_run, trainer_id):
+    body = {"query": "hola", "conversation_id": "conv-12345678", "trainer_id": trainer_id}
+    assert client.post("/api/agent/run", json=body).status_code == 422
+    assert captured_run == []
+
+
+@pytest.mark.parametrize("trainer_id", [TRAINER, "a" * 32, "a" * 64])
+def test_run_passes_the_trainer_id_to_the_agent_run(client, captured_run, trainer_id):
+    body = {"query": "hola", "conversation_id": "conv-12345678", "trainer_id": trainer_id}
+    assert client.post("/api/agent/run", json=body).status_code == 200
+    assert captured_run == [{"conversation_id": "conv-12345678", "trainer_id": trainer_id}]
+
+
+def test_run_works_without_a_trainer_id(client, captured_run):
+    # A bundle cached before the box existed: the turn runs, and Bill reports the box unavailable.
+    assert client.post("/api/agent/run", json={"query": "hola", "conversation_id": "conv-12345678"}).status_code == 200
+    assert captured_run == [{"conversation_id": "conv-12345678", "trainer_id": None}]
+
+
+def test_the_trainer_id_never_leaves_the_server(client, monkeypatch, tmp_path, caplog):
+    """A whole turn through the real agents: no SSE frame, log record or query-log row carries the id."""
+    import logging
+
+    from backend import box
+    from backend.tests.test_bill import Stage, _delegate, _store_then_report
+
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    stage = Stage(monkeypatch, tmp_path)
+    stage.scripts["dexter"] = _delegate("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    stage.scripts["bill"] = _store_then_report(["pikachu"])
+    logged: list[dict] = []
+    monkeypatch.setattr(main, "log_query", lambda **kw: logged.append(kw))
+
+    body = {"query": "guarda a pikachu en mi caja", "conversation_id": "conv-12345678", "trainer_id": TRAINER}
+    with caplog.at_level(logging.DEBUG):
+        res = client.post("/api/agent/run", json=body)
+
+    events = _sse_events(res)
+    assert [e["type"] for e in events][-1] == "done" and "error" not in [e["type"] for e in events]
+    # The id did its job: the Pokémon is in that trainer's box, through Bill's tools.
+    assert [p["name"] for p in box.list_box(TRAINER)["pokemon"]] == ["pikachu"]
+    assert [e.get("agent") for e in events if e["type"] == "tool_call"] == [None, "bill"]
+    init = next(e for e in events if e["type"] == "agent_init")
+    assert "bill" in init["tool_names"] and init["mcp_tools_count"] == len(init["tool_names"]) - 1
+
+    assert TRAINER not in res.text
+    assert TRAINER not in caplog.text
+    assert all(TRAINER not in str(record.__dict__) for record in caplog.records)
+    assert logged and TRAINER not in str(logged)
+
+
 # --- Telemetry on setup failures ----------------------------------------------------
 
 
@@ -546,7 +627,7 @@ def test_run_usage_falls_back_to_the_root_metrics():
 def quick_run(client, monkeypatch):
     """/api/agent/run without the agent: each call is one hit on the rate limit."""
 
-    async def gen(query, conversation_id, *, authenticated):
+    async def gen(query, conversation_id, *, authenticated, trainer_id=None):
         yield "data: {}\n\n"
 
     monkeypatch.setattr(main, "_sse_generator", gen)
