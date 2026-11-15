@@ -180,6 +180,11 @@ class PhoenixBackend:
         self._ids: OrderedDict[str, str] = OrderedDict()
         self._ids_lock = threading.Lock()
 
+    @property
+    def headers(self) -> dict[str, str]:
+        """Auth headers for Phoenix's REST API (``backend/traces.py`` reads with them)."""
+        return dict(self._headers)
+
     # -- spans ---------------------------------------------------------------
 
     def _start(

@@ -194,6 +194,11 @@ def is_enabled() -> bool:
     return _dd_enabled or _phoenix is not None
 
 
+def phoenix_backend() -> Any:
+    """The Phoenix backend when it is on, else None; ``backend/traces.py`` reads runs back through it."""
+    return _phoenix
+
+
 def _px(method: str, *args: Any, **kwargs: Any) -> Any:
     """Call the Phoenix backend; None (and a warning) instead of raising."""
     if _phoenix is None:

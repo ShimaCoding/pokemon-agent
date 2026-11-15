@@ -34,6 +34,7 @@ from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
 from typing import Any, Optional
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +46,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import build_info, guards, mcp_gateway, telemetry, tool_cache
+from backend import build_info, guards, mcp_gateway, telemetry, tool_cache, traces
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.evals import checks
 from backend.feedback import registry as feedback_registry
@@ -781,6 +782,49 @@ async def admin_queries(
     search: str = Query(""),
 ):
     return get_queries(page=page, limit=limit, search=search)
+
+
+@app.get("/admin/traces", include_in_schema=False)
+async def admin_traces_page():
+    # Public HTML like /admin: the data comes from the /admin/api/traces endpoints below.
+    path = os.path.join(os.path.dirname(__file__), "static", "traces.html")
+    return FileResponse(path, media_type="text/html")
+
+
+def _trace_reader() -> traces.PhoenixReader:
+    reader = traces.reader()
+    if reader is None:
+        raise HTTPException(status_code=503, detail="Phoenix no está configurado en este servidor.")
+    return reader
+
+
+def _read_phoenix(call):
+    """Run a PhoenixReader call; Phoenix being down or slow is a 502, not a crash."""
+    try:
+        return call()
+    except httpx.HTTPError as exc:
+        logger.warning("[TRACES] Phoenix no respondió: %s", exc)
+        raise HTTPException(status_code=502, detail="Phoenix no respondió. Intenta de nuevo.") from exc
+
+
+# Sync handlers: the reader blocks on HTTP, so FastAPI runs them in its thread pool.
+@app.get("/admin/api/traces", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+def admin_traces(limit: int = Query(30, ge=1, le=traces.MAX_TRACES)):
+    """Recent queries, newest first, for the run view."""
+    reader = _trace_reader()
+    return {"traces": _read_phoenix(lambda: reader.list_traces(limit))}
+
+
+@app.get("/admin/api/traces/{trace_id}", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+def admin_trace(trace_id: str):
+    """One query with every step of its run."""
+    if not traces.TRACE_ID_RE.fullmatch(trace_id):
+        raise HTTPException(status_code=404, detail="No existe esa consulta.")
+    reader = _trace_reader()
+    trace = _read_phoenix(lambda: reader.get_trace(trace_id))
+    if trace is None:
+        raise HTTPException(status_code=404, detail="No existe esa consulta.")
+    return trace
 
 
 # ---------------------------------------------------------------------------
