@@ -152,13 +152,13 @@ def _turn(query, uid="tu-1", tool_input=None, name="get_pokedex_entry"):
 
 def test_grounded_names_cancels_a_look_alike_and_explains():
     event = _tool_event(_turn("háblame de pikachuu"))
-    GroundedPokemonNames._on_call(event)
+    GroundedPokemonNames()._on_call(event)
     assert '"pikachu"' in event.cancel_tool and "como lo escribió el usuario" in event.cancel_tool
 
 
 def test_grounded_names_lets_the_named_pokemon_through():
     event = _tool_event(_turn("háblame de pikachu"))
-    GroundedPokemonNames._on_call(event)
+    GroundedPokemonNames()._on_call(event)
     assert event.cancel_tool is False
 
 
@@ -166,19 +166,50 @@ def test_grounded_names_ignores_its_own_call_and_direct_calls():
     # The call's own input never grounds it.
     team = {"pokemon_names": ["mew", "ditto"]}
     event = _tool_event(_turn("¿qué opinas del clima?", tool_input=team, name="analyze_team"), name="analyze_team", tool_input=team)
-    GroundedPokemonNames._on_call(event)
+    GroundedPokemonNames()._on_call(event)
     assert event.cancel_tool
     # agent.tool.* calls are not the model's: no message issued them.
     assert conversation_texts([], "tu-9") is None
     event = _tool_event([], uid="tu-9")
-    GroundedPokemonNames._on_call(event)
+    GroundedPokemonNames()._on_call(event)
     assert event.cancel_tool is False
 
 
 def test_grounded_names_skips_tools_without_names():
     event = _tool_event(_turn("dame 10 Pokémon", name="search_pokemon", tool_input={"limit": 10}), name="search_pokemon", tool_input={"limit": 10})
-    GroundedPokemonNames._on_call(event)
+    GroundedPokemonNames()._on_call(event)
     assert event.cancel_tool is False
+
+
+def test_grounded_names_judges_the_tools_it_is_given():
+    # A sub-agent's own tools: the names must be in the request it was given.
+    guard = GroundedPokemonNames({"box_store"})
+    store = {"pokemon": ["pikachu", "mew"]}
+    event = _tool_event(_turn("guarda a pikachu", name="box_store", tool_input=store), name="box_store", tool_input=store)
+    guard._on_call(event)
+    assert '"mew"' in event.cancel_tool and '"pikachu"' not in event.cancel_tool
+
+    event = _tool_event(_turn("guarda a pikachu y a mew", name="box_store", tool_input=store), name="box_store", tool_input=store)
+    guard._on_call(event)
+    assert event.cancel_tool is False
+
+    # Tools outside the set are not judged, and by default box_store is not one of them.
+    event = _tool_event(_turn("háblame de pikachuu"))
+    guard._on_call(event)
+    assert event.cancel_tool is False
+    event = _tool_event(_turn("hola", name="box_store", tool_input=store), name="box_store", tool_input=store)
+    GroundedPokemonNames()._on_call(event)
+    assert event.cancel_tool is False
+
+
+def test_normalize_names_rewrites_the_tools_it_is_given():
+    from backend.agent import NormalizePokemonNames
+
+    event = _tool_event([], name="box_store", tool_input={"pokemon": ["Mr. Mime", "Giratina"]})
+    NormalizePokemonNames()._on_call(event)
+    assert event.tool_use["input"] == {"pokemon": ["Mr. Mime", "Giratina"]}
+    NormalizePokemonNames({"box_store"})._on_call(event)
+    assert event.tool_use["input"] == {"pokemon": ["mr-mime", "giratina-altered"]}
 
 
 # --- history ----------------------------------------------------------------------------------

@@ -26,7 +26,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Any
+from typing import Any, Iterable
 
 from strands import Agent
 from strands.middleware import ExecuteToolStage
@@ -167,17 +167,22 @@ class NormalizePokemonNames:
 
     Runs before the trace hooks, so the tool_call event, the widget's tool input
     and the history all carry the name that was actually looked up.
+
+    ``tools`` are the tools it rewrites (the MCP tools by default): a sub-agent passes
+    its own, whose name arguments are in ``POKEMON_NAME_ARGS`` too.
     """
+
+    def __init__(self, tools: Iterable[str] = MCP_TOOLS) -> None:
+        self._tools = frozenset(tools)
 
     def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import BeforeToolCallEvent
 
         registry.add_callback(BeforeToolCallEvent, self._on_call)
 
-    @staticmethod
-    def _on_call(event) -> None:
+    def _on_call(self, event) -> None:
         tool_input = event.tool_use.get("input")
-        if event.tool_use.get("name") not in MCP_TOOLS or not isinstance(tool_input, dict):
+        if event.tool_use.get("name") not in self._tools or not isinstance(tool_input, dict):
             return
         for key in POKEMON_NAME_ARGS & tool_input.keys():
             value = tool_input[key]
@@ -231,17 +236,22 @@ class GroundedPokemonNames:
     The model gets the reason as the tool result and can call again with the
     user's name. Registered before ``NormalizePokemonNames``: it judges the name
     the model wrote, not its PokeAPI slug.
+
+    ``tools`` are the tools it judges (the MCP tools by default). On a sub-agent the
+    conversation is the request it was given plus its own tool results.
     """
+
+    def __init__(self, tools: Iterable[str] = MCP_TOOLS) -> None:
+        self._tools = frozenset(tools)
 
     def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import BeforeToolCallEvent
 
         registry.add_callback(BeforeToolCallEvent, self._on_call)
 
-    @staticmethod
-    def _on_call(event) -> None:
+    def _on_call(self, event) -> None:
         tool_input = event.tool_use.get("input")
-        if event.tool_use.get("name") not in MCP_TOOLS or not isinstance(tool_input, dict):
+        if event.tool_use.get("name") not in self._tools or not isinstance(tool_input, dict):
             return
         names: list[str] = []
         for key in POKEMON_NAME_ARGS & tool_input.keys():
