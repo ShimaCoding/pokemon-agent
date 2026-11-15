@@ -6,9 +6,9 @@ Enabled by ``PHOENIX_COLLECTOR_ENDPOINT`` (the Phoenix base URL, e.g.
 ``http://mcpokedex-phoenix:6006``), authenticated with ``PHOENIX_API_KEY``. Traces go
 to the project ``PHOENIX_PROJECT_NAME`` (default ``mcpokedex-<env>``).
 
-Phoenix OSS has no per-trace custom links, so with ``GRAFANA_AGENT_GRAPH_URL`` (the
-URL of the "Grafo de ejecución" dashboard, ``…/d/mcpokedex-agent-graph``) the root
-agent span carries ``grafana_url`` in its metadata: that dashboard opened on the trace.
+Phoenix OSS has no per-trace custom links, so with ``ADMIN_TRACES_URL`` (the address
+of the run view, ``…/admin/traces``) the root agent span carries ``admin_url`` in its
+metadata: that view opened on the trace (``backend/traces.py``).
 
 Same tree as Datadog: agent "dexter" → {llm, tool, sub-agent → {llm, tool, …}},
 emitted by hand from the same call sites. Agent spans carry ``agent.name`` and
@@ -35,7 +35,6 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlencode
 
 import httpx
 from openinference.semconv.trace import (
@@ -62,11 +61,6 @@ TOOL = OpenInferenceSpanKindValues.TOOL.value
 # Exposed span ids remembered for feedback/evals; same bound as backend/feedback.py.
 MAX_IDS = 5000
 ANNOTATION_TIMEOUT_S = 5.0
-
-# Time range of the Grafana link, around the start of the trace: the dashboard lists the
-# traces of its range as the options of $trace_id, and this trace has to be one of them.
-GRAPH_LEAD_MS = 5 * 60_000
-GRAPH_TAIL_MS = 60 * 60_000
 
 # LiteLLM provider prefix → OpenInference llm.provider, where they differ.
 _PROVIDERS = {"gemini": "google"}
@@ -147,15 +141,15 @@ class PhoenixBackend:
         project: str,
         env: str,
         version: str | None,
-        agent_graph_url: str = "",
+        admin_traces_url: str = "",
         processor: SpanProcessor | None = None,
         http: httpx.Client | None = None,
         executor: Any = None,
     ) -> None:
         self.base_url = endpoint.strip().rstrip("/").removesuffix("/v1/traces")
         self.project = project
-        # Grafana dashboard that draws one trace; empty = no link on the root agent span.
-        self.agent_graph_url = agent_graph_url.strip()
+        # The admin run view (/admin/traces); empty = no link on the root agent span.
+        self.admin_traces_url = admin_traces_url.strip()
         self._headers = {"authorization": f"Bearer {api_key}"} if api_key else {}
         self._base_metadata = {"env": env, "version": version or "?"}
 
@@ -217,24 +211,16 @@ class PhoenixBackend:
         if parent is not None:
             attributes[SpanAttributes.GRAPH_NODE_PARENT_ID] = parent.name
         span = self._start(name, AGENT, parent, attributes, session_id)
-        if parent is None and self.agent_graph_url:
-            # After the start: the link needs the trace id and the start time.
-            span.metadata["grafana_url"] = self._agent_graph_link(span)
+        if parent is None and self.admin_traces_url:
+            # After the start: the link needs the trace id.
+            span.metadata["admin_url"] = self._run_link(span)
             span.otel.set_attribute(SpanAttributes.METADATA, _dumps(span.metadata))
         return span
 
-    def _agent_graph_link(self, span: Span) -> str:
-        """The execution graph dashboard with this trace selected (variables ``project``, ``trace_id``)."""
-        start_ms = span.otel.start_time // 1_000_000
-        query = urlencode(
-            {
-                "var-project": self.project,
-                "var-trace_id": format(span.otel.get_span_context().trace_id, "032x"),
-                "from": start_ms - GRAPH_LEAD_MS,
-                "to": start_ms + GRAPH_TAIL_MS,
-            }
-        )
-        return f"{self.agent_graph_url}{'&' if '?' in self.agent_graph_url else '?'}{query}"
+    def _run_link(self, span: Span) -> str:
+        """The admin run view opened on this trace (it reads ``?trace=``, see frontend/src/traces)."""
+        trace_id = format(span.otel.get_span_context().trace_id, "032x")
+        return f"{self.admin_traces_url}{'&' if '?' in self.admin_traces_url else '?'}trace={trace_id}"
 
     def start_llm(self, model_id: str, parent: Span | None = None) -> Span:
         provider, _, model = model_id.partition("/")

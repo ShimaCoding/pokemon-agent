@@ -27,7 +27,7 @@ def reset(monkeypatch):
         "PHOENIX_COLLECTOR_ENDPOINT",
         "PHOENIX_API_KEY",
         "PHOENIX_PROJECT_NAME",
-        "GRAFANA_AGENT_GRAPH_URL",
+        "ADMIN_TRACES_URL",
         *telemetry._DDTRACE_DEFAULTS,
     ):
         # setenv first so monkeypatch also undoes what setup_telemetry writes.
@@ -427,16 +427,16 @@ def test_phoenix_project_override_and_both_backends(monkeypatch, enable_calls):
     assert telemetry.setup_telemetry() is True
     assert telemetry._dd_enabled and len(enable_calls) == 1
     assert telemetry._phoenix.project == "custom"
-    assert telemetry._phoenix.agent_graph_url == ""
+    assert telemetry._phoenix.admin_traces_url == ""
     telemetry._phoenix.shutdown()
 
 
-def test_phoenix_agent_graph_url_from_environment(monkeypatch):
+def test_phoenix_admin_traces_url_from_environment(monkeypatch):
     monkeypatch.setenv("PHOENIX_COLLECTOR_ENDPOINT", "http://phoenix:6006")
-    monkeypatch.setenv("GRAFANA_AGENT_GRAPH_URL", " https://grafana.test/d/mcpokedex-agent-graph ")
+    monkeypatch.setenv("ADMIN_TRACES_URL", " https://app.test/admin/traces ")
 
     assert telemetry.setup_telemetry() is True
-    assert telemetry._phoenix.agent_graph_url == "https://grafana.test/d/mcpokedex-agent-graph"
+    assert telemetry._phoenix.admin_traces_url == "https://app.test/admin/traces"
     telemetry._phoenix.shutdown()
 
 
@@ -734,9 +734,9 @@ def test_agent_spans_carry_graph_attributes(px):
         assert "agent_level" not in _metadata(span)
 
 
-def test_root_agent_span_links_to_the_grafana_graph(px, monkeypatch):
+def test_root_agent_span_links_to_the_admin_run_view(px, monkeypatch):
     backend, exporter, _ = px
-    monkeypatch.setattr(backend, "agent_graph_url", "https://grafana.test/d/mcpokedex-agent-graph")
+    monkeypatch.setattr(backend, "admin_traces_url", "https://app.test/admin/traces")
     with telemetry.agent_span("conv-12345678") as root:
         with telemetry.sub_agent_span("researcher"):
             with telemetry.llm_span(MODEL):
@@ -746,23 +746,14 @@ def test_root_agent_span_links_to_the_grafana_graph(px, monkeypatch):
         trace_id = telemetry.export_ids(root)["trace_id"]
 
     spans = _by_name(exporter)
-    url = urlsplit(_metadata(spans["dexter"])["grafana_url"])
-    assert f"{url.scheme}://{url.netloc}{url.path}" == "https://grafana.test/d/mcpokedex-agent-graph"
-    start_ms = spans["dexter"].start_time // 1_000_000
-    assert parse_qs(url.query) == {
-        "var-project": ["mcpokedex-test"],
-        "var-trace_id": [trace_id],
-        # Around the trace, so it is among the options the dashboard lists for $trace_id.
-        "from": [str(start_ms - 5 * 60_000)],
-        "to": [str(start_ms + 60 * 60_000)],
-    }
     assert re.fullmatch(r"[0-9a-f]{32}", trace_id)
+    assert _metadata(spans["dexter"])["admin_url"] == f"https://app.test/admin/traces?trace={trace_id}"
     assert _metadata(spans["dexter"])["guard"] == "none"
     for name in ("researcher", "chat", "search_pokemon"):
-        assert "grafana_url" not in _metadata(spans[name])
+        assert "admin_url" not in _metadata(spans[name])
 
 
-def test_no_grafana_link_without_the_dashboard_url(px):
+def test_no_admin_link_without_the_run_view_url(px):
     _, exporter, _ = px
     with telemetry.agent_span("conv-12345678"):
         with telemetry.sub_agent_span("researcher"):
@@ -770,16 +761,16 @@ def test_no_grafana_link_without_the_dashboard_url(px):
     telemetry.record_failed_request("conv-12345678", RuntimeError("mcp down"))
 
     assert len(exporter.get_finished_spans()) == 3
-    assert not [s.name for s in exporter.get_finished_spans() if "grafana_url" in _metadata(s)]
+    assert not [s.name for s in exporter.get_finished_spans() if "admin_url" in _metadata(s)]
 
 
-def test_grafana_link_keeps_a_query_already_in_the_dashboard_url(px, monkeypatch):
+def test_admin_link_keeps_a_query_already_in_the_url(px, monkeypatch):
     backend, exporter, _ = px
-    monkeypatch.setattr(backend, "agent_graph_url", "https://grafana.test/d/mcpokedex-agent-graph?orgId=1")
+    monkeypatch.setattr(backend, "admin_traces_url", "https://app.test/admin/traces?env=prod")
     telemetry.record_failed_request("conv-12345678", RuntimeError("mcp down"))  # a root agent span too
 
-    url = _metadata(_by_name(exporter)["dexter"])["grafana_url"]
-    assert url.startswith("https://grafana.test/d/mcpokedex-agent-graph?orgId=1&var-project=mcpokedex-test&var-trace_id=")
+    url = _metadata(_by_name(exporter)["dexter"])["admin_url"]
+    assert re.fullmatch(r"https://app\.test/admin/traces\?env=prod&trace=[0-9a-f]{32}", url)
 
 
 def test_root_agent_name_is_configurable(px):
