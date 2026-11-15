@@ -460,6 +460,85 @@ def test_eval_errors_never_break_the_stream(fake_run, monkeypatch):
     assert "error" not in [e["type"] for e in events]
 
 
+# --- Tokens of a run with a sub-agent -------------------------------------------------
+
+
+def _model_events(*, text=None, tool=None, usage):
+    """Stream events of one scripted model call: a reply or a tool call, with its token usage."""
+    import json
+
+    if tool:
+        name, arguments = tool
+        body = [
+            {"contentBlockStart": {"start": {"toolUse": {"name": name, "toolUseId": f"call-{name}"}}}},
+            {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(arguments)}}}},
+        ]
+    else:
+        body = [{"contentBlockDelta": {"delta": {"text": text}}}]
+    return [
+        {"messageStart": {"role": "assistant"}},
+        *body,
+        {"contentBlockStop": {}},
+        {"messageStop": {"stopReason": "tool_use" if tool else "end_turn"}},
+        {"metadata": {"usage": usage, "metrics": {"latencyMs": 1}}},
+    ]
+
+
+def _usage(inp, out, cached=None):
+    usage = {"inputTokens": inp, "outputTokens": out, "totalTokens": inp + out}
+    return usage if cached is None else {**usage, "cacheReadInputTokens": cached}
+
+
+def test_done_counts_the_tokens_of_the_sub_agent_too(monkeypatch):
+    # Two real Strands agents: metrics.accumulated_usage of the root's result leaves the sub-agent out.
+    import asyncio
+    import json
+
+    from strands import Agent
+    from strands.models.litellm import LiteLLMModel
+
+    from backend import agent as agent_module
+    from backend.providers import TracedLiteLLMModel
+
+    def dexter_script(messages):
+        if any("toolResult" in b for m in messages for b in m["content"]):
+            return _model_events(text="Pikachu queda almacenado.", usage=_usage(200, 20, cached=50))
+        return _model_events(tool=("bill", {"input": "guarda a pikachu"}), usage=_usage(100, 5))
+
+    scripts = {"dexter": dexter_script, "bill": lambda messages: _model_events(text="Guardado. 1 de 30.", usage=_usage(10, 2))}
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        for event in scripts[system_prompt](messages):
+            yield event
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+    model = lambda: TracedLiteLLMModel(model_id="groq/openai/gpt-oss-20b")  # noqa: E731
+    bill = Agent(name="bill", model=model(), system_prompt="bill", callback_handler=None)
+    dexter = Agent(name="dexter", model=model(), system_prompt="dexter", tools=[bill.as_tool()], callback_handler=None)
+
+    logged: dict = {}
+    monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: dexter)
+    monkeypatch.setattr(main, "log_query", lambda **kw: logged.update(kw))
+
+    async def collect():
+        return [json.loads(f[len("data: ") :]) async for f in main._sse_generator("guarda a pikachu", "conv-12345678")]
+
+    done = asyncio.run(collect())[-1]
+    assert done["type"] == "done"
+    assert (done["input_tokens"], done["output_tokens"], done["total_tokens"]) == (310, 27, 337)
+    assert done["cached_tokens"] == 50
+    assert (logged["input_tokens"], logged["output_tokens"], logged["total_tokens"]) == (310, 27, 337)
+
+
+def test_run_usage_falls_back_to_the_root_metrics():
+    usage = {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}
+    without_context = SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=usage))
+    assert main._run_usage(without_context) == usage
+    empty_context = SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=usage), invocation_context=None)
+    assert main._run_usage(empty_context) == usage
+    assert main._run_usage(SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=None))) == {}
+
+
 # --- RATE_LIMIT_DISABLED (local evals only) ---------------------------------------
 
 

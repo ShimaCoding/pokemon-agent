@@ -520,6 +520,19 @@ def _submit_rule_evals(ids: dict[str, str], query: str, reply: str, tool_trace: 
         logger.warning("[EVAL] Las evaluaciones fallaron: %s", exc)
 
 
+def _run_usage(result: Any) -> dict:
+    """Token usage of the whole run, sub-agents included.
+
+    ``result.metrics.accumulated_usage`` only counts the root agent's model calls; the
+    request's ``invocation_context`` also adds up the agents it called as tools. Results
+    without one (older Strands, test fakes) fall back to the metrics.
+    """
+    usage = getattr(getattr(result, "invocation_context", None), "usage", None)
+    if usage:
+        return dict(usage)
+    return dict(result.metrics.accumulated_usage or {})
+
+
 # "Usa el prompt <name> [con <arg>=<val>...]" — sent by the slash menu.
 _PROMPT_RE = re.compile(
     r"(?:usa el prompt|ejecuta el prompt|aplicar el prompt)\s+([a-zA-Z0-9_./-]+)(?:\s+con\s+(.+))?",
@@ -577,7 +590,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 # root agent only: a sub-agent's tools never mount a widget
       {"type": "text",          "delta": str}  # filtered by guards.StreamGuard: the first ~200 chars are held back
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
-                                # total_tool_calls and models_tried: the root agent's only
+                                # total_tool_calls and models_tried: the root agent's only;
+                                # tokens and llm_calls: the whole run, sub-agents included
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
                                 "guard": str | None,  # guards.REPLACEMENTS key when a guard replaced or cut the reply
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
@@ -715,7 +729,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                             logger.warning("[GUARD] Respuesta reemplazada o cortada: %s", guard.reason)
                         usage: dict = {}
                         with suppress(Exception):
-                            usage = event["result"].metrics.accumulated_usage or {}
+                            usage = _run_usage(event["result"])
                         done = done_event(usage)
                         logger.info(
                             "[DONE] %dms (TTFT %sms) | llamadas LLM: %d | tools: %d | tokens: %d (cache: %d) | modelos: %s",
