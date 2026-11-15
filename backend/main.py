@@ -14,6 +14,8 @@ Routes:
 Security:
   - API key auth: set API_KEY env var; clients send the X-API-Key header.
     Authenticated requests skip the agent rate limit and get the larger model.
+  - Admin (/admin/api/*): same header, checked against ADMIN_API_KEY; without it,
+    against API_KEY. With neither set the admin API rejects everything.
   - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
     Local eval runs can lift that cap with RATE_LIMIT_DISABLED=1, which is
     ignored (with a warning) when DD_ENV is prod or preview.
@@ -34,6 +36,7 @@ from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
 from typing import Any, Optional
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +48,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import build_info, guards, mcp_gateway, telemetry, tool_cache
+from backend import build_info, guards, mcp_gateway, telemetry, tool_cache, traces
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.evals import checks
 from backend.feedback import registry as feedback_registry
@@ -78,12 +81,30 @@ _req_api_key: ContextVar[str] = ContextVar("req_api_key", default="")
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def _key_matches(provided: str | None, env_name: str) -> bool:
+    """True when ``provided`` is the key configured in ``env_name``; an unset key matches nothing."""
+    expected = os.environ.get(env_name, "").strip()
+    if not expected or not provided:
+        return False
+    # As bytes: compare_digest refuses non-ASCII str, and a header can carry anything.
+    return hmac.compare_digest(provided.encode(), expected.encode())
+
+
 def _is_valid_api_key(api_key: str | None) -> bool:
     """Return True if the provided key matches the configured API_KEY."""
-    expected = os.environ.get("API_KEY", "").strip()
-    if not expected or not api_key:
-        return False
-    return hmac.compare_digest(api_key, expected)
+    return _key_matches(api_key, "API_KEY")
+
+
+def _is_valid_admin_key(api_key: str | None) -> bool:
+    """The key that opens /admin/api/*: ADMIN_API_KEY, or API_KEY when the admin has no key of its own.
+
+    They are separate because API_KEY changes the public chat (/config tells every visitor
+    a key exists, and the settings dialog opens), and whoever holds it should not read
+    what other visitors asked. With ADMIN_API_KEY set, API_KEY no longer opens the admin.
+    """
+    if os.environ.get("ADMIN_API_KEY", "").strip():
+        return _key_matches(api_key, "ADMIN_API_KEY")
+    return _key_matches(api_key, "API_KEY")
 
 
 def _is_authenticated_request() -> bool:
@@ -756,8 +777,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
 
 async def _verify_admin(api_key: str = Security(_api_key_header)) -> None:
-    """Reject admin API calls when API_KEY is set but header is missing/wrong."""
-    if not _is_valid_api_key(api_key):
+    """Reject admin API calls without the admin key (see ``_is_valid_admin_key``); no key configured = all rejected."""
+    if not _is_valid_admin_key(api_key):
         raise HTTPException(status_code=401, detail="Admin access denied")
 
 
@@ -781,6 +802,49 @@ async def admin_queries(
     search: str = Query(""),
 ):
     return get_queries(page=page, limit=limit, search=search)
+
+
+@app.get("/admin/traces", include_in_schema=False)
+async def admin_traces_page():
+    # Public HTML like /admin: the data comes from the /admin/api/traces endpoints below.
+    path = os.path.join(os.path.dirname(__file__), "static", "traces.html")
+    return FileResponse(path, media_type="text/html")
+
+
+def _trace_reader() -> traces.PhoenixReader:
+    reader = traces.reader()
+    if reader is None:
+        raise HTTPException(status_code=503, detail="Phoenix no está configurado en este servidor.")
+    return reader
+
+
+def _read_phoenix(call):
+    """Run a PhoenixReader call; Phoenix being down or slow is a 502, not a crash."""
+    try:
+        return call()
+    except httpx.HTTPError as exc:
+        logger.warning("[TRACES] Phoenix no respondió: %s", exc)
+        raise HTTPException(status_code=502, detail="Phoenix no respondió. Intenta de nuevo.") from exc
+
+
+# Sync handlers: the reader blocks on HTTP, so FastAPI runs them in its thread pool.
+@app.get("/admin/api/traces", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+def admin_traces(limit: int = Query(30, ge=1, le=traces.MAX_TRACES)):
+    """Recent queries, newest first, for the run view."""
+    reader = _trace_reader()
+    return {"traces": _read_phoenix(lambda: reader.list_traces(limit))}
+
+
+@app.get("/admin/api/traces/{trace_id}", dependencies=[Depends(_verify_admin)], include_in_schema=False)
+def admin_trace(trace_id: str):
+    """One query with every step of its run."""
+    if not traces.TRACE_ID_RE.fullmatch(trace_id):
+        raise HTTPException(status_code=404, detail="No existe esa consulta.")
+    reader = _trace_reader()
+    trace = _read_phoenix(lambda: reader.get_trace(trace_id))
+    if trace is None:
+        raise HTTPException(status_code=404, detail="No existe esa consulta.")
+    return trace
 
 
 # ---------------------------------------------------------------------------

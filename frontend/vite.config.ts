@@ -26,10 +26,19 @@ export default defineConfig({
   build: {
     outDir: '../backend/static',
     emptyOutDir: false,
+    rolldownOptions: {
+      // Two pages: the public chat, and the admin run view served at /admin/traces.
+      input: {
+        index: resolve(__dirname, 'index.html'),
+        traces: resolve(__dirname, 'traces.html'),
+      },
+    },
   },
   server: {
     proxy: {
       '/api': backendUrl,
+      // The run view (/traces.html in dev) reads /admin/api/traces.
+      '/admin/api': backendUrl,
       '/config': backendUrl,
       '/health': backendUrl,
     },

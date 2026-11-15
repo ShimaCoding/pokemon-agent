@@ -1,0 +1,557 @@
+/* Admin view of one query's run: the agent as a Game Boy dialog frame, each step a card.
+   Pixel font for names only; what you read uses --font-read, numbers --font-mono. */
+
+.page {
+  --tone-agent: var(--gbc-dark);
+  --tone-llm: #7c6fa0;
+  --tone-tool: var(--mcp-tool);
+  --tone-error: #b84a4a;
+  --paper: #f1f1f1;
+
+  height: 100dvh;
+  display: grid;
+  grid-template: 'top top top' auto 'list flow detail' minmax(0, 1fr) / 270px minmax(0, 1fr) 370px;
+  background: var(--gbc-bg);
+  font-family: var(--font-read);
+  color: var(--gbc-dark);
+}
+
+/* ── Top bar ──────────────────────────────────────────────────── */
+
+.top {
+  grid-area: top;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px 9px;
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+  border-bottom: 2px solid var(--gbc-border);
+}
+.top h1 {
+  font-family: var(--font-pixel);
+  font-weight: normal;
+  font-size: 14px;
+}
+.top a {
+  font-size: 13px;
+  color: var(--gbc-light);
+}
+.top a:hover { color: #fff; }
+
+/* ── Recent queries ───────────────────────────────────────────── */
+
+.list {
+  grid-area: list;
+  overflow-y: auto;
+  padding: 16px 12px;
+  background: var(--gbc-light);
+  border-right: 2px solid var(--gbc-border);
+}
+.listHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.listHead h2 { margin-bottom: 0; }
+.list .listHead button {
+  width: auto;
+  padding: 3px 8px;
+  font-size: 12px;
+  border: 2px solid var(--gbc-border);
+  background: var(--gbc-cream);
+}
+.list .listHead button:disabled { opacity: 0.5; }
+
+.list h2,
+.detail h3 {
+  font-family: var(--font-pixel);
+  font-weight: normal;
+  font-size: 11px;
+  color: var(--gbc-border);
+  margin-bottom: 10px;
+}
+.list ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.list li button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  text-align: left;
+  font-family: var(--font-read);
+  background: var(--gbc-cream);
+  border: 2px solid transparent;
+  border-left: 5px solid var(--gbc-mid);
+}
+.list li button:hover { background: var(--paper); }
+.list li button[aria-current='true'] {
+  background: #fff;
+  border-color: var(--gbc-dark);
+  border-left-color: var(--gbc-dark);
+}
+.query {
+  font-size: 14px;
+  line-height: 1.35;
+}
+.listMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--gbc-mid);
+}
+.listMeta:empty { display: none; }
+
+.chip,
+.chipError {
+  font-family: var(--font-read);
+  font-size: 11.5px;
+  line-height: 1.4;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  color: var(--gbc-border);
+}
+.chipError {
+  color: #fff;
+  background: var(--tone-error);
+  border-color: var(--tone-error);
+}
+
+/* ── Flow ─────────────────────────────────────────────────────── */
+
+.flow {
+  grid-area: flow;
+  overflow: auto;
+  padding: 22px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  /* safe: a run wider than the column starts at its left edge instead of being cut off. */
+  align-items: safe center;
+}
+.flow > * { flex-shrink: 0; }
+
+/* What the visitor typed: the chat's "TÚ" bubble, pointing into the run. */
+.asked {
+  position: relative;
+  max-width: 520px;
+  margin-bottom: 26px;
+  padding: 9px 14px;
+  font-size: 15px;
+  line-height: 1.4;
+  background: var(--gbc-dark);
+  color: var(--gbc-cream);
+}
+.asked::after,
+.arrow::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top: 8px solid var(--gbc-border);
+  border-bottom: 0;
+}
+.asked::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1px);
+  bottom: -20px;
+  height: 20px;
+  border-left: 2px solid var(--gbc-border);
+}
+
+/* An agent: a dialog box that holds its steps. */
+.frame {
+  min-width: 320px;
+  background: var(--gbc-cream);
+  border: 3px solid var(--gbc-dark);
+  box-shadow: inset 0 0 0 2px var(--gbc-cream), inset 0 0 0 4px var(--gbc-light);
+}
+.frame .frame { background: #dedede; }
+.frame[data-error='true'] { border-color: var(--tone-error); }
+.frame[data-selected='true'] { box-shadow: inset 0 0 0 2px var(--gbc-cream), inset 0 0 0 4px var(--gbc-light), 5px 5px 0 var(--gbc-dark); }
+
+.frameHead {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 13px 16px 10px;
+  text-align: left;
+  border-bottom: 2px dotted var(--gbc-mid);
+}
+.frameHead:hover { background: rgba(255, 255, 255, 0.4); }
+.frameName {
+  font-family: var(--font-pixel);
+  font-size: 15px;
+}
+.frameMeta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gbc-mid);
+  margin-right: auto;
+}
+.frameHead .bar { flex-basis: 100%; }
+
+.rows {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 16px 18px;
+}
+.row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Between two steps: the next one started after this one ended. */
+.arrow {
+  position: relative;
+  height: 26px;
+  border-left: 2px solid var(--gbc-border);
+}
+.arrow::after { bottom: 0; }
+
+.branches {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+.branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tail { display: none; }
+
+/* Steps that ran at the same time fork from one line… */
+.row[data-parallel='true'] > .arrow { height: 26px; }
+.row[data-parallel='true'] > .arrow::after { display: none; }
+.row[data-parallel='true'] > .branches { gap: 0; }
+.row[data-parallel='true'] > .branches > .branch {
+  position: relative;
+  padding: 20px 8px 0;
+}
+.row[data-parallel='true'] > .branches > .branch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-top: 2px solid var(--gbc-border);
+}
+.row[data-parallel='true'] > .branches > .branch:first-child::before { left: 50%; }
+.row[data-parallel='true'] > .branches > .branch:last-child::before { right: 50%; }
+.row[data-parallel='true'] > .branches > .branch::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1px);
+  height: 20px;
+  border-left: 2px solid var(--gbc-border);
+}
+
+/* …and join again before the next step: the shorter branch's line runs down to the join. */
+.row[data-parallel='true'] > .branches[data-joins='true'] > .branch > .tail {
+  display: block;
+  flex: 1;
+  min-height: 16px;
+  border-left: 2px solid var(--gbc-border);
+}
+.row[data-parallel='true'] > .branches[data-joins='true'] > .branch {
+  background: linear-gradient(var(--gbc-border), var(--gbc-border)) bottom / 100% 2px no-repeat;
+}
+.row[data-parallel='true'] > .branches[data-joins='true'] > .branch:first-child {
+  background-position: bottom right;
+  background-size: 50% 2px;
+}
+.row[data-parallel='true'] > .branches[data-joins='true'] > .branch:last-child {
+  background-position: bottom left;
+  background-size: 50% 2px;
+}
+.parallelNote {
+  position: absolute;
+  top: 8px;
+  left: calc(50% + 10px);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--gbc-mid);
+  white-space: nowrap;
+}
+
+/* A model call or a tool call. */
+.card {
+  --tone: var(--tone-agent);
+  width: 264px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 12px 10px;
+  text-align: left;
+  font-family: var(--font-read);
+  background: var(--paper);
+  border: 2px solid var(--gbc-border);
+  border-left: 7px solid var(--tone);
+}
+.card[data-kind='llm'] { --tone: var(--tone-llm); }
+.card[data-kind='tool'] { --tone: var(--tone-tool); }
+.card[data-error='true'] {
+  --tone: var(--tone-error);
+  border-color: var(--tone-error);
+}
+.card:hover { background: #fff; }
+.card[aria-pressed='true'] {
+  background: #fff;
+  box-shadow: 5px 5px 0 var(--gbc-dark);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.kind {
+  font-size: 12px;
+  color: var(--tone, var(--gbc-mid));
+}
+.duration {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.name {
+  font-family: var(--font-pixel);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.summary {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--gbc-border);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.card[data-kind='tool'] .summary {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.card[data-error='true'] .summary { color: var(--tone-error); }
+
+.cardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--gbc-mid);
+}
+
+/* When the step ran within the query, like a battle HP bar: the track is the whole query. */
+.bar {
+  position: relative;
+  display: block;
+  height: 9px;
+  margin-top: 2px;
+  background: var(--gbc-light);
+  border: 2px solid var(--gbc-border);
+}
+.barFill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--tone, var(--gbc-dark));
+}
+.frameHead .barFill { background: var(--gbc-dark); }
+.frame[data-error='true'] > .frameHead .barFill { background: var(--tone-error); }
+
+/* ── Detail ───────────────────────────────────────────────────── */
+
+.detail {
+  --tone: var(--tone-agent);
+  grid-area: detail;
+  overflow-y: auto;
+  padding: 18px 18px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--gbc-cream);
+  border-left: 2px solid var(--gbc-border);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.detail[data-kind='llm'] { --tone: var(--tone-llm); }
+.detail[data-kind='tool'] { --tone: var(--tone-tool); }
+
+.detailHead {
+  padding-left: 10px;
+  border-left: 7px solid var(--tone);
+}
+.detailHead h2 {
+  font-family: var(--font-pixel);
+  font-weight: normal;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.errorBox {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #fff;
+  background: var(--tone-error);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px 12px;
+}
+.facts dt {
+  font-size: 12px;
+  color: var(--gbc-mid);
+}
+.facts dd {
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--gbc-light);
+}
+.text + .text { margin-top: 6px; }
+
+.messages {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.messages li {
+  padding: 6px 10px 8px;
+  background: #fff;
+  border: 1px solid var(--gbc-light);
+  border-left: 4px solid var(--gbc-mid);
+}
+.messages li[data-role='user'] { border-left-color: var(--gbc-dark); }
+.messages li[data-role='tool'] { border-left-color: var(--tone-tool); }
+.messages p {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.role {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--gbc-mid);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.links:empty { display: none; }
+.links a,
+.login button,
+.listHead button {
+  padding: 7px 12px;
+  font-family: var(--font-read);
+  font-size: 13px;
+  color: var(--gbc-dark);
+  border: 2px solid var(--gbc-dark);
+  text-decoration: none;
+  background: var(--paper);
+}
+.links a:hover,
+.login button:hover,
+.listHead button:hover:not(:disabled) { background: #fff; box-shadow: 3px 3px 0 var(--gbc-dark); }
+
+/* ── Loading, empty and error notes ───────────────────────────── */
+
+.note,
+.noteError {
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--gbc-border);
+}
+.noteError {
+  padding: 8px 10px;
+  color: #fff;
+  background: var(--tone-error);
+}
+
+/* ── Login (same key as the admin panel) ──────────────────────── */
+
+.gate {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(320px, 100%);
+  padding: 20px;
+  background: var(--gbc-cream);
+  border: 3px solid var(--gbc-dark);
+  box-shadow: inset 0 0 0 2px var(--gbc-cream), inset 0 0 0 4px var(--gbc-light);
+}
+.login label { font-size: 14px; }
+.login input {
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  border: 2px solid var(--gbc-border);
+  background: #fff;
+}
+.login button { align-self: flex-start; }
+
+/* ── Narrow screens: the detail drops under the flow, then everything stacks ── */
+
+@media (max-width: 1180px) {
+  .page {
+    grid-template: 'top top' auto 'list flow' minmax(0, 3fr) 'list detail' minmax(0, 2fr) / 260px minmax(0, 1fr);
+  }
+  .detail { border-left: none; border-top: 2px solid var(--gbc-border); }
+}
+
+@media (max-width: 720px) {
+  .page {
+    height: auto;
+    min-height: 100dvh;
+    display: block;
+    overflow-y: auto;
+    max-height: 100dvh;
+  }
+  .list { border-right: none; border-bottom: 2px solid var(--gbc-border); max-height: 40dvh; }
+  .flow { align-items: flex-start; }
+}
