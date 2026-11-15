@@ -1049,8 +1049,107 @@ def test_strands_sub_agent_failure_marks_its_span(px, scripted_model):
     asyncio.run(run())
     spans = _by_name(exporter)
     assert spans["researcher"].status.status_code == StatusCode.ERROR
+    assert spans["researcher"].status.description == "RuntimeError: groq down"
+    assert spans["researcher"].events[0].name == "exception"
     assert spans["dexter"].status.status_code == StatusCode.UNSET
     assert "output.value" not in spans["researcher"].attributes
+
+
+def test_strands_structured_output_without_a_result_is_not_an_error(px, scripted_model, monkeypatch):
+    """Agent.structured_output fires AfterInvocationEvent with result=None on success too."""
+    from pydantic import BaseModel
+    from strands import Agent
+    from strands.models.litellm import LiteLLMModel
+
+    class Weight(BaseModel):
+        kg: float
+
+    outcome: dict = {}
+
+    async def fake_structured_output(self, output_model, prompt, system_prompt=None, **kwargs):
+        if "error" in outcome:
+            raise outcome["error"]
+        yield {"output": output_model(kg=4.0)}
+
+    monkeypatch.setattr(LiteLLMModel, "structured_output", fake_structured_output)
+    _, exporter, _ = px
+    researcher = Agent(
+        name="researcher",
+        model=scripted_model("researcher", lambda messages: _reply("unused")),
+        system_prompt="researcher",
+        hooks=[telemetry.SubAgentTrace()],
+        callback_handler=None,
+    )
+
+    async def run():
+        with telemetry.agent_span("conv-12345678"):
+            with pytest.warns(DeprecationWarning):
+                assert (await researcher.structured_output_async(Weight, "¿cuánto pesa mew?")).kg == 4.0
+            outcome["error"] = RuntimeError("groq down")
+            with pytest.warns(DeprecationWarning), pytest.raises(RuntimeError):
+                await researcher.structured_output_async(Weight, "¿cuánto pesa mew?")
+
+    asyncio.run(run())
+    ok, failed = [s for s in exporter.get_finished_spans() if s.name == "researcher"]
+    assert ok.status.status_code == StatusCode.UNSET
+    assert failed.status.status_code == StatusCode.ERROR
+    assert _by_name(exporter)["dexter"].status.status_code == StatusCode.UNSET
+
+
+def _invocation(result=None):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(agent=SimpleNamespace(name="researcher"), messages=[], result=result)
+
+
+def _run_hook(px, body) -> StatusCode:
+    """Run ``body(hook)`` under a root agent and return the status of the sub-agent span."""
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        body(telemetry.SubAgentTrace())
+    return _by_name(exporter)["researcher"].status.status_code
+
+
+def test_sub_agent_trace_no_result_alone_is_not_an_error(px):
+    # A run a hook denied: no result, nothing raised.
+    def denied(hook):
+        hook._on_start(_invocation())
+        hook._on_end(_invocation())
+
+    assert _run_hook(px, denied) == StatusCode.UNSET
+
+
+@pytest.mark.parametrize(
+    "exc,expected",
+    [
+        (ValueError("pokeapi down"), StatusCode.ERROR),
+        (asyncio.CancelledError(), StatusCode.UNSET),
+        (GeneratorExit(), StatusCode.UNSET),
+    ],
+)
+def test_sub_agent_trace_marks_what_the_run_raised(px, exc, expected):
+    # Strands fires the After event from a ``finally``, while the exception propagates.
+    def raising(hook):
+        with pytest.raises(type(exc)):
+            hook._on_start(_invocation())
+            try:
+                raise exc
+            finally:
+                hook._on_end(_invocation())
+
+    assert _run_hook(px, raising) == expected
+
+
+def test_sub_agent_trace_ignores_the_exception_its_caller_is_handling(px):
+    # A caller that retries inside ``except``: that exception is not this run's.
+    def retry(hook):
+        try:
+            raise ValueError("first attempt")
+        except ValueError:
+            hook._on_start(_invocation())
+            hook._on_end(_invocation())
+
+    assert _run_hook(px, retry) == StatusCode.UNSET
 
 
 def test_strands_graph_runs_parallel_agents_under_the_root(px, scripted_model):

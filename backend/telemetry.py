@@ -44,6 +44,7 @@ Spans carry ``env`` (``DD_ENV``, default ``local``; docker-compose.yml pins
 import asyncio
 import logging
 import os
+import sys
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -360,11 +361,19 @@ class SubAgentTrace:
     name) and put this hook first, so the span opens before the other hooks run and
     closes after them (After callbacks run in reverse order).
 
+    The span is an error when the run raised. Strands fires the After event while that
+    exception propagates and gives it no result, but no result alone is not a failure:
+    ``Agent.structured_output`` and a run a hook denied have none either. A stopped run
+    (cancelled task, closed stream) is not an error, like a client disconnect on the root.
+
     One span per instance at a time: Strands does not run one Agent concurrently.
     """
 
     def __init__(self) -> None:
         self._span: Any = None
+        # The exception already being handled when the run started (a caller retrying inside
+        # an ``except``): still visible at the end, and not this run's failure.
+        self._ambient: BaseException | None = None
 
     def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import AfterInvocationEvent, BeforeInvocationEvent
@@ -373,6 +382,7 @@ class SubAgentTrace:
         registry.add_callback(AfterInvocationEvent, self._on_end)
 
     def _on_start(self, event) -> None:
+        self._ambient = sys.exc_info()[1]
         self._span = start_sub_agent_span(event.agent.name)
         if self._span is None:
             return
@@ -384,20 +394,22 @@ class SubAgentTrace:
 
     def _on_end(self, event) -> None:
         span, self._span = self._span, None
+        ambient, self._ambient = self._ambient, None
         if span is None:
             return
+        raised = sys.exc_info()[1]
         result = event.result
         output, metrics = None, None
         try:
+            if raised is not None and raised is not ambient and not isinstance(raised, _CLIENT_GONE):
+                _set_error(span, raised)
             if result is not None:
                 output = str(result).strip() or None
                 usage = result.metrics.accumulated_usage or {}
                 metrics = {name: usage[key] for key, name in _USAGE_METRICS.items() if key in usage} or None
         except Exception as exc:  # noqa: BLE001 — telemetry must never break a request
             logger.warning("[TELEMETRY] SubAgentTrace falló: %s", exc)
-        # No result: the run raised, was cancelled or a hook denied it. Sub-agent spans feed
-        # no monitor, so the approximation is fine.
-        finish_sub_agent_span(span, output_data=output, metrics=metrics, error=result is None)
+        finish_sub_agent_span(span, output_data=output, metrics=metrics)
 
 
 def record_failed_request(session_id: str, exc: BaseException, *, input_data: Any = None) -> None:

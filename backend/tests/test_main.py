@@ -345,7 +345,7 @@ def fake_run(monkeypatch):
     monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: _FakeAgent(kw["hooks"]))
     monkeypatch.setattr(main, "log_query", lambda **kw: None)
     monkeypatch.setattr(main, "feedback_registry", FeedbackRegistry())
-    monkeypatch.setattr(telemetry, "agent_span", lambda session_id: nullcontext(object()))
+    monkeypatch.setattr(telemetry, "agent_span", lambda session_id, **kw: nullcontext(object()))
     monkeypatch.setattr(telemetry, "annotate", lambda span, **kw: None)
     monkeypatch.setattr(telemetry, "export_ids", lambda span: dict(IDS))
     submitted = []
