@@ -298,17 +298,25 @@ class RetryMalformedToolCalls:
         event.retry = True
 
 
-def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRouter:
+def build_model(
+    authenticated: bool, trace: TraceSink | None = None, *, models: list[str] | None = None
+) -> ModelRouter:
     """Build a ModelRouter over the Groq models allowed for this request.
 
     A fresh router and fresh model instances per request keep the trace sink
     request-scoped; model health across requests lives in CooldownFallbackStrategy.
 
+    ``models`` is an explicit list, preferred model first, for an agent that does not
+    use the request's (a sub-agent with its own order); ``authenticated`` is then ignored.
+
     Raises:
         RuntimeError: If GROQ_API_KEY is not set.
+        ValueError: If ``models`` is an empty list.
     """
     if not groq_configured():
         raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    if models is not None and not models:
+        raise ValueError("models must name at least one model")
     # Candidate name = model id: CooldownFallbackStrategy keys its process-wide table on it.
     return ModelRouter(
         [
@@ -316,7 +324,7 @@ def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRou
                 model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
                 name=m,
             )
-            for m in model_ids(authenticated)
+            for m in (models if models is not None else model_ids(authenticated))
         ],
         strategy=CooldownFallbackStrategy(),
     )

@@ -47,6 +47,19 @@ def test_build_model_candidates(monkeypatch, authenticated, expected):
     assert [c.model.get_config()["model_id"] for c in router.candidates] == expected
 
 
+def test_build_model_takes_an_explicit_model_list(monkeypatch):
+    # A sub-agent with its own order: small model first, the large one as fallback.
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    order = list(reversed(MODELS_AUTHENTICATED))
+    for authenticated in (False, True):
+        router = build_model(authenticated, models=order)
+        assert [c.model.get_config()["model_id"] for c in router.candidates] == order
+        assert [c.name for c in router.candidates] == order  # the cooldown table keys on the name
+    assert len(build_model(False, models=order[:1]).candidates) == 1
+    with pytest.raises(ValueError):
+        build_model(False, models=[])
+
+
 def _collect(model, messages):
     async def run():
         return [e async for e in model.stream(messages)]
