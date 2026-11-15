@@ -6,8 +6,11 @@ Enabled by ``PHOENIX_COLLECTOR_ENDPOINT`` (the Phoenix base URL, e.g.
 ``http://mcpokedex-phoenix:6006``), authenticated with ``PHOENIX_API_KEY``. Traces go
 to the project ``PHOENIX_PROJECT_NAME`` (default ``mcpokedex-<env>``).
 
-Same tree as Datadog: agent "dexter" → {llm, tool}, emitted by hand from the same
-call sites. Strands' native OTel export was evaluated (2026-11): its token counts are
+Same tree as Datadog: agent "dexter" → {llm, tool, sub-agent → {llm, tool, …}},
+emitted by hand from the same call sites. Agent spans carry ``agent.name`` and
+``graph.node.id`` / ``graph.node.name`` (the agent's name: stable across traces, so
+Grafana and Arize AX can aggregate per agent); a sub-agent also carries
+``graph.node.parent_id``, the name of the agent it runs under. Strands' native OTel export was evaluated (2026-11): its token counts are
 right, but it also exports HTTP/MCP/event-loop spans, roots the trace at the HTTP
 span, puts token counts on its agent span (Phoenix would add them twice in the
 cumulative counts the token monitor reads) and knows nothing of sessions, setup
@@ -16,9 +19,9 @@ failures or feedback ids.
 The tracer provider is private, not the global one: Strands and FastAPI emit their
 own OTel spans to the global provider and those must not reach Phoenix.
 
-The agent span is never attached to the OTel context: it wraps the SSE async
-generator, which may be closed from another context, where detaching fails. Children
-find it through a ContextVar and take it as explicit parent.
+Nothing here is attached to the OTel context: the agent span wraps the SSE async
+generator, which may be closed from another context, where detaching fails. Every
+span takes its parent explicitly; ``backend/telemetry.py`` tracks which agent is open.
 """
 
 import json
@@ -26,7 +29,6 @@ import logging
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -75,11 +77,9 @@ class Span:
     otel: Any
     kind: str
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-# The open agent span of this request (set in the SSE generator's context).
-_current_agent: ContextVar[Span | None] = ContextVar("phoenix_agent_span", default=None)
-_current_session: ContextVar[str | None] = ContextVar("phoenix_session_id", default=None)
+    name: str = ""
+    # Set on the root agent, inherited by everything under it.
+    session_id: str | None = None
 
 
 def _dumps(value: Any) -> str:
@@ -169,35 +169,48 @@ class PhoenixBackend:
 
     # -- spans ---------------------------------------------------------------
 
-    def _start(self, name: str, kind: str, parent: Span | None, attributes: dict[str, Any]) -> Span:
+    def _start(
+        self, name: str, kind: str, parent: Span | None, attributes: dict[str, Any], session_id: str | None = None
+    ) -> Span:
         # A fresh Context for roots: the current one may hold a FastAPI/Strands span of the
         # global provider, which never reaches Phoenix and would leave the agent span orphaned.
         context = trace.set_span_in_context(parent.otel) if parent else Context()
-        session_id = _current_session.get()
+        session_id = parent.session_id if parent else session_id
         attrs = {SpanAttributes.OPENINFERENCE_SPAN_KIND: kind, **attributes}
         if session_id:
             attrs[SpanAttributes.SESSION_ID] = session_id
-        span = Span(self._tracer.start_span(name, context=context, attributes=attrs), kind, dict(self._base_metadata))
+        span = Span(
+            self._tracer.start_span(name, context=context, attributes=attrs),
+            kind,
+            dict(self._base_metadata),
+            name=name,
+            session_id=session_id,
+        )
         span.otel.set_attribute(SpanAttributes.METADATA, _dumps(span.metadata))
         return span
 
-    def start_agent(self, session_id: str) -> Span:
-        _current_session.set(session_id)
-        span = self._start("dexter", AGENT, None, {})
-        _current_agent.set(span)
-        return span
+    def start_agent(self, name: str, *, session_id: str | None = None, parent: Span | None = None) -> Span:
+        """Root agent span of a request, or a sub-agent under ``parent`` (another agent span)."""
+        attributes = {
+            SpanAttributes.AGENT_NAME: name,
+            SpanAttributes.GRAPH_NODE_ID: name,
+            SpanAttributes.GRAPH_NODE_NAME: name,
+        }
+        if parent is not None:
+            attributes[SpanAttributes.GRAPH_NODE_PARENT_ID] = parent.name
+        return self._start(name, AGENT, parent, attributes, session_id)
 
-    def start_llm(self, model_id: str) -> Span:
+    def start_llm(self, model_id: str, parent: Span | None = None) -> Span:
         provider, _, model = model_id.partition("/")
         return self._start(
             "chat",
             LLM,
-            _current_agent.get(),
+            parent,
             {SpanAttributes.LLM_MODEL_NAME: model, SpanAttributes.LLM_PROVIDER: _PROVIDERS.get(provider, provider)},
         )
 
-    def start_tool(self, name: str) -> Span:
-        return self._start(name, TOOL, _current_agent.get(), {SpanAttributes.TOOL_NAME: name})
+    def start_tool(self, name: str, parent: Span | None = None) -> Span:
+        return self._start(name, TOOL, parent, {SpanAttributes.TOOL_NAME: name})
 
     def annotate(
         self,
@@ -243,9 +256,6 @@ class PhoenixBackend:
         if error:
             span.otel.set_status(Status(StatusCode.ERROR))
         span.otel.end()
-        if span.kind == AGENT and _current_agent.get() is span:
-            _current_agent.set(None)
-            _current_session.set(None)
 
     # -- ids, evals and feedback ---------------------------------------------
 

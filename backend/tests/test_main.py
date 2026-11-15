@@ -195,6 +195,35 @@ def test_unknown_tool_result_passes_through():
     assert events[1]["result"] == "tabla"
 
 
+def test_agent_used_as_a_tool_gets_no_tool_span(monkeypatch):
+    # Its own agent span (telemetry.SubAgentTrace) stands for the call; the SSE events stay.
+    from backend import telemetry
+
+    started: list[str] = []
+    finished: list[object] = []
+    monkeypatch.setattr(telemetry, "start_tool_span", lambda name: started.append(name) or name)
+    monkeypatch.setattr(telemetry, "finish_tool_span", lambda span, **kw: finished.append(span))
+
+    events: list[dict] = []
+    trace = main._ToolTrace(events.append)
+    result = {"status": "success", "content": [{"text": "Mew pesa 4 kg."}]}
+    for uid, name, tool_type in (("tu-1", "researcher", "agent"), ("tu-2", "search_pokemon", "python")):
+        tool_use = {"toolUseId": uid, "name": name, "input": {"input": "mew"}}
+        selected = SimpleNamespace(tool_type=tool_type)
+        trace._on_call(SimpleNamespace(tool_use=tool_use, selected_tool=selected))
+        trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=selected))
+
+    assert started == ["search_pokemon"]
+    assert finished == [None, "search_pokemon"]
+    assert [(e["type"], e["tool"]) for e in events] == [
+        ("tool_call", "researcher"),
+        ("tool_result", "researcher"),
+        ("tool_call", "search_pokemon"),
+        ("tool_result", "search_pokemon"),
+    ]
+    assert trace.names == ["researcher", "search_pokemon"]
+
+
 # --- /api/agent/run turn counter ----------------------------------------------------
 
 
@@ -316,7 +345,7 @@ def fake_run(monkeypatch):
     monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: _FakeAgent(kw["hooks"]))
     monkeypatch.setattr(main, "log_query", lambda **kw: None)
     monkeypatch.setattr(main, "feedback_registry", FeedbackRegistry())
-    monkeypatch.setattr(telemetry, "agent_span", lambda session_id: nullcontext(object()))
+    monkeypatch.setattr(telemetry, "agent_span", lambda session_id, **kw: nullcontext(object()))
     monkeypatch.setattr(telemetry, "annotate", lambda span, **kw: None)
     monkeypatch.setattr(telemetry, "export_ids", lambda span: dict(IDS))
     submitted = []

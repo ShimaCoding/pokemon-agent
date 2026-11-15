@@ -32,6 +32,8 @@ def reset(monkeypatch):
         # setenv first so monkeypatch also undoes what setup_telemetry writes.
         monkeypatch.setenv(name, "")
         monkeypatch.delenv(name)
+    yield
+    telemetry._current_agent.set(None)
 
 
 def test_disabled_without_key():
@@ -113,7 +115,8 @@ def test_no_version_leaves_config_untouched(monkeypatch, enable_calls):
 class FakeSpan:
     """Stands in for the ddtrace Span so nothing is sent; records what the error monitor would see."""
 
-    def __init__(self):
+    def __init__(self, **kw):
+        self.kw = kw
         self.error, self.exc, self.finished = 0, None, False
 
     def set_exc_info(self, exc_type, exc_val, exc_tb):
@@ -131,7 +134,7 @@ def fake_llmobs(monkeypatch):
     notes: list[dict] = []
 
     def agent(**kw):
-        spans.append(FakeSpan())
+        spans.append(FakeSpan(**kw))
         return spans[-1]
 
     monkeypatch.setattr(telemetry, "_dd_enabled", True)
@@ -164,7 +167,10 @@ def test_agent_span_ignores_client_disconnect(fake_llmobs, exc_type):
         with telemetry.agent_span("conv-12345678"):
             raise exc_type()
     assert (spans[0].error, spans[0].finished) == (0, True)
-    assert notes == [{"span": spans[0], "tags": {"client_disconnected": "true"}}]
+    assert notes == [
+        {"span": spans[0], "tags": {"agent_level": "root"}},
+        {"span": spans[0], "tags": {"client_disconnected": "true"}},
+    ]
 
 
 def test_agent_span_ignores_aclose(fake_llmobs):
@@ -193,7 +199,10 @@ def test_record_failed_request(fake_llmobs):
         telemetry.record_failed_request("conv-12345678", exc, input_data="hola")
     [span] = spans
     assert (span.error, span.exc, span.finished) == (1, RuntimeError, True)
-    assert notes == [{"span": span, "input_data": "hola", "tags": {"failure_stage": "setup"}}]
+    assert notes == [
+        {"span": span, "tags": {"agent_level": "root"}},
+        {"span": span, "input_data": "hola", "tags": {"failure_stage": "setup"}},
+    ]
 
 
 def test_record_failed_request_noop_when_disabled(fake_llmobs, monkeypatch):
@@ -475,7 +484,7 @@ def test_phoenix_trace_tree(px):
     assert (a.attributes["input.value"], a.attributes["output.value"]) == ("pikachu", "¡Pikachu!")
     assert a.resource.attributes["openinference.project.name"] == "mcpokedex-test"
     assert all(s.status.status_code == StatusCode.UNSET for s in (a, l, t))
-    assert telemetry_phoenix._current_agent.get() is None
+    assert telemetry._current_agent.get() is None
 
 
 def test_phoenix_root_ignores_foreign_otel_context(px):
@@ -636,3 +645,559 @@ def test_phoenix_annotation_errors_are_swallowed(px):
         ids = telemetry.export_ids(agent)
     telemetry.submit_feedback(ids, value="up", submitter_id="conv-12345678")
     assert re.fullmatch(r"[0-9a-f]{32}", ids["trace_id"])
+
+
+# ---------------------------------------------------------------------------
+# Multi-agent: sub-agent spans nest under the agent open in the current context
+# ---------------------------------------------------------------------------
+
+import contextvars  # noqa: E402
+
+MODEL = "groq/openai/gpt-oss-20b"
+
+
+def _tree(exporter) -> dict[str, list[str]]:
+    """Span name → names of its children in start order; the root is under ``None``."""
+    spans = sorted(exporter.get_finished_spans(), key=lambda s: s.start_time)
+    names = {s.context.span_id: s.name for s in spans}
+    tree: dict = {}
+    for s in spans:
+        tree.setdefault(names[s.parent.span_id] if s.parent else None, []).append(s.name)
+    return tree
+
+
+def _parent_name(exporter, span) -> str | None:
+    names = {s.context.span_id: s.name for s in exporter.get_finished_spans()}
+    return names[span.parent.span_id] if span.parent else None
+
+
+def test_sub_agent_nests_under_the_open_agent(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678") as root:
+        with telemetry.llm_span(MODEL):
+            pass
+        with telemetry.sub_agent_span("researcher") as sub:
+            assert telemetry._current_agent.get() is sub
+            with telemetry.llm_span(MODEL):
+                pass
+            telemetry.finish_tool_span(telemetry.start_tool_span("search_pokemon"), input_data={}, output_data="ok")
+        assert telemetry._current_agent.get() is root
+        telemetry.finish_tool_span(telemetry.start_tool_span("get_pokedex_entry"), input_data={}, output_data="ok")
+    assert telemetry._current_agent.get() is None
+
+    assert _tree(exporter) == {
+        None: ["dexter"],
+        "dexter": ["chat", "researcher", "get_pokedex_entry"],
+        "researcher": ["chat", "search_pokemon"],
+    }
+    spans = exporter.get_finished_spans()
+    assert len({s.context.trace_id for s in spans}) == 1
+    assert {s.attributes["session.id"] for s in spans} == {"conv-12345678"}
+
+
+def test_agent_spans_carry_graph_attributes(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        with telemetry.sub_agent_span("researcher") as sub:
+            with telemetry.llm_span(MODEL) as llm:
+                telemetry.annotate(llm, metrics={"total_tokens": 7})
+            telemetry.finish_tool_span(telemetry.start_tool_span("search_pokemon"), input_data={}, output_data="ok")
+            telemetry.annotate(sub, input_data="busca a mew", output_data="MEW", metrics={"total_tokens": 7})
+
+    spans = _by_name(exporter)
+    root, sub = spans["dexter"], spans["researcher"]
+    for span, name in ((root, "dexter"), (sub, "researcher")):
+        assert span.attributes["openinference.span.kind"] == "AGENT"
+        assert span.attributes["agent.name"] == span.attributes["graph.node.id"] == name
+        assert span.attributes["graph.node.name"] == name
+        # Tokens stay on the llm spans: Phoenix sums each agent's subtree itself.
+        assert not [k for k in span.attributes if k.startswith("llm.token_count")]
+    assert "graph.node.parent_id" not in root.attributes
+    assert sub.attributes["graph.node.parent_id"] == "dexter"
+    assert (_metadata(root)["agent_level"], _metadata(sub)["agent_level"]) == ("root", "sub")
+    assert _metadata(sub)["total_tokens"] == 7
+    assert (sub.attributes["input.value"], sub.attributes["output.value"]) == ("busca a mew", "MEW")
+    for span in (spans["chat"], spans["search_pokemon"]):
+        assert not [k for k in span.attributes if k.startswith(("graph.", "agent."))]
+        assert "agent_level" not in _metadata(span)
+
+
+def test_root_agent_name_is_configurable(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678", name="orquestador"):
+        with telemetry.sub_agent_span("researcher"):
+            pass
+    spans = _by_name(exporter)
+    assert spans["orquestador"].attributes["agent.name"] == "orquestador"
+    assert spans["researcher"].attributes["graph.node.parent_id"] == "orquestador"
+    assert telemetry.DEFAULT_AGENT_NAME == "dexter"
+
+
+def test_sub_agents_nest_two_levels_deep(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        with telemetry.sub_agent_span("planner"):
+            with telemetry.sub_agent_span("researcher"):
+                with telemetry.llm_span(MODEL):
+                    pass
+            with telemetry.llm_span(MODEL):
+                pass
+    assert _tree(exporter) == {
+        None: ["dexter"],
+        "dexter": ["planner"],
+        "planner": ["researcher", "chat"],
+        "researcher": ["chat"],
+    }
+    assert _by_name(exporter)["researcher"].attributes["graph.node.parent_id"] == "planner"
+
+
+def test_parallel_sub_agents_keep_their_own_children(px):
+    """Graph nodes and concurrent tools run as asyncio tasks: each has its own copy of the context."""
+    _, exporter, _ = px
+
+    async def node(name: str, tool: str, started: asyncio.Event, other: asyncio.Event):
+        with telemetry.sub_agent_span(name):
+            started.set()
+            await other.wait()  # both sub-agents are open before either starts a child
+            telemetry.finish_tool_span(telemetry.start_tool_span(tool), input_data={}, output_data="ok")
+
+    async def main():
+        a, b = asyncio.Event(), asyncio.Event()
+        with telemetry.agent_span("conv-12345678") as root:
+            await asyncio.gather(node("alpha", "tool_a", a, b), node("beta", "tool_b", b, a))
+            assert telemetry._current_agent.get() is root
+            with telemetry.llm_span(MODEL):
+                pass
+
+    asyncio.run(main())
+    tree = _tree(exporter)
+    assert sorted(tree["dexter"][:2]) == ["alpha", "beta"] and tree["dexter"][2] == "chat"
+    assert (tree["alpha"], tree["beta"]) == (["tool_a"], ["tool_b"])
+
+
+def test_threads_that_copy_the_context_keep_the_agent(px):
+    _, exporter, _ = px
+
+    def blocking_model_call():
+        with telemetry.llm_span(MODEL):
+            pass
+
+    async def main():
+        with telemetry.agent_span("conv-12345678"):
+            with telemetry.sub_agent_span("researcher"):
+                await asyncio.to_thread(blocking_model_call)
+
+    asyncio.run(main())
+    assert _tree(exporter)["researcher"] == ["chat"]
+
+
+def test_sub_agent_closed_from_another_context(px):
+    """Like the SSE generator closed by Starlette: the context that opened the span never resets it."""
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678") as root:
+        sub = telemetry.start_sub_agent_span("researcher")
+        contextvars.copy_context().run(telemetry.finish_sub_agent_span, sub)
+        assert telemetry._current_agent.get() is sub  # stale here, skipped by _open_agent
+        with telemetry.llm_span(MODEL):
+            pass
+        with telemetry.sub_agent_span("writer"):
+            pass
+        assert telemetry._current_agent.get() is root
+    assert telemetry._current_agent.get() is None
+    assert _tree(exporter) == {None: ["dexter"], "dexter": ["researcher", "chat", "writer"]}
+    assert _by_name(exporter)["writer"].attributes["graph.node.parent_id"] == "dexter"
+
+
+def test_root_closed_from_another_context_leaves_no_agent_open(px):
+    _, exporter, _ = px
+
+    def close(cm):
+        cm.__exit__(None, None, None)
+
+    cm = telemetry.agent_span("conv-12345678")
+    cm.__enter__()
+    contextvars.copy_context().run(close, cm)
+    assert telemetry.start_sub_agent_span("researcher") is None
+    telemetry.finish_tool_span(telemetry.start_tool_span("search_pokemon"), input_data={}, output_data="ok")
+    assert _by_name(exporter)["search_pokemon"].parent is None
+
+
+def test_sub_agent_without_an_open_agent_has_no_span(px):
+    _, exporter, _ = px
+    assert telemetry.start_sub_agent_span("researcher") is None
+    telemetry.finish_sub_agent_span(None, output_data="x")
+    with telemetry.sub_agent_span("researcher") as sub:
+        assert sub is None
+    with telemetry.agent_span("conv-12345678"):
+        pass
+    assert telemetry.start_sub_agent_span("researcher") is None  # the request is over
+    assert [s.name for s in exporter.get_finished_spans()] == ["dexter"]
+
+
+def test_sub_agent_helpers_are_noops_when_disabled():
+    assert telemetry.start_sub_agent_span("researcher") is None
+    with telemetry.sub_agent_span("researcher") as sub:
+        assert sub is None
+    assert telemetry._current_agent.get() is None
+
+
+def test_sub_agent_error_marks_only_the_sub_agent(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        with pytest.raises(ValueError):
+            with telemetry.sub_agent_span("researcher"):
+                raise ValueError("pokeapi down")
+        with pytest.raises(asyncio.CancelledError):
+            with telemetry.sub_agent_span("writer"):
+                raise asyncio.CancelledError()
+        failed = telemetry.start_sub_agent_span("critic")
+        telemetry.finish_sub_agent_span(failed, error=True)
+    spans = _by_name(exporter)
+    assert spans["researcher"].status.status_code == StatusCode.ERROR
+    assert spans["researcher"].events[0].name == "exception"
+    assert spans["critic"].status.status_code == StatusCode.ERROR
+    assert spans["writer"].status.status_code == StatusCode.UNSET
+    assert spans["dexter"].status.status_code == StatusCode.UNSET  # it handled the failures
+
+
+def test_sub_agent_error_that_propagates_marks_the_root_too(px):
+    _, exporter, _ = px
+    with pytest.raises(ValueError):
+        with telemetry.agent_span("conv-12345678"):
+            with telemetry.sub_agent_span("researcher"):
+                raise ValueError("pokeapi down")
+    spans = _by_name(exporter)
+    assert {spans[n].status.status_code for n in ("dexter", "researcher")} == {StatusCode.ERROR}
+    assert telemetry._current_agent.get() is None
+
+
+def test_ids_evals_and_feedback_stay_on_the_root_agent(px):
+    from backend.evals.checks import EvalResult
+
+    _, exporter, posts = px
+    with telemetry.agent_span("conv-12345678") as root:
+        with telemetry.sub_agent_span("researcher"):
+            ids = telemetry.export_ids(root)
+    telemetry.submit_evaluations(ids, [EvalResult("grounded_facts", True, "ok", {})])
+    telemetry.submit_feedback(ids, value="up", submitter_id="conv-12345678")
+
+    root_hex = format(_by_name(exporter)["dexter"].context.span_id, "016x")
+    assert format(int(ids["span_id"]), "016x") == root_hex
+    assert [json.loads(p.content)["data"][0]["span_id"] for p in posts] == [root_hex, root_hex]
+
+
+def test_datadog_sub_agent_takes_name_and_no_session(fake_llmobs):
+    spans, notes = fake_llmobs
+    with telemetry.agent_span("conv-12345678", name="orquestador"):
+        with telemetry.sub_agent_span("researcher"):
+            pass
+        failed = telemetry.start_sub_agent_span("critic")
+        telemetry.finish_sub_agent_span(failed, output_data="nada", metrics={"total_tokens": 9}, error=True)
+
+    root, sub, failed = spans
+    # ddtrace nests the sub-agent under its active span and LLM Obs inherits the session.
+    assert root.kw == {"name": "orquestador", "session_id": "conv-12345678"}
+    assert sub.kw == {"name": "researcher"} and failed.kw == {"name": "critic"}
+    assert all(s.finished for s in spans)
+    assert (root.error, sub.error, failed.error) == (0, 0, 1)
+    assert notes == [
+        {"span": root, "tags": {"agent_level": "root"}},
+        {"span": sub, "tags": {"agent_level": "sub"}},
+        {"span": failed, "tags": {"agent_level": "sub"}},
+        {"span": failed, "output_data": "nada", "metrics": {"total_tokens": 9}},
+    ]
+
+
+def test_datadog_sub_agent_without_an_open_agent_has_no_span(fake_llmobs):
+    spans, _ = fake_llmobs
+    assert telemetry.start_sub_agent_span("researcher") is None
+    assert spans == []
+
+
+def test_sub_agent_span_never_raises(fake_llmobs, monkeypatch):
+    from ddtrace.llmobs import LLMObs
+
+    spans, _ = fake_llmobs
+    with telemetry.agent_span("conv-12345678") as root:
+        monkeypatch.setattr(LLMObs, "agent", lambda **kw: 1 / 0)
+        assert telemetry.start_sub_agent_span("researcher") is None
+        assert telemetry._current_agent.get() is root
+
+
+# --- Real Strands agents: pins that invocation hooks run in the agent's own context ---
+
+
+def _reply(text: str) -> list[dict]:
+    return [
+        {"messageStart": {"role": "assistant"}},
+        {"contentBlockDelta": {"delta": {"text": text}}},
+        {"contentBlockStop": {}},
+        {"messageStop": {"stopReason": "end_turn"}},
+        {"metadata": {"usage": {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}, "metrics": {"latencyMs": 1}}},
+    ]
+
+
+def _tool_call(name: str, arguments: dict) -> list[dict]:
+    return [
+        {"messageStart": {"role": "assistant"}},
+        {"contentBlockStart": {"start": {"toolUse": {"name": name, "toolUseId": f"call-{name}"}}}},
+        {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(arguments)}}}},
+        {"contentBlockStop": {}},
+        {"messageStop": {"stopReason": "tool_use"}},
+    ]
+
+
+@pytest.fixture
+def scripted_model(monkeypatch):
+    """TracedLiteLLMModel (the real llm spans) over a model scripted per agent, keyed by system prompt."""
+    from strands.models.litellm import LiteLLMModel
+
+    from backend.providers import TracedLiteLLMModel
+
+    scripts: dict[str, callable] = {}
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        for event in scripts[system_prompt](messages):
+            await asyncio.sleep(0)  # let parallel agents interleave
+            yield event
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+
+    def build(system_prompt: str, script) -> TracedLiteLLMModel:
+        scripts[system_prompt] = script
+        return TracedLiteLLMModel(model_id=MODEL)
+
+    return build
+
+
+def _has_tool_result(messages) -> bool:
+    return any("toolResult" in block for message in messages for block in message["content"])
+
+
+def test_strands_agent_as_tool_nests_under_the_calling_agent(px, scripted_model):
+    from strands import Agent
+
+    from backend import main
+
+    _, exporter, _ = px
+    researcher = Agent(
+        name="researcher",
+        model=scripted_model("researcher", lambda messages: _reply("Mew pesa 4 kg.")),
+        system_prompt="researcher",
+        hooks=[telemetry.SubAgentTrace()],
+        callback_handler=None,
+    )
+    events: list[dict] = []
+    dexter = Agent(
+        name="dexter",
+        model=scripted_model(
+            "dexter",
+            lambda messages: _reply("MEW. 4 kg.")
+            if _has_tool_result(messages)
+            else _tool_call("researcher", {"input": "¿cuánto pesa mew?"}),
+        ),
+        system_prompt="dexter",
+        tools=[researcher.as_tool()],
+        hooks=[main._ToolTrace(events.append)],
+        callback_handler=None,
+    )
+
+    async def run():
+        with telemetry.agent_span("conv-12345678") as root:
+            result = await dexter.invoke_async("¿cuánto pesa mew?")
+            assert telemetry._current_agent.get() is root
+            return str(result)
+
+    assert asyncio.run(run()).strip() == "MEW. 4 kg."
+
+    # No TOOL span "researcher": the sub-agent span stands for the call.
+    assert _tree(exporter) == {None: ["dexter"], "dexter": ["chat", "researcher", "chat"], "researcher": ["chat"]}
+    kinds = [s.attributes["openinference.span.kind"] for s in exporter.get_finished_spans()]
+    assert sorted(kinds) == ["AGENT", "AGENT", "LLM", "LLM", "LLM"]
+    sub = _by_name(exporter)["researcher"]
+    assert sub.attributes["graph.node.parent_id"] == "dexter"
+    assert (sub.attributes["input.value"], sub.attributes["output.value"]) == ("¿cuánto pesa mew?", "Mew pesa 4 kg.")
+    assert _metadata(sub)["total_tokens"] == 12
+    assert sub.status.status_code == StatusCode.UNSET
+    # The SSE events of the call are still emitted.
+    assert [(e["type"], e["tool"]) for e in events] == [("tool_call", "researcher"), ("tool_result", "researcher")]
+    assert "Mew pesa 4 kg." in events[1]["result"]
+
+
+def test_strands_sub_agent_failure_marks_its_span(px, scripted_model):
+    from strands import Agent
+
+    _, exporter, _ = px
+
+    def broken(messages):
+        raise RuntimeError("groq down")
+
+    researcher = Agent(
+        name="researcher",
+        model=scripted_model("researcher", broken),
+        system_prompt="researcher",
+        hooks=[telemetry.SubAgentTrace()],
+        callback_handler=None,
+    )
+
+    async def run():
+        with telemetry.agent_span("conv-12345678") as root:
+            with pytest.raises(RuntimeError):
+                await researcher.invoke_async("mew")
+            assert telemetry._current_agent.get() is root
+
+    asyncio.run(run())
+    spans = _by_name(exporter)
+    assert spans["researcher"].status.status_code == StatusCode.ERROR
+    assert spans["researcher"].status.description == "RuntimeError: groq down"
+    assert spans["researcher"].events[0].name == "exception"
+    assert spans["dexter"].status.status_code == StatusCode.UNSET
+    assert "output.value" not in spans["researcher"].attributes
+
+
+def test_strands_structured_output_without_a_result_is_not_an_error(px, scripted_model, monkeypatch):
+    """Agent.structured_output fires AfterInvocationEvent with result=None on success too."""
+    from pydantic import BaseModel
+    from strands import Agent
+    from strands.models.litellm import LiteLLMModel
+
+    class Weight(BaseModel):
+        kg: float
+
+    outcome: dict = {}
+
+    async def fake_structured_output(self, output_model, prompt, system_prompt=None, **kwargs):
+        if "error" in outcome:
+            raise outcome["error"]
+        yield {"output": output_model(kg=4.0)}
+
+    monkeypatch.setattr(LiteLLMModel, "structured_output", fake_structured_output)
+    _, exporter, _ = px
+    researcher = Agent(
+        name="researcher",
+        model=scripted_model("researcher", lambda messages: _reply("unused")),
+        system_prompt="researcher",
+        hooks=[telemetry.SubAgentTrace()],
+        callback_handler=None,
+    )
+
+    async def run():
+        with telemetry.agent_span("conv-12345678"):
+            with pytest.warns(DeprecationWarning):
+                assert (await researcher.structured_output_async(Weight, "¿cuánto pesa mew?")).kg == 4.0
+            outcome["error"] = RuntimeError("groq down")
+            with pytest.warns(DeprecationWarning), pytest.raises(RuntimeError):
+                await researcher.structured_output_async(Weight, "¿cuánto pesa mew?")
+
+    asyncio.run(run())
+    ok, failed = [s for s in exporter.get_finished_spans() if s.name == "researcher"]
+    assert ok.status.status_code == StatusCode.UNSET
+    assert failed.status.status_code == StatusCode.ERROR
+    assert _by_name(exporter)["dexter"].status.status_code == StatusCode.UNSET
+
+
+def _invocation(result=None):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(agent=SimpleNamespace(name="researcher"), messages=[], result=result)
+
+
+def _run_hook(px, body) -> StatusCode:
+    """Run ``body(hook)`` under a root agent and return the status of the sub-agent span."""
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        body(telemetry.SubAgentTrace())
+    return _by_name(exporter)["researcher"].status.status_code
+
+
+def test_sub_agent_trace_no_result_alone_is_not_an_error(px):
+    # A run a hook denied: no result, nothing raised.
+    def denied(hook):
+        hook._on_start(_invocation())
+        hook._on_end(_invocation())
+
+    assert _run_hook(px, denied) == StatusCode.UNSET
+
+
+@pytest.mark.parametrize(
+    "exc,expected",
+    [
+        (ValueError("pokeapi down"), StatusCode.ERROR),
+        (asyncio.CancelledError(), StatusCode.UNSET),
+        (GeneratorExit(), StatusCode.UNSET),
+    ],
+)
+def test_sub_agent_trace_marks_what_the_run_raised(px, exc, expected):
+    # Strands fires the After event from a ``finally``, while the exception propagates.
+    def raising(hook):
+        with pytest.raises(type(exc)):
+            hook._on_start(_invocation())
+            try:
+                raise exc
+            finally:
+                hook._on_end(_invocation())
+
+    assert _run_hook(px, raising) == expected
+
+
+def test_sub_agent_trace_ignores_the_exception_its_caller_is_handling(px):
+    # A caller that retries inside ``except``: that exception is not this run's.
+    def retry(hook):
+        try:
+            raise ValueError("first attempt")
+        except ValueError:
+            hook._on_start(_invocation())
+            hook._on_end(_invocation())
+
+    assert _run_hook(px, retry) == StatusCode.UNSET
+
+
+def test_strands_graph_runs_parallel_agents_under_the_root(px, scripted_model):
+    from strands import Agent
+    from strands.multiagent import GraphBuilder
+
+    _, exporter, _ = px
+    builder = GraphBuilder()
+    for name in ("stats", "lore"):
+        builder.add_node(
+            Agent(
+                name=name,
+                model=scripted_model(name, lambda messages, name=name: _reply(f"listo {name}")),
+                system_prompt=name,
+                hooks=[telemetry.SubAgentTrace()],
+                callback_handler=None,
+            ),
+            name,
+        )
+        builder.set_entry_point(name)
+    graph = builder.set_execution_timeout(30).build()
+
+    async def run():
+        with telemetry.agent_span("conv-12345678") as root:
+            await graph.invoke_async("mew")
+            assert telemetry._current_agent.get() is root
+
+    asyncio.run(run())
+    tree = _tree(exporter)
+    assert sorted(tree["dexter"]) == ["lore", "stats"]
+    assert (tree["stats"], tree["lore"]) == (["chat"], ["chat"])
+    spans = exporter.get_finished_spans()
+    assert len({s.context.trace_id for s in spans}) == 1
+    # The two nodes really overlapped: each ran in its own task, with its own copy of the context.
+    stats, lore = _by_name(exporter)["stats"], _by_name(exporter)["lore"]
+    assert stats.start_time < lore.end_time and lore.start_time < stats.end_time
+
+
+def test_strands_sub_agent_outside_a_request_has_no_span(px, scripted_model):
+    from strands import Agent
+
+    _, exporter, _ = px
+    researcher = Agent(
+        name="researcher",
+        model=scripted_model("researcher", lambda messages: _reply("Mew.")),
+        system_prompt="researcher",
+        hooks=[telemetry.SubAgentTrace()],
+        callback_handler=None,
+    )
+    researcher("mew")
+    assert [s.attributes["openinference.span.kind"] for s in exporter.get_finished_spans()] == ["LLM"]
