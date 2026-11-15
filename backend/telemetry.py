@@ -141,6 +141,7 @@ def _setup_phoenix() -> bool:
         project=project,
         env=env,
         version=version,
+        agent_graph_url=os.environ.get("GRAFANA_AGENT_GRAPH_URL", ""),
     )
     logger.info(
         "[TELEMETRY] Phoenix → %s (project=%s env=%s version=%s)", _phoenix.base_url, project, env, version or "?"
