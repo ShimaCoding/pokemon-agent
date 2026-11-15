@@ -12,11 +12,17 @@ per-panel layered layout.
 import json
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from openinference.semconv.trace import SpanAttributes
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-DASHBOARDS = Path(__file__).resolve().parents[2] / "observability" / "grafana" / "dashboards"
+from backend.telemetry_phoenix import PhoenixBackend
+
+ROOT = Path(__file__).resolve().parents[2]
+DASHBOARDS = ROOT / "observability" / "grafana" / "dashboards"
 DATASOURCE_UID = "phoenix-pg"
 UID = "mcpokedex-agent-graph"
 ROOT_AGENT = "s.parent_id IS NULL AND s.span_kind = 'AGENT'"
@@ -177,6 +183,42 @@ def test_recent_queries_link_to_the_trace_view_and_to_phoenix():
     assert links["trace_id"] == (
         "https://phoenix.shimadev.xyz/projects/${__data.fields.phoenix_project}/traces/${__value.raw}"
     )
+
+
+def test_phoenix_root_span_links_to_this_dashboard():
+    # Phoenix → Grafana: telemetry_phoenix.py writes metadata.grafana_url on the root agent span.
+    # GRAFANA_AGENT_GRAPH_URL holds the dashboard URL (with the uid); the code adds the variables.
+    dash = _dashboard()
+    example = re.search(r"^GRAFANA_AGENT_GRAPH_URL=.*?(https://\S+?);", (ROOT / ".env.example").read_text(), re.M).group(1)
+    assert urlsplit(example).path == f"/d/{dash['uid']}"
+
+    exporter = InMemorySpanExporter()
+    backend = PhoenixBackend(
+        endpoint="http://phoenix:6006",
+        api_key="",
+        project="mcpokedex-prod",
+        env="prod",
+        version=None,
+        agent_graph_url=example,
+        processor=SimpleSpanProcessor(exporter),
+    )
+    root = backend.start_agent("dexter", session_id="conv-12345678")
+    backend.finish(root)
+    backend.shutdown()
+    [span] = exporter.get_finished_spans()
+    url = urlsplit(json.loads(span.attributes[SpanAttributes.METADATA])["grafana_url"])
+    query = parse_qs(url.query)
+
+    assert url.path == f"/d/{dash['uid']}"
+    variables = {v["name"]: v for v in dash["templating"]["list"]}
+    assert {k.removeprefix("var-") for k in query if k.startswith("var-")} == {"project", "trace_id"} <= set(variables)
+    assert query["var-project"] == [variables["project"]["current"]["value"]]
+    # $trace_id holds traces.trace_id: 32 hex, as OTel writes it.
+    assert query["var-trace_id"] == [format(span.context.trace_id, "032x")]
+    assert "t.trace_id AS __value" in variables["trace_id"]["query"]
+    # Its options are the root agent spans of the range: the link's range must hold this one.
+    assert "$__timeFilter(s.start_time)" in variables["trace_id"]["query"]
+    assert int(query["from"][0]) < span.start_time // 1_000_000 < int(query["to"][0])
 
 
 def test_dashboards_link_to_each_other():
