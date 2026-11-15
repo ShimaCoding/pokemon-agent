@@ -19,6 +19,7 @@ when he becomes a separate service.
   no error message carries it.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -210,3 +211,13 @@ def purge_inactive(days: int | None = None, *, now: int | None = None) -> int:
     if removed:
         logger.info("[BOX] %d cajas inactivas eliminadas", removed)
     return removed
+
+
+async def purge_periodically(interval_seconds: int = 3600) -> None:
+    """Purge inactive boxes now and every ``interval_seconds`` (started in ``main.lifespan``)."""
+    while True:
+        try:
+            await asyncio.to_thread(purge_inactive)
+        except Exception:
+            logger.exception("[BOX] Error purgando cajas inactivas")
+        await asyncio.sleep(interval_seconds)

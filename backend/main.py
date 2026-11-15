@@ -49,7 +49,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import build_info, guards, mcp_gateway, telemetry, tool_cache, traces
+from backend import box, build_info, guards, mcp_gateway, telemetry, tool_cache, traces
 from backend.database import get_queries, get_stats, init_db, log_query
 from backend.evals import checks
 from backend.feedback import registry as feedback_registry
@@ -149,13 +149,16 @@ async def lifespan(app: FastAPI):
         else:
             logger.warning("RATE_LIMIT_DISABLED ignored: DD_ENV=%s keeps the rate limit.", os.environ.get("DD_ENV"))
     init_db()
-    prune_task = asyncio.create_task(prune_periodically())
+    # Hourly cleanups: expired conversations and boxes nobody touched in BOX_TTL_DAYS.
+    cleanup_tasks = [asyncio.create_task(prune_periodically()), asyncio.create_task(box.purge_periodically())]
     try:
         yield
     finally:
-        prune_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await prune_task
+        for task in cleanup_tasks:
+            task.cancel()
+        for task in cleanup_tasks:
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="MCPokédex", lifespan=lifespan)

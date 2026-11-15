@@ -155,6 +155,31 @@ def test_purge_without_a_database_is_a_noop(db):
     assert not db.exists()
 
 
+def test_purge_periodically_purges_and_survives_errors(monkeypatch):
+    import asyncio
+
+    calls = []
+
+    def purge():
+        calls.append(len(calls))
+        if len(calls) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return 0
+
+    monkeypatch.setattr(box, "purge_inactive", purge)
+
+    async def run():
+        task = asyncio.create_task(box.purge_periodically(interval_seconds=0))
+        while len(calls) < 3:
+            await asyncio.sleep(0.001)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(run())
+    assert len(calls) >= 3  # the first failure did not stop the loop
+
+
 def test_invalid_env_values_fall_back(monkeypatch):
     monkeypatch.setenv("BOX_MAX_POKEMON", "muchos")
     assert box._env_int("BOX_MAX_POKEMON", 30) == 30

@@ -40,6 +40,26 @@ def test_run_requires_conversation_id(client):
     assert res.status_code == 422
 
 
+def test_lifespan_purges_inactive_boxes(monkeypatch, tmp_path):
+    # Next to the session cleanup: both start with the app and stop with it.
+    from backend import box
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(main, "init_db", lambda: None)
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    old = "c" * 36
+    box.store(old, [box.Entry(name="pikachu", pokemon_id=25, types=["electric"], base_stats={"hp": 35})], now=0)
+    with TestClient(main.app) as c:
+        assert c.get("/health").status_code == 200
+        for _ in range(200):
+            if box.list_box(old, now=0)["count"] == 0:
+                break
+            import time
+
+            time.sleep(0.01)
+    assert box.list_box(old, now=0)["count"] == 0
+
+
 # --- trainer_id (#77) ----------------------------------------------------------------
 
 TRAINER = "0f8fad5b-d9cb-469f-a165-70867728950e"
