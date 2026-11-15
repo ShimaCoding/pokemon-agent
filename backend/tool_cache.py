@@ -20,6 +20,10 @@ so ``_ToolTrace`` still emits ``ui_resource`` on hits.
 
 Each call's outcome (``hit``/``miss``/``stale``/``bypass``) is written to
 ``invocation_state[STATE_KEY][toolUseId]`` for the tool trace.
+
+``fetch`` reads a tool through the same cache from outside the agent loop: code
+that needs a Pokédex entry (the box tools validating a name) gets it without a
+model call.
 """
 
 import json
@@ -27,6 +31,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from collections import OrderedDict
 from typing import Any, AsyncIterator
 
@@ -177,6 +182,41 @@ async def middleware(ctx: ExecuteToolContext, next_fn) -> AsyncIterator[Any]:
     else:
         _mark(ctx, "bypass")
     yield final
+
+
+async def fetch(tool: Any, tool_input: dict[str, Any]) -> dict[str, Any]:
+    """The result of ``tool`` for ``tool_input``, called outside the agent loop.
+
+    No model call, no hooks and no trace events: the caller owns what it does with the
+    result. A cacheable tool is served from the cache when it has a fresh copy; otherwise
+    the tool object runs through its generic ``stream`` and a complete result is stored,
+    so the agent's next call of the same tool is a hit. Like the middleware, an expired
+    copy is served when the live call returns an error or an incomplete result.
+
+    The ``toolUseId`` of the result means nothing here. Exceptions of the tool propagate.
+    """
+    name = tool.tool_name
+    key = cache_key(name, tool_input) if name in CACHEABLE_TOOLS and enabled() else None
+    cached = _get(key) if key is not None else None
+    if cached is not None and cached[1]:
+        logger.info("[CACHE] hit %s %s (fetch)", name, key[1])
+        return cached[0]
+
+    tool_use = {"toolUseId": f"fetch-{uuid.uuid4().hex}", "name": name, "input": tool_input}
+    last: Any = None
+    async for event in tool.stream(tool_use, {}):
+        last = event
+    result = last.tool_result if isinstance(last, ToolResultEvent) else last
+    if not isinstance(result, dict):
+        result = {"status": "error", "content": [{"text": f"{name} returned no result"}]}
+
+    if key is not None:
+        if is_cacheable(name, result):
+            _put(key, result)
+        elif cached is not None:
+            logger.warning("[CACHE] stale %s %s (falló la llamada en vivo, fetch)", name, key[1])
+            return cached[0]
+    return result
 
 
 def _reset_cache() -> None:
