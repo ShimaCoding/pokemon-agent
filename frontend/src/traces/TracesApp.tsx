@@ -148,7 +148,6 @@ function Messages({ messages }: { messages: ChatMessage[] }) {
 function Detail({ span, trace }: { span: TraceSpan; trace: TraceDetail }) {
   const tokens = span.tokens
   const result = span.kind === 'tool' && span.output ? parseJson(span.output) : null
-  const grafanaUrl = span.metadata?.grafana_url
   return (
     <aside className={styles.detail} data-kind={span.kind} aria-label="Detalle del paso">
       <header className={styles.detailHead}>
@@ -195,18 +194,13 @@ function Detail({ span, trace }: { span: TraceSpan; trace: TraceDetail }) {
         </section>
       )}
 
-      <p className={styles.links}>
-        {trace.phoenixUrl && (
+      {trace.phoenixUrl && (
+        <p className={styles.links}>
           <a href={trace.phoenixUrl} target="_blank" rel="noreferrer">
             Abrir la traza en Phoenix
           </a>
-        )}
-        {typeof grafanaUrl === 'string' && (
-          <a href={grafanaUrl} target="_blank" rel="noreferrer">
-            Abrir en Grafana
-          </a>
-        )}
-      </p>
+        </p>
+      )}
     </aside>
   )
 }

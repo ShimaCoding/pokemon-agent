@@ -278,6 +278,28 @@ def test_trace_links_to_phoenix_by_project_id(phoenix):
     assert _reader(phoenix, public_url="").get_trace(trace_id)["phoenixUrl"] is None
 
 
+def test_the_link_telemetry_writes_opens_that_run(phoenix, monkeypatch):
+    """Phoenix → admin: metadata.admin_url on the root span must be a URL this app serves and the page reads."""
+    import re
+    from pathlib import Path
+    from urllib.parse import parse_qs, urlsplit
+
+    root = Path(__file__).resolve().parents[2]
+    # ADMIN_TRACES_URL as documented in .env.example.
+    example = re.search(r"^ADMIN_TRACES_URL=.*?(https://\S+?);", (root / ".env.example").read_text(), re.M).group(1)
+    monkeypatch.setattr(telemetry._phoenix, "admin_traces_url", example)
+    trace_id = _run()
+
+    trace = _reader(phoenix).get_trace(trace_id)
+    url = urlsplit(trace["spans"][0]["metadata"]["admin_url"])
+    assert url.path in {route.path for route in main.app.routes}  # the page main.py serves
+    [(param, [value])] = parse_qs(url.query).items()
+    assert value == trace_id and traces.TRACE_ID_RE.fullmatch(value)  # an id the API accepts
+    # …and the query parameter the page opens a run from.
+    page = (root / "frontend" / "src" / "traces" / "TracesApp.tsx").read_text()
+    assert f"params.get('{param}')" in page
+
+
 def test_unknown_trace_is_none(phoenix):
     _run()
     assert _reader(phoenix).get_trace("0" * 32) is None
