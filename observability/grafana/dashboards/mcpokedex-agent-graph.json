@@ -1,0 +1,297 @@
+{
+  "uid": "mcpokedex-agent-graph",
+  "title": "MCPokedex Agent — Grafo de ejecución",
+  "description": "Grafo de ejecución del agente sobre las trazas de Phoenix (Postgres): mapa agregado de agentes, modelos y tools, y el recorrido de una consulta.",
+  "tags": [
+    "mcpokedex",
+    "phoenix",
+    "managed_by:repo"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "",
+  "links": [
+    {
+      "title": "MCPokedex Agent — Phoenix",
+      "url": "/d/mcpokedex-phoenix",
+      "type": "link",
+      "keepTime": true,
+      "includeVars": true
+    },
+    {
+      "title": "Phoenix",
+      "url": "https://phoenix.shimadev.xyz",
+      "type": "link",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Proyecto (env)",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "phoenix-pg"
+        },
+        "query": "SELECT name FROM projects WHERE name LIKE 'mcpokedex-%' ORDER BY name = 'mcpokedex-prod' DESC, name",
+        "definition": "SELECT name FROM projects WHERE name LIKE 'mcpokedex-%'",
+        "current": {
+          "text": "mcpokedex-prod",
+          "value": "mcpokedex-prod"
+        },
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "trace_id",
+        "label": "Consulta",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "phoenix-pg"
+        },
+        "query": "SELECT t.trace_id AS __value,\n       to_char(s.start_time, 'MM-DD HH24:MI:SS') || ' · ' || left(coalesce(s.attributes #>> '{input,value}', '—'), 60) AS __text\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)\nORDER BY s.start_time DESC\nLIMIT 100",
+        "definition": "Consultas (spans AGENT raíz) del rango, la más reciente primero",
+        "refresh": 2,
+        "sort": 0,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "secuencia",
+        "label": "Secuencia entre hermanos",
+        "type": "custom",
+        "query": "on,off",
+        "options": [
+          {
+            "text": "on",
+            "value": "on",
+            "selected": true
+          },
+          {
+            "text": "off",
+            "value": "off",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "on",
+          "value": "on"
+        },
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "nodeGraph",
+      "title": "Mapa de agentes",
+      "description": "Agentes, modelos y tools del rango, en columnas: agente raíz, sub-agentes, modelos y tools. Nodo: llamadas, p95 y fracción con error (arco rojo). Arista: quién llama a quién (pasa el cursor para ver llamadas y p95); en rojo si más del 5% de esas llamadas terminó en error.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 18
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH sp AS MATERIALIZED (\n  SELECT s.span_id, s.parent_id, s.trace_rowid, s.span_kind, s.status_code,\n         extract(epoch FROM s.end_time - s.start_time) AS dur,\n         s.attributes #>> '{graph,node,parent_id}' AS parent_agent,\n         CASE s.span_kind\n           WHEN 'AGENT' THEN 'agent:' || coalesce(s.attributes #>> '{agent,name}', s.name)\n           WHEN 'LLM' THEN 'llm:' || coalesce(s.attributes #>> '{llm,model_name}', s.name)\n           ELSE lower(s.span_kind) || ':' || s.name\n         END AS node\n  FROM spans s\n  JOIN traces t ON t.id = s.trace_rowid\n  JOIN projects p ON p.id = t.project_rowid\n  WHERE p.name = '$project' AND $__timeFilter(t.start_time)\n)\n, roots AS (\n  SELECT DISTINCT node FROM sp WHERE parent_id IS NULL\n), stats AS (\n  SELECT node, lower(min(span_kind)) AS kind, count(*) AS calls,\n         percentile_cont(0.95) WITHIN GROUP (ORDER BY dur) AS p95,\n         avg((status_code = 'ERROR')::int) AS errors,\n         max(CASE\n               WHEN span_kind = 'LLM' THEN 3\n               WHEN span_kind <> 'AGENT' THEN 4\n               WHEN parent_id IS NULL THEN 0\n               WHEN coalesce('agent:' || parent_agent IN (SELECT node FROM roots), true) THEN 1\n               ELSE 2\n             END) AS level\n  FROM sp\n  GROUP BY node\n), grid AS (\n  SELECT *, row_number() OVER (PARTITION BY level ORDER BY node) - 1 AS r, count(*) OVER (PARTITION BY level) AS in_level\n  FROM stats\n), cells AS (\n  SELECT *, dense_rank() OVER (ORDER BY level, r / 4) - 1 AS col, r % 4 AS line, least(4, in_level - (r / 4) * 4) AS lines\n  FROM grid\n)\nSELECT node AS id, substr(node, strpos(node, ':') + 1) AS title, kind AS subtitle,\n       calls::text AS mainstat,\n       'p95 ' || round(p95::numeric, 2) || ' s' AS secondarystat,\n       (1 - errors)::float8 AS arc__ok,\n       errors::float8 AS arc__error,\n       round(100.0 * errors, 1) || ' %' AS detail__errores,\n       ((col - max(col) OVER () / 2.0) * 240)::float8 AS fixedx,\n       ((line - (lines - 1) / 2.0 + (col % 2) * 0.5 - 0.25) * 115)::float8 AS fixedy\nFROM cells\nORDER BY node"
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH sp AS MATERIALIZED (\n  SELECT s.span_id, s.parent_id, s.trace_rowid, s.span_kind, s.status_code,\n         extract(epoch FROM s.end_time - s.start_time) AS dur,\n         s.attributes #>> '{graph,node,parent_id}' AS parent_agent,\n         CASE s.span_kind\n           WHEN 'AGENT' THEN 'agent:' || coalesce(s.attributes #>> '{agent,name}', s.name)\n           WHEN 'LLM' THEN 'llm:' || coalesce(s.attributes #>> '{llm,model_name}', s.name)\n           ELSE lower(s.span_kind) || ':' || s.name\n         END AS node\n  FROM spans s\n  JOIN traces t ON t.id = s.trace_rowid\n  JOIN projects p ON p.id = t.project_rowid\n  WHERE p.name = '$project' AND $__timeFilter(t.start_time)\n)\nSELECT pa.node || ' → ' || ch.node AS id, pa.node AS source, ch.node AS target,\n       count(*)::text AS mainstat,\n       'p95 ' || round(percentile_cont(0.95) WITHIN GROUP (ORDER BY ch.dur)::numeric, 2) || ' s' AS secondarystat,\n       round(100.0 * avg((ch.status_code = 'ERROR')::int), 1) || ' %' AS detail__errores,\n       CASE WHEN avg((ch.status_code = 'ERROR')::int) > 0.05 THEN 'red' END AS color\nFROM sp ch\nJOIN sp pa ON pa.trace_rowid = ch.trace_rowid AND pa.span_id = ch.parent_id\nGROUP BY pa.node, ch.node\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "nodes": {
+          "arcs": [
+            {
+              "field": "arc__ok",
+              "color": "green"
+            },
+            {
+              "field": "arc__error",
+              "color": "red"
+            }
+          ]
+        },
+        "edges": {}
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Consultas recientes",
+      "description": "Clic en la consulta para ver su recorrido abajo; trace_id abre la traza en Phoenix.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT s.start_time AS inicio,\n       left(coalesce(s.attributes #>> '{input,value}', '—'), 120) AS consulta,\n       round(extract(epoch FROM s.end_time - s.start_time)::numeric, 2) AS segundos,\n       s.status_code AS estado,\n       s.cumulative_llm_token_count_prompt + s.cumulative_llm_token_count_completion AS tokens,\n       (SELECT count(*) FROM spans c WHERE c.trace_rowid = s.trace_rowid) AS spans,\n       (SELECT count(*) FROM spans c WHERE c.trace_rowid = s.trace_rowid AND c.span_kind = 'AGENT') - 1 AS sub_agentes,\n       t.trace_id,\n       encode(convert_to('Project:' || p.id, 'UTF8'), 'base64') AS phoenix_project\nFROM spans s\nJOIN traces t ON t.id = s.trace_rowid\nJOIN projects p ON p.id = t.project_rowid\nWHERE p.name = '$project' AND s.parent_id IS NULL AND s.span_kind = 'AGENT' AND $__timeFilter(s.start_time)\nORDER BY s.start_time DESC\nLIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "consulta"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Ver el recorrido",
+                    "url": "/d/mcpokedex-agent-graph?var-project=${project}&var-secuencia=${secuencia}&var-trace_id=${__data.fields.trace_id}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Abrir en Phoenix",
+                    "url": "https://phoenix.shimadev.xyz/projects/${__data.fields.phoenix_project}/traces/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "phoenix_project"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "nodeGraph",
+      "title": "Recorrido de una consulta",
+      "description": "Cada span de la consulta elegida: de izquierda a derecha en orden de inicio, hacia abajo por profundidad. Línea continua: padre → hijo (duración del hijo). Línea punteada: orden entre hermanos (pausa en ms; naranja si se solapan, es decir, corrieron en paralelo).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "phoenix-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 16
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH RECURSIVE tr AS MATERIALIZED (\n  SELECT s.span_id, s.parent_id, s.span_kind, s.name, s.status_code, s.start_time, s.end_time, s.attributes,\n         s.llm_token_count_prompt, s.llm_token_count_completion\n  FROM spans s\n  JOIN traces t ON t.id = s.trace_rowid\n  JOIN projects p ON p.id = t.project_rowid\n  WHERE t.trace_id = '$trace_id' AND p.name = '$project'\n), tree AS (\n  SELECT span_id, 0 AS depth FROM tr WHERE parent_id IS NULL\n  UNION ALL\n  SELECT ch.span_id, tree.depth + 1 FROM tr ch JOIN tree ON ch.parent_id = tree.span_id\n), sp AS (\n  SELECT tr.*, coalesce(tree.depth, 0) AS depth,\n         row_number() OVER (ORDER BY tr.start_time, tr.span_id) - 1 AS pos,\n         count(*) OVER () AS n,\n         max(coalesce(tree.depth, 0)) OVER () AS max_depth,\n         min(tr.start_time) OVER () AS t0\n  FROM tr\n  LEFT JOIN tree USING (span_id)\n)\nSELECT span_id AS id,\n       CASE span_kind\n         WHEN 'AGENT' THEN coalesce(attributes #>> '{agent,name}', name)\n         WHEN 'LLM' THEN coalesce(attributes #>> '{llm,model_name}', name)\n         ELSE name\n       END AS title,\n       lower(span_kind) || ' · +' || round(extract(epoch FROM start_time - t0) * 1000) || ' ms' AS subtitle,\n       round(extract(epoch FROM end_time - start_time)::numeric, 2) || ' s' AS mainstat,\n       CASE WHEN span_kind = 'LLM'\n            THEN coalesce(llm_token_count_prompt, 0) + coalesce(llm_token_count_completion, 0) || ' tok'\n       END AS secondarystat,\n       (status_code IS DISTINCT FROM 'ERROR')::int::float8 AS arc__ok,\n       (status_code IS NOT DISTINCT FROM 'ERROR')::int::float8 AS arc__error,\n       left(attributes #>> '{input,value}', 200) AS detail__input,\n       left(attributes #>> '{output,value}', 200) AS detail__output,\n       attributes #>> '{metadata,cache}' AS detail__cache,\n       ((pos - (n - 1) / 2.0) * least(170, greatest(115, 1500.0 / n)))::float8 AS fixedx,\n       ((depth - max_depth / 2.0) * 150)::float8 AS fixedy\nFROM sp\nORDER BY pos"
+        },
+        {
+          "refId": "edges",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "phoenix-pg"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH RECURSIVE tr AS MATERIALIZED (\n  SELECT s.span_id, s.parent_id, s.span_kind, s.name, s.status_code, s.start_time, s.end_time, s.attributes,\n         s.llm_token_count_prompt, s.llm_token_count_completion\n  FROM spans s\n  JOIN traces t ON t.id = s.trace_rowid\n  JOIN projects p ON p.id = t.project_rowid\n  WHERE t.trace_id = '$trace_id' AND p.name = '$project'\n), tree AS (\n  SELECT span_id, 0 AS depth FROM tr WHERE parent_id IS NULL\n  UNION ALL\n  SELECT ch.span_id, tree.depth + 1 FROM tr ch JOIN tree ON ch.parent_id = tree.span_id\n), sp AS (\n  SELECT tr.*, coalesce(tree.depth, 0) AS depth,\n         row_number() OVER (ORDER BY tr.start_time, tr.span_id) - 1 AS pos,\n         count(*) OVER () AS n,\n         max(coalesce(tree.depth, 0)) OVER () AS max_depth,\n         min(tr.start_time) OVER () AS t0\n  FROM tr\n  LEFT JOIN tree USING (span_id)\n)\nSELECT 'p:' || ch.span_id AS id, ch.parent_id AS source, ch.span_id AS target,\n       round(extract(epoch FROM ch.end_time - ch.start_time)::numeric, 2) || ' s' AS mainstat,\n       'padre → hijo' AS detail__relacion,\n       NULL::text AS color, NULL::text AS strokedasharray\nFROM sp ch\nJOIN sp pa ON pa.span_id = ch.parent_id\nUNION ALL\nSELECT 's:' || span_id, prev_id, span_id,\n       round(gap_ms) || ' ms',\n       CASE WHEN gap_ms < 0 THEN 'paralelo' ELSE 'secuencia' END,\n       CASE WHEN gap_ms < 0 THEN 'orange' ELSE 'gray' END, '6 4'\nFROM (\n  SELECT span_id,\n         lag(span_id) OVER w AS prev_id,\n         extract(epoch FROM start_time - lag(end_time) OVER w) * 1000 AS gap_ms\n  FROM sp\n  WHERE parent_id IS NOT NULL\n  WINDOW w AS (PARTITION BY parent_id ORDER BY start_time, span_id)\n) seq\nWHERE prev_id IS NOT NULL AND '$secuencia' = 'on'\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "nodes": {
+          "arcs": [
+            {
+              "field": "arc__ok",
+              "color": "green"
+            },
+            {
+              "field": "arc__error",
+              "color": "red"
+            }
+          ]
+        },
+        "edges": {}
+      }
+    }
+  ]
+}
