@@ -136,6 +136,15 @@ def test_narrated_opening_without_tool_or_name_fails():
     assert r.metadata["narrated_opening"] is True
 
 
+def test_an_agent_used_as_a_tool_counts_as_a_data_tool():
+    bill = ToolObservation(name="bill", args={"input": "guarda a pikachu"}, text="Guardado: pikachu. 1 de 30.")
+    r = checks.check_tool_use(Turn("guarda a pikachu en mi caja", "Pikachu queda almacenado.", [bill]))
+    assert r.passed and "bill" in r.reasoning
+    failed = ToolObservation(name="bill", args={"input": "guarda a pikachu"}, text="Bill no respondió.", error=True)
+    assert not checks.check_tool_use(Turn("guarda a pikachu en mi caja", "No hay respuesta de Bill.", [failed])).passed
+    assert not checks.AGENT_TOOLS & checks.POKEMON_DATA_TOOLS
+
+
 def test_failed_tool_does_not_count():
     failed = ToolObservation("get_pokedex_entry", {"pokemon": "charmander"}, "❌ not found", error=True)
     assert not checks.check_tool_use(Turn("¿y la de charmander?", "Sin datos.", [failed])).passed

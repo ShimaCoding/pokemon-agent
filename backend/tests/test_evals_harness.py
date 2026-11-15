@@ -65,6 +65,64 @@ def test_record_marks_mcp_errors_and_missing_done():
     assert rec["status"] == "error"
 
 
+def _with_bill(bill_status="success", bill_result="Guardado: pikachu. 1 de 30."):
+    """A turn where the root agent calls `bill`, and Bill calls his own tools and a UI-bound MCP tool."""
+    return [
+        {"type": "start"},
+        {"type": "tool_call", "index": 0, "tool_id": "t0", "tool": "bill", "args": {"input": "guarda a pikachu"}},
+        {"type": "llm_call", "call_index": 2, "model": "m", "agent": "bill"},
+        {"type": "tool_call", "index": 1, "tool_id": "b1", "tool": "box_store", "args": {"pokemon": ["pikachu"]}, "agent": "bill"},
+        {"type": "tool_result", "index": 1, "tool_id": "b1", "tool": "box_store", "result": '{"stored": ["pikachu"]}', "status": "success", "agent": "bill"},
+        {"type": "tool_call", "index": 2, "tool_id": "b2", "tool": "analyze_team", "args": {"pokemon_names": ["pikachu"]}, "agent": "bill"},
+        {"type": "tool_result", "index": 2, "tool_id": "b2", "tool": "analyze_team", "result": "{}", "status": "success", "agent": "bill"},
+        {"type": "tool_result", "index": 0, "tool_id": "t0", "tool": "bill", "result": bill_result, "status": bill_status},
+        {"type": "text", "delta": "Pikachu queda almacenado. Ocupas 1 de 30 espacios."},
+        {"type": "done", "elapsed_ms": 1, "llm_calls": 4},
+    ]
+
+
+def test_record_keeps_only_the_root_agents_tools():
+    rec = harness.record_from_events("guarda a pikachu en mi caja", _with_bill(), {})
+    assert [t["name"] for t in rec["tools"]] == ["bill"]
+    assert rec["tools"][0]["result"] == "Guardado: pikachu. 1 de 30."
+    assert rec["tools"][0]["error"] is False
+    assert rec["widgets"] == []
+
+    metrics = harness.grade_turn({"required_tools": ["bill"], "forbidden_tools": ["analyze_team"]}, rec, [])
+    assert metrics["tool_expectation"]["passed"], metrics["tool_expectation"]
+    # Bill's analyze_team mounts no widget, and none is expected of it.
+    assert "widget_shown" not in metrics
+    # A successful call to an agent counts as a data tool, and its reply grounds the "1 de 30".
+    assert metrics["pokemon_tool_used"]["passed"]
+    assert metrics["grounded_facts"]["passed"], metrics["grounded_facts"]
+
+
+def test_injection_turn_judges_only_the_root_agent():
+    events = [e for e in _with_bill() if e.get("agent") or e["type"] not in ("tool_call", "tool_result")]
+    rec = harness.record_from_events("¿qué opinas del clima?", events, {})
+    assert rec["tools"] == []
+    assert harness.grade_turn({"no_tools": True}, rec, [])["no_tool_on_injection"]["passed"]
+
+
+def test_a_failed_agent_call_is_an_error_by_status_only():
+    failed = harness.record_from_events("guarda a pikachu", _with_bill("error", "Bill no respondió."), {})
+    assert failed["tools"][0]["error"] is True
+    assert not harness.grade_turn({"required_tools": ["bill"]}, failed, [])["tool_expectation"]["passed"]
+    assert not harness.grade_turn({}, failed, [])["pokemon_tool_used"]["passed"]
+    # Prose that reads like an MCP error is not one: Bill reports what he did not find.
+    prose = harness.record_from_events("guarda a pikachuzard", _with_bill(bill_result="Error: pikachuzard not found. 0 de 30."), {})
+    assert prose["tools"][0]["error"] is False
+    # The MCP tools keep the text heuristic of runs recorded without a status.
+    assert _record(tools=(("get_pokedex_entry", {"pokemon": "x"}, "❌ Pokémon 'x' not found."),))["tools"][0]["error"] is True
+
+
+def test_tool_result_status_marks_an_error():
+    events = _events(tools=(("get_pokedex_entry", {"pokemon": "pikachu"}, "PokeAPI no responde"),))
+    assert harness.record_from_events("q", events, {})["tools"][0]["error"] is False
+    events[3]["status"] = "error"
+    assert harness.record_from_events("q", events, {})["tools"][0]["error"] is True
+
+
 # --- grading --------------------------------------------------------------------------
 
 

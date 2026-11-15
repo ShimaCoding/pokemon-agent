@@ -142,7 +142,7 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _looks_like_error(text: str) -> bool:
-    """SSE tool_result carries no status; MCP errors read like "❌ Pokémon 'x' not found"."""
+    """Runs recorded before tool_result carried ``status``; MCP errors read like "❌ Pokémon 'x' not found"."""
     head = text.strip()[:200].lower()
     return head.startswith(("❌", "error")) or "not found" in head
 
@@ -164,13 +164,21 @@ def _parse_sse(lines: Any) -> Any:
 
 
 def record_from_events(query: str, events: list[dict], client_ms: dict[str, int | None]) -> dict:
-    """One turn's record from its SSE events (pure; the client only adds timings)."""
+    """One turn's record from its SSE events (pure; the client only adds timings).
+
+    Only the root agent's tools are recorded: events tagged with ``agent`` are a sub-agent's
+    steps, and ``forbidden_tools``, ``no_tool_on_injection`` and ``widget_shown`` judge what
+    the root agent did. The sub-agent's work reaches the record as the result of the root's
+    call (``bill``), which is also the evidence for ``grounded_facts``.
+    """
     calls: dict[str, dict] = {}
     order: list[str] = []
     reply: list[str] = []
     widgets: list[str] = []
     for evt in events:
         kind = evt.get("type")
+        if evt.get("agent"):
+            continue
         if kind == "tool_call":
             uid = evt.get("tool_id") or f"#{evt.get('index')}"
             calls[uid] = {"name": evt.get("tool", "unknown"), "args": evt.get("args") or {}, "result": "", "error": False}
@@ -181,7 +189,9 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
             if uid not in order:
                 order.append(uid)
             call["result"] = str(evt.get("result", ""))
-            call["error"] = evt.get("status") == "error" or _looks_like_error(call["result"])
+            # An agent's reply is prose ("no figura en la caja"): only its status says it failed.
+            prose = call["name"] in checks.AGENT_TOOLS
+            call["error"] = evt.get("status") == "error" or (not prose and _looks_like_error(call["result"]))
             # Cancelled before running (agent.GroundedPokemonNames): an error that never reached the MCP.
             if evt.get("cancelled"):
                 call["cancelled"] = call["error"] = True

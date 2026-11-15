@@ -7,7 +7,8 @@ backend submits them to Datadog as boolean evaluations on the ``agent`` span
 on every recorded turn:
 
 - ``pokemon_tool_used`` — the question named a real Pokémon (or the reply
-  narrates a Pokédex opening) and a Pokémon data tool ran in this turn.
+  narrates a Pokédex opening) and a Pokémon data tool, or an agent used as a
+  tool (``AGENT_TOOLS``), ran in this turn.
 - ``dexter_persona`` — Spanish, no exclamations, empathy, emoji or headings, and
   the "NOMBRE. El Pokémon <genus>." opening after ``get_pokedex_entry``.
 - ``grounded_facts`` — every number in the reply comes from a tool result or the
@@ -47,6 +48,10 @@ POKEMON_DATA_TOOLS = frozenset(
     }
 )
 SCAFFOLDING_TOOLS = frozenset({"skills", "retrieve_context"})
+# Agents the root agent calls as a tool (``agent.AGENT_TOOLS``; a test keeps them equal). A
+# successful call counts as a data tool: "guarda a pikachu en mi caja" is answered by Bill, and
+# his reply is the tool result. What the sub-agent did inside is not graded here.
+AGENT_TOOLS = frozenset({"bill"})
 
 # Species names that are also everyday Spanish words ("abra la puerta", "¿por qué no paras?",
 # "un golem sin alma", "un anillo de ónix"). Not detected in the question: a reply that
@@ -298,7 +303,7 @@ def evidence_from_messages(messages: list[dict[str, Any]]) -> list[str]:
 
 
 def _data_tools_used(turn: Turn) -> list[str]:
-    return [t.name for t in turn.tools if not t.error and t.name in POKEMON_DATA_TOOLS]
+    return [t.name for t in turn.tools if not t.error and (t.name in POKEMON_DATA_TOOLS or t.name in AGENT_TOOLS)]
 
 
 def check_tool_use(turn: Turn) -> EvalResult | None:
