@@ -476,7 +476,6 @@
   flex-wrap: wrap;
   gap: 10px;
 }
-.links:empty { display: none; }
 .links a,
 .login button,
 .listHead button {
