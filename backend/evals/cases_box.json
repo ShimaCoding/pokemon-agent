@@ -1,0 +1,125 @@
+{
+  "_doc": "Conversations about the trainer's box (Caja de Bill, #78) for backend/evals/harness.py. Same format as cases.json, run apart (--cases backend/evals/cases_box.json, Phoenix dataset mcpokedex-box-v1) so their rates never mix with the functional ones. Every played case gets a new trainer_id, so its box starts empty. Extra per-turn keys: session names the conversation of the turn (default \"main\": a second session is a new conversation with a trainer of its own); trainer names the session whose box the turn uses (a new conversation of the same trainer). The tool to expect is bill, the agent Dexter delegates the box to: his own tools (box_store, box_release, box_list) are not the root agent's and are never graded. Occupancy is asserted as \"N de 30\": run the backend with the default BOX_MAX_POKEMON.",
+  "cases": [
+    {
+      "id": "box_store",
+      "turns": [
+        {"q": "guarda a pikachu en mi caja", "required_tools": ["bill"], "expect_args": {"bill": "pikachu"}, "reply_contains": ["pikachu", "1 de 30"]}
+      ]
+    },
+    {
+      "id": "box_store_many",
+      "turns": [
+        {"q": "guarda a bulbasaur, charmander y squirtle en mi caja", "required_tools": ["bill"], "expect_args": {"bill": ["bulbasaur", "charmander", "squirtle"]}, "reply_contains": ["3 de 30"]}
+      ]
+    },
+    {
+      "id": "box_store_hard_name",
+      "turns": [
+        {"q": "guarda a Mr. Mime en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
+        {"q": "¿qué hay en mi caja?", "required_tools": ["bill"], "reply_contains": ["mime", "1 de 30"]}
+      ]
+    },
+    {
+      "id": "box_list",
+      "turns": [
+        {"q": "guarda a gengar y a snorlax en mi caja", "required_tools": ["bill"], "reply_contains": ["2 de 30"]},
+        {"q": "¿qué hay en mi caja?", "required_tools": ["bill"], "reply_contains": ["gengar", "snorlax", "2 de 30"], "judge_focus": "Debe listar la caja con lo que respondió bill (gengar y snorlax, 2 de 30), sin Pokémon que bill no nombró."}
+      ]
+    },
+    {
+      "id": "box_empty",
+      "turns": [
+        {"q": "¿qué hay en mi caja?", "required_tools": ["bill"], "reply_contains": ["0 de 30"], "judge_focus": "La caja está vacía: no debe nombrar ningún Pokémon como guardado."}
+      ]
+    },
+    {
+      "id": "box_release",
+      "turns": [
+        {"q": "guarda a pikachu y a eevee en mi caja", "required_tools": ["bill"], "reply_contains": ["2 de 30"]},
+        {"q": "saca a pikachu de mi caja", "required_tools": ["bill"], "expect_args": {"bill": "pikachu"}, "reply_contains": ["1 de 30"]},
+        {"q": "¿qué tengo en la caja?", "required_tools": ["bill"], "reply_contains": ["eevee", "1 de 30"]}
+      ]
+    },
+    {
+      "id": "box_release_missing",
+      "turns": [
+        {"q": "saca a mew de mi caja", "required_tools": ["bill"], "reply_contains": ["0 de 30"], "judge_focus": "Mew no estaba en la caja: debe decirlo, no afirmar que lo sacó."}
+      ]
+    },
+    {
+      "id": "box_duplicate",
+      "turns": [
+        {"q": "guarda a eevee en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
+        {"q": "guarda a eevee en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"], "judge_focus": "Eevee ya estaba: la caja sigue con 1 de 30 y no debe decir que ahora hay dos."}
+      ]
+    },
+    {
+      "id": "box_unknown",
+      "turns": [
+        {"q": "guarda a pikachuzard en mi caja", "any_of_tools": ["bill", "get_pokedex_entry"], "unknown_pokemon": "pikachuzard", "judge_focus": "pikachuzard no existe: debe decir que no se guardó, sin narrar ni guardar otro Pokémon en su lugar."},
+        {"q": "¿qué hay en mi caja?", "required_tools": ["bill"], "reply_contains": ["0 de 30"]}
+      ]
+    },
+    {
+      "id": "box_question_weakness",
+      "turns": [
+        {"q": "guarda a charizard, gyarados y pikachu en mi caja", "required_tools": ["bill"], "reply_contains": ["3 de 30"]},
+        {"q": "¿quién de mi caja es débil a los ataques de tipo Roca?", "required_tools": ["bill"], "reply_contains": ["charizard", "gyarados"], "judge_focus": "Charizard (x4) y Gyarados (x2) son débiles a Roca; Pikachu no. Solo puede usar lo que respondió bill."}
+      ]
+    },
+    {
+      "id": "box_question_types",
+      "turns": [
+        {"q": "guarda a gengar, alakazam, machamp y snorlax en mi caja", "required_tools": ["bill"], "reply_contains": ["4 de 30"]},
+        {"q": "¿cuáles de mi caja son de tipo Psíquico?", "required_tools": ["bill"], "reply_contains": ["alakazam"], "judge_focus": "Solo Alakazam es de tipo Psíquico entre los cuatro guardados."}
+      ]
+    },
+    {
+      "id": "box_store_and_ask",
+      "turns": [
+        {"q": "guarda a garchomp en mi caja y dime a qué tipos es débil", "any_of_tools": ["bill"], "reply_contains": ["hielo", "1 de 30"], "judge_focus": "Garchomp (Dragón/Tierra) es débil a Hielo (x4), Dragón y Hada. Debe guardar y responder con datos de las herramientas."}
+      ]
+    },
+    {
+      "id": "box_followup_later_turn",
+      "turns": [
+        {"q": "guarda a mewtwo en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
+        {"q": "háblame de bulbasaur", "required_tools": ["get_pokedex_entry"], "forbidden_tools": ["bill"], "expect_args": {"get_pokedex_entry": "bulbasaur"}},
+        {"q": "¿sigue mewtwo en mi caja?", "required_tools": ["bill"], "reply_contains": ["mewtwo", "1 de 30"], "judge_focus": "El resultado anterior de bill ya no está en el historial: debe volver a llamar a bill, no responder de memoria."}
+      ]
+    },
+    {
+      "id": "box_team_from_context",
+      "turns": [
+        {"q": "analiza mi equipo: gengar, alakazam y machamp", "required_tools": ["analyze_team"], "forbidden_tools": ["bill"]},
+        {"q": "guarda ese equipo en mi caja", "required_tools": ["bill"], "expect_args": {"bill": ["gengar", "alakazam", "machamp"]}, "reply_contains": ["3 de 30"], "judge_focus": "Debe pasar a bill los tres nombres del equipo analizado en el turno anterior."}
+      ]
+    },
+    {
+      "id": "box_new_conversation",
+      "turns": [
+        {"q": "guarda a lucario en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
+        {"q": "¿qué hay en mi caja?", "session": "nueva", "trainer": "main", "required_tools": ["bill"], "reply_contains": ["lucario", "1 de 30"], "judge_focus": "Conversación nueva del mismo entrenador: la caja sigue ahí y solo se conoce llamando a bill."}
+      ]
+    },
+    {
+      "id": "box_two_trainers",
+      "turns": [
+        {"q": "guarda a lapras en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
+        {"q": "¿qué hay en mi caja?", "session": "otro", "required_tools": ["bill"], "reply_contains": ["0 de 30"], "reply_excludes": ["lapras"], "judge_focus": "Otro entrenador en otra conversación: su caja está vacía y no debe nombrar a Lapras."}
+      ]
+    },
+    {
+      "id": "box_full",
+      "turns": [
+        {"q": "guarda a bulbasaur, ivysaur, venusaur, charmander, charmeleon y charizard en mi caja", "required_tools": ["bill"], "reply_contains": ["6 de 30"]},
+        {"q": "guarda a squirtle, wartortle, blastoise, caterpie, metapod y butterfree en mi caja", "required_tools": ["bill"], "reply_contains": ["12 de 30"]},
+        {"q": "guarda a weedle, kakuna, beedrill, pidgey, pidgeotto y pidgeot en mi caja", "required_tools": ["bill"], "reply_contains": ["18 de 30"]},
+        {"q": "guarda a rattata, raticate, spearow, fearow, ekans y arbok en mi caja", "required_tools": ["bill"], "reply_contains": ["24 de 30"]},
+        {"q": "guarda a pikachu, raichu, sandshrew, sandslash, vulpix y ninetales en mi caja", "required_tools": ["bill"], "reply_contains": ["30 de 30"]},
+        {"q": "guarda también a jigglypuff en mi caja", "required_tools": ["bill"], "reply_contains": ["30 de 30"], "judge_focus": "La caja está llena (30 de 30): debe decir que Jigglypuff no se guardó."}
+      ]
+    }
+  ]
+}

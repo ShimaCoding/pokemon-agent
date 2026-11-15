@@ -21,6 +21,8 @@ if it is missing) runs a Phoenix experiment over it:
 
 The adversarial cases (#41) are a dataset of their own, so their rates never mix with
 the functional ones: ``--cases backend/evals/cases_adversarial.json --dataset mcpokedex-adversarial-v3`` (``mcpokedex-adversarial`` and ``-v2`` are frozen drafts).
+So are the box cases (#78): ``--cases backend/evals/cases_box.json --dataset mcpokedex-box-v1``
+and ``--cases backend/evals/cases_box_adversarial.json --dataset mcpokedex-box-adversarial-v1``.
 
 Phoenix keeps every experiment with its outputs, scores and task traces, so two runs can
 be compared side by side in the UI (Datasets → mcpokedex-cases-v2 → Experiments). The same
@@ -43,7 +45,6 @@ import os
 import statistics
 import threading
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -135,12 +136,14 @@ def make_task(
     http = httpx.Client()
 
     def task(input: dict, expected: dict) -> dict:  # noqa: A002 — Phoenix binds by parameter name
-        conversation_id = str(uuid.uuid4())
+        sessions = harness.Sessions()  # new conversation and trainer ids for this case
+        conversation_id = sessions.conversation()
         records: list[dict] = []
-        tool_texts: list[str] = []  # data tool results only (judge input), as in harness.run
+        judge_texts: dict[str, list[str]] = {}  # per session: data tool results only (judge input), as in harness.run
         for query, spec in zip(input["turns"], expected["turns"]):
             pacer.wait()
-            record = send(http, url, conversation_id, query)
+            record = harness.play_turn(send, http, url, sessions, {**spec, "q": query})
+            tool_texts = judge_texts.setdefault(harness.session_of(spec), [])
             if record["status"] == "done":
                 tool_texts.extend(harness.evidence_texts(record)[1:])
                 if judge_model:
