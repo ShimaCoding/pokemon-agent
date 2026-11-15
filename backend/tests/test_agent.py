@@ -363,3 +363,147 @@ def test_annotate_runs_before_the_trace_hooks():
     order = [src.index(h) for h in ("GroundedPokemonNames()", "NormalizePokemonNames()", "*(hooks or [])", "AnnotateTeamSwap()")]
     # The grounding guard judges the name the model wrote, before it becomes a slug.
     assert order == sorted(order)
+
+
+# --- build_sub_agent (#74) --------------------------------------------------------------
+
+
+def _stream_events(*, text=None, tool=None):
+    import json
+
+    if tool:
+        name, arguments, uid = tool
+        body = [
+            {"contentBlockStart": {"start": {"toolUse": {"name": name, "toolUseId": uid}}}},
+            {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(arguments)}}}},
+        ]
+    else:
+        body = [{"contentBlockDelta": {"delta": {"text": text}}}]
+    return [
+        {"messageStart": {"role": "assistant"}},
+        *body,
+        {"contentBlockStop": {}},
+        {"messageStop": {"stopReason": "tool_use" if tool else "end_turn"}},
+        {"metadata": {"usage": {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}, "metrics": {"latencyMs": 1}}},
+    ]
+
+
+@pytest.fixture
+def scripted(monkeypatch):
+    """Model calls answered by a script per system prompt; returns the dict to fill."""
+    scripts: dict[str, callable] = {}
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        for event in scripts[system_prompt](messages):
+            yield event
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    return scripts
+
+
+def test_sub_agent_is_a_plain_agent_with_the_trace_hook_first(scripted):
+    from backend import telemetry
+    from backend.agent import ModelCallLimit, build_sub_agent
+    from backend.providers import RetryMalformedToolCalls
+
+    marker = type("Marker", (), {"register_hooks": lambda self, registry, **_: None})()
+    sub = build_sub_agent("bill", system_prompt="bill", tools=[_fake_mcp_tool("analyze_team")], hooks=[marker])
+
+    assert sub.name == "bill"
+    assert set(sub.tool_names) == {"analyze_team"}
+    # No harness: as_tool() refuses a session manager, and nothing else may slip in.
+    assert sub._session_manager is None
+    assert not any(isinstance(p, AgentSkills) for p in sub._plugin_registry._plugins.values())
+    assert sub.as_tool(name="bill", delegate=False).tool_type == "agent"
+
+    import inspect
+
+    src = inspect.getsource(build_sub_agent)
+    order = [src.index(h) for h in ("telemetry.SubAgentTrace()", "RetryMalformedToolCalls()", "ModelCallLimit(", "*hooks")]
+    assert order == sorted(order)
+    assert telemetry.SubAgentTrace and RetryMalformedToolCalls and ModelCallLimit
+
+
+def test_sub_agent_models_default_to_the_public_order_or_the_given_one(scripted):
+    from backend.agent import build_sub_agent
+
+    default = build_sub_agent("bill", system_prompt="bill", tools=[])
+    assert [c.model.get_config()["model_id"] for c in _router_candidates(default)] == MODELS_PUBLIC
+    order = list(reversed(MODELS_PUBLIC))
+    custom = build_sub_agent("bill", system_prompt="bill", tools=[], models=order)
+    assert [c.model.get_config()["model_id"] for c in _router_candidates(custom)] == order
+
+
+@pytest.mark.parametrize("name", ["dexter", "has space", "", "x" * 65])
+def test_sub_agent_rejects_the_root_name_and_invalid_names(scripted, name):
+    from backend.agent import build_sub_agent
+
+    with pytest.raises(ValueError):
+        build_sub_agent(name, system_prompt="p", tools=[])
+
+
+def test_sub_agent_rejects_a_name_already_taken(scripted):
+    from backend.agent import build_sub_agent
+
+    with pytest.raises(ValueError, match="already exists"):
+        build_sub_agent("bill", system_prompt="p", tools=[], taken={"bill"})
+    assert build_sub_agent("oak", system_prompt="p", tools=[], taken={"bill"}).name == "oak"
+
+
+def test_sub_agent_model_events_are_tagged_with_its_name(scripted):
+    from backend.agent import build_sub_agent
+
+    scripted["bill"] = lambda messages: _stream_events(text="Listo. 0 de 30.")
+    events: list[dict] = []
+    sub = build_sub_agent("bill", system_prompt="bill", tools=[], trace=events.append)
+    assert str(sub("lista la caja")).strip() == "Listo. 0 de 30."
+    assert [(e["type"], e["agent"]) for e in events] == [("llm_call", "bill"), ("model_attempt", "bill")]
+
+
+def test_sub_agent_stops_at_the_model_call_limit(scripted):
+    from backend.agent import SUB_AGENT_LIMIT_REPLY, build_sub_agent
+
+    calls = []
+
+    def looping(messages):
+        calls.append(len(messages))
+        return _stream_events(tool=("analyze_team", {}, f"tu-{len(calls)}"))
+
+    scripted["bill"] = looping
+    sub = build_sub_agent("bill", system_prompt="bill", tools=[_fake_mcp_tool("analyze_team")], max_model_calls=3)
+    assert str(sub("ordena mi caja")).strip() == SUB_AGENT_LIMIT_REPLY
+    assert len(calls) == 3
+    # The count is per run: the next call gets its own three.
+    assert str(sub("otra vez")).strip() == SUB_AGENT_LIMIT_REPLY
+    assert len(calls) == 6
+
+
+def test_sub_agent_tools_go_through_the_tool_cache(scripted):
+    import json
+
+    from backend import tool_cache
+    from backend.agent import build_sub_agent
+
+    entry = {"id": 25, "name": "pikachu", "evolution_chain": [{"name": "pikachu", "id": 25}]}
+    seen = []
+
+    def lookup(tool_use, **_):
+        seen.append(tool_use["input"])
+        return {"toolUseId": tool_use["toolUseId"], "status": "success", "content": [{"text": json.dumps(entry)}]}
+
+    spec = {"name": "get_pokedex_entry", "description": "x", "inputSchema": {"json": {"type": "object", "properties": {}}}}
+    tool = PythonAgentTool("get_pokedex_entry", spec, lookup)
+    scripted["bill"] = lambda messages: (
+        _stream_events(text="Hecho.")
+        if any("toolResult" in b for m in messages for b in m["content"])
+        else _stream_events(tool=("get_pokedex_entry", {"pokemon": "pikachu"}, "tu-1"))
+    )
+    tool_cache._reset_cache()
+    try:
+        sub = build_sub_agent("bill", system_prompt="bill", tools=[tool])
+        sub("mira a pikachu")
+        sub("mira a pikachu")
+        assert seen == [{"pokemon": "pikachu"}]
+    finally:
+        tool_cache._reset_cache()

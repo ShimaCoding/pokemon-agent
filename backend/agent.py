@@ -32,7 +32,7 @@ from strands import Agent
 from strands.middleware import ExecuteToolStage
 from strands_harness import create_harness
 
-from backend import guards, tool_cache
+from backend import guards, telemetry, tool_cache
 from backend.evals import checks
 from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
@@ -367,6 +367,93 @@ class AnnotateTeamSwap:
             return
         note = {"text": TEAM_SWAP_NOTE.format(out=removed[0], inc=added[0])}
         event.result = {**result, "content": [*result.get("content", []), note]}
+
+
+# Model calls one run of a sub-agent may make. ``Agent.as_tool()`` passes no limit of its
+# own, so without this nothing bounds a sub-agent that keeps calling tools.
+SUB_AGENT_MAX_MODEL_CALLS = 6
+SUB_AGENT_LIMIT_REPLY = (
+    "Operación incompleta: se alcanzó el límite de pasos. Lo ya ejecutado pudo aplicarse; "
+    "no afirmes nada que los resultados anteriores no confirmen."
+)
+# What ``Agent.as_tool()`` accepts as a tool name.
+_AGENT_NAME_RE = re.compile(r"[a-zA-Z0-9_-]{1,64}")
+
+
+class ModelCallLimit:
+    """End a run after ``max_calls`` model calls: the next one is answered with ``reply`` instead.
+
+    Strands turns a cancelled model call into an assistant message with that text and
+    ends the turn, so the caller gets a normal result that says the work is incomplete.
+    Retried calls (``RetryMalformedToolCalls``) count too.
+    """
+
+    def __init__(self, max_calls: int = SUB_AGENT_MAX_MODEL_CALLS, reply: str = SUB_AGENT_LIMIT_REPLY) -> None:
+        self._max = max_calls
+        self._reply = reply
+        self._calls = 0
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import BeforeInvocationEvent, BeforeModelCallEvent
+
+        registry.add_callback(BeforeInvocationEvent, self._on_start)
+        registry.add_callback(BeforeModelCallEvent, self._on_model_call)
+
+    def _on_start(self, event) -> None:
+        self._calls = 0
+
+    def _on_model_call(self, event) -> None:
+        self._calls += 1
+        if self._calls > self._max:
+            event.cancel = self._reply
+
+
+def build_sub_agent(
+    name: str,
+    *,
+    system_prompt: str,
+    tools: Iterable[Any],
+    trace: TraceSink | None = None,
+    models: list[str] | None = None,
+    hooks: Iterable[Any] = (),
+    description: str | None = None,
+    max_model_calls: int = SUB_AGENT_MAX_MODEL_CALLS,
+    taken: Iterable[str] = (),
+) -> Agent:
+    """Build an agent meant to be called by another one as a tool (``agent.as_tool()``).
+
+    A plain ``strands.Agent``, not a harness: no session, no memory and no built-in
+    tools. ``as_tool()`` refuses an agent with a session manager, and the harness
+    defaults switch tools and memory on. It gets:
+
+    - ``telemetry.SubAgentTrace`` first among its hooks, so its span opens before the
+      others run and its model and tool spans hang from it;
+    - the same model stack as the root agent (``build_model``), over ``models`` when
+      given, reporting to ``trace`` with every event tagged ``agent: name``;
+    - the tool result cache, and ``ModelCallLimit`` (``max_model_calls`` per run).
+
+    ``name`` is the span name, the graph node and the tool name, so it must be fixed and
+    unique in a run: the root agent's name and the names in ``taken`` are rejected.
+    """
+    if not _AGENT_NAME_RE.fullmatch(name):
+        raise ValueError(f"sub-agent name {name!r} is not a valid tool name")
+    if name == telemetry.DEFAULT_AGENT_NAME:
+        raise ValueError(f"{name!r} is the root agent's name")
+    if name in set(taken):
+        raise ValueError(f"an agent named {name!r} already exists in this run")
+
+    sink = (lambda event: trace({**event, "agent": name})) if trace is not None else None
+    agent = Agent(
+        name=name,
+        description=description,
+        model=build_model(False, trace=sink, models=models),
+        system_prompt=system_prompt,
+        tools=list(tools),
+        hooks=[telemetry.SubAgentTrace(), RetryMalformedToolCalls(), ModelCallLimit(max_model_calls), *hooks],
+        callback_handler=None,
+    )
+    agent.add_middleware(ExecuteToolStage, tool_cache.middleware)
+    return agent
 
 
 def create_agent(
