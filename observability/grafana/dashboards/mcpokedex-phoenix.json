@@ -9,7 +9,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "time": {
     "from": "now-24h",
@@ -17,6 +17,13 @@
   },
   "refresh": "5m",
   "links": [
+    {
+      "title": "Grafo de ejecución",
+      "url": "/d/mcpokedex-agent-graph",
+      "type": "link",
+      "keepTime": true,
+      "includeVars": true
+    },
     {
       "title": "Phoenix",
       "url": "https://phoenix.shimadev.xyz",

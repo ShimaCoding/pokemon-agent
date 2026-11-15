@@ -14,7 +14,8 @@ from backend import telemetry
 
 MONITORS_PATH = Path(__file__).resolve().parents[2] / "observability" / "datadog" / "monitors.json"
 DASHBOARD_ID = "795-e3v-q9e"
-SCOPE = f"@ml_app:{telemetry.DEFAULT_ML_APP.lower()} env:prod @meta.span.kind:agent"
+# Root agent spans only: one per user query. Sub-agent spans (agent_level:sub) are not requests.
+SCOPE = f"@ml_app:{telemetry.DEFAULT_ML_APP.lower()} env:prod @meta.span.kind:agent agent_level:root"
 
 # "p95 > X" is "more than 5% of requests are > X"; clamp_min(all, 20) keeps one bad request
 # out of a low-traffic hour from paging (1/20 = 5%, not > 5).
