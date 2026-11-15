@@ -27,6 +27,7 @@ def reset(monkeypatch):
         "PHOENIX_COLLECTOR_ENDPOINT",
         "PHOENIX_API_KEY",
         "PHOENIX_PROJECT_NAME",
+        "GRAFANA_AGENT_GRAPH_URL",
         *telemetry._DDTRACE_DEFAULTS,
     ):
         # setenv first so monkeypatch also undoes what setup_telemetry writes.
@@ -426,6 +427,16 @@ def test_phoenix_project_override_and_both_backends(monkeypatch, enable_calls):
     assert telemetry.setup_telemetry() is True
     assert telemetry._dd_enabled and len(enable_calls) == 1
     assert telemetry._phoenix.project == "custom"
+    assert telemetry._phoenix.agent_graph_url == ""
+    telemetry._phoenix.shutdown()
+
+
+def test_phoenix_agent_graph_url_from_environment(monkeypatch):
+    monkeypatch.setenv("PHOENIX_COLLECTOR_ENDPOINT", "http://phoenix:6006")
+    monkeypatch.setenv("GRAFANA_AGENT_GRAPH_URL", " https://grafana.test/d/mcpokedex-agent-graph ")
+
+    assert telemetry.setup_telemetry() is True
+    assert telemetry._phoenix.agent_graph_url == "https://grafana.test/d/mcpokedex-agent-graph"
     telemetry._phoenix.shutdown()
 
 
@@ -652,6 +663,7 @@ def test_phoenix_annotation_errors_are_swallowed(px):
 # ---------------------------------------------------------------------------
 
 import contextvars  # noqa: E402
+from urllib.parse import parse_qs, urlsplit  # noqa: E402
 
 MODEL = "groq/openai/gpt-oss-20b"
 
@@ -720,6 +732,54 @@ def test_agent_spans_carry_graph_attributes(px):
     for span in (spans["chat"], spans["search_pokemon"]):
         assert not [k for k in span.attributes if k.startswith(("graph.", "agent."))]
         assert "agent_level" not in _metadata(span)
+
+
+def test_root_agent_span_links_to_the_grafana_graph(px, monkeypatch):
+    backend, exporter, _ = px
+    monkeypatch.setattr(backend, "agent_graph_url", "https://grafana.test/d/mcpokedex-agent-graph")
+    with telemetry.agent_span("conv-12345678") as root:
+        with telemetry.sub_agent_span("researcher"):
+            with telemetry.llm_span(MODEL):
+                pass
+            telemetry.finish_tool_span(telemetry.start_tool_span("search_pokemon"), input_data={}, output_data="ok")
+        telemetry.annotate(root, tags={"guard": "none"})  # later metadata keeps the link
+        trace_id = telemetry.export_ids(root)["trace_id"]
+
+    spans = _by_name(exporter)
+    url = urlsplit(_metadata(spans["dexter"])["grafana_url"])
+    assert f"{url.scheme}://{url.netloc}{url.path}" == "https://grafana.test/d/mcpokedex-agent-graph"
+    start_ms = spans["dexter"].start_time // 1_000_000
+    assert parse_qs(url.query) == {
+        "var-project": ["mcpokedex-test"],
+        "var-trace_id": [trace_id],
+        # Around the trace, so it is among the options the dashboard lists for $trace_id.
+        "from": [str(start_ms - 5 * 60_000)],
+        "to": [str(start_ms + 60 * 60_000)],
+    }
+    assert re.fullmatch(r"[0-9a-f]{32}", trace_id)
+    assert _metadata(spans["dexter"])["guard"] == "none"
+    for name in ("researcher", "chat", "search_pokemon"):
+        assert "grafana_url" not in _metadata(spans[name])
+
+
+def test_no_grafana_link_without_the_dashboard_url(px):
+    _, exporter, _ = px
+    with telemetry.agent_span("conv-12345678"):
+        with telemetry.sub_agent_span("researcher"):
+            pass
+    telemetry.record_failed_request("conv-12345678", RuntimeError("mcp down"))
+
+    assert len(exporter.get_finished_spans()) == 3
+    assert not [s.name for s in exporter.get_finished_spans() if "grafana_url" in _metadata(s)]
+
+
+def test_grafana_link_keeps_a_query_already_in_the_dashboard_url(px, monkeypatch):
+    backend, exporter, _ = px
+    monkeypatch.setattr(backend, "agent_graph_url", "https://grafana.test/d/mcpokedex-agent-graph?orgId=1")
+    telemetry.record_failed_request("conv-12345678", RuntimeError("mcp down"))  # a root agent span too
+
+    url = _metadata(_by_name(exporter)["dexter"])["grafana_url"]
+    assert url.startswith("https://grafana.test/d/mcpokedex-agent-graph?orgId=1&var-project=mcpokedex-test&var-trace_id=")
 
 
 def test_root_agent_name_is_configurable(px):
