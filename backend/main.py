@@ -27,6 +27,7 @@ Security:
 
 import asyncio
 import hmac
+import itertools
 import json
 import logging
 import os
@@ -34,7 +35,7 @@ import re
 import time
 from contextlib import asynccontextmanager, suppress
 from contextvars import ContextVar
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -400,11 +401,19 @@ class _ToolTrace:
 
     After a UI-bound MCP tool (``_meta.ui.resourceUri``) runs, a ``ui_resource``
     event carries everything the frontend needs to mount its widget.
+
+    A sub-agent's own tools get their trace from ``for_sub_agent``: its events carry
+    ``agent`` (absent = the root agent), share the root's index sequence so no two
+    calls of a run collide, and never include ``ui_resource``: a sub-agent does not
+    talk in the chat, so an MCP tool it calls must not mount a widget there.
+    ``names``, ``observations`` and ``count`` are this trace's calls only.
     """
 
-    def __init__(self, emit) -> None:
+    def __init__(self, emit, *, agent: str | None = None, widgets: bool = True, indexes: Iterator[int] | None = None) -> None:
         self._emit = emit
-        self._next_index = 0
+        self._agent = agent
+        self._widgets = widgets
+        self._indexes = indexes if indexes is not None else itertools.count()
         self._index_by_id: dict[str, int] = {}
         self._spans: dict[str, Any] = {}
         self.names: list[str] = []
@@ -417,11 +426,17 @@ class _ToolTrace:
         registry.add_callback(BeforeToolCallEvent, self._on_call)
         registry.add_callback(AfterToolCallEvent, self._on_result)
 
+    def for_sub_agent(self, name: str) -> "_ToolTrace":
+        """The trace for the tools of the sub-agent ``name`` (a hook on that agent)."""
+        return _ToolTrace(self._emit, agent=name, widgets=False, indexes=self._indexes)
+
+    def _send(self, event: dict) -> None:
+        self._emit({**event, "agent": self._agent} if self._agent else event)
+
     def _on_call(self, event) -> None:
         uid = event.tool_use.get("toolUseId", "")
         name = event.tool_use.get("name", "unknown")
-        index = self._next_index
-        self._next_index += 1
+        index = next(self._indexes)
         self._index_by_id[uid] = index
         # An agent used as a tool (Agent.as_tool()) gets no tool span: its own agent span
         # (telemetry.SubAgentTrace) has the input, the output and the latency, and hangs
@@ -431,7 +446,7 @@ class _ToolTrace:
         self.names.append(name)
         args = dict(event.tool_use.get("input") or {})
         logger.info("[TOOL] Llamando tool #%d: %s | args: %s", index, name, str(args)[:120])
-        self._emit({"type": "tool_call", "index": index, "tool_id": uid, "tool": name, "args": args})
+        self._send({"type": "tool_call", "index": index, "tool_id": uid, "tool": name, "args": args})
 
     def _on_result(self, event) -> None:
         uid = event.tool_use.get("toolUseId", "")
@@ -444,14 +459,16 @@ class _ToolTrace:
         cache = tool_cache.status(getattr(event, "invocation_state", None), uid)
         duration = getattr(event, "duration", None)
         duration_ms = round(duration * 1000, 2) if duration is not None else None
-        self._emit({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display,
+        error = event.result.get("status") == "error"
+        self._send({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display,
+                    "status": "error" if error else "success",
                     "cached": cache in ("hit", "stale"), "duration_ms": duration_ms,
                     "cancelled": getattr(event, "cancel_message", None) is not None})
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
             input_data=dict(event.tool_use.get("input") or {}),
             output_data=display,
-            error=event.result.get("status") == "error",
+            error=error,
             tags={"cache": cache} if cache else None,
         )
         self.observations.append(
@@ -459,13 +476,15 @@ class _ToolTrace:
                 name=name,
                 args=dict(event.tool_use.get("input") or {}),
                 text=text,
-                error=event.result.get("status") == "error",
+                error=error,
             )
         )
 
+        if not self._widgets:
+            return
         uri = mcp_gateway.ui_resource_uri(getattr(event.selected_tool, "mcp_tool", None))
-        if uri and event.result.get("status") != "error":
-            self._emit(
+        if uri and not error:
+            self._send(
                 {
                     "type": "ui_resource",
                     "index": index,
@@ -479,7 +498,7 @@ class _ToolTrace:
 
     @property
     def count(self) -> int:
-        return self._next_index
+        return len(self.names)
 
 
 def _submit_rule_evals(ids: dict[str, str], query: str, reply: str, tool_trace: _ToolTrace, messages: list) -> None:
@@ -542,21 +561,30 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                                 # skill_loaded: the narration protocol, always inline in SYSTEM_PROMPT
                                 # turn: 1-based turn of the conversation; history_messages: after the last compaction
       {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int,
-                                "call_role": "routing"|"final", "reasoning_effort": str}
+                                "call_role": "routing"|"final", "reasoning_effort": str, "agent": str?}
                                 # routing: opens the turn (picks a tool or answers directly); final: after tool results
-      {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int}
-      {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int}
+                                # call_index counts every model call of the run, sub-agents included
+      {"type": "model_attempt", "model": str, "status": "success"|"failed", "error": str?, "timestamp_ms": int,
+                                "agent": str?}
+      {"type": "tool_call",     "index": int, "tool_id": str, "tool": str, "args": dict, "timestamp_ms": int,
+                                "agent": str?}
       {"type": "tool_result",   "index": int, "tool_id": str, "tool": str, "result": str, "timestamp_ms": int,
-                                "cached": bool, "duration_ms": float | None, "cancelled": bool}
+                                "status": "success"|"error", "cached": bool, "duration_ms": float | None,
+                                "cancelled": bool, "agent": str?}
                                 # cancelled: never ran (agent.GroundedPokemonNames); result is the reason
       {"type": "ui_resource",   "index": int, "tool_id": str, "tool": str, "resource_uri": str,
                                 "tool_input": dict, "tool_result": CallToolResult, "timestamp_ms": int}
+                                # root agent only: a sub-agent's tools never mount a widget
       {"type": "text",          "delta": str}  # filtered by guards.StreamGuard: the first ~200 chars are held back
       {"type": "done",          "total_tool_calls": int, "elapsed_ms": int, "models_tried": list[str], tokens…,
+                                # total_tool_calls and models_tried: the root agent's only
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
                                 "guard": str | None,  # guards.REPLACEMENTS key when a guard replaced or cut the reply
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
+
+    ``agent`` names the sub-agent whose step the event is (an agent used as a tool);
+    absent = the root agent. ``index`` is unique across the agents of a run.
     """
     from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_entry_names
     from backend.context import next_turn
@@ -601,7 +629,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
         if evt["type"] == "llm_call":
             llm_calls += 1
             evt = {**evt, "call_index": llm_calls}
-        else:
+        elif "agent" not in evt:
+            # A sub-agent's model is not a fallback of the root's: it stays out of models_tried.
             models_tried.append(evt["model"])
         queue(evt)
 

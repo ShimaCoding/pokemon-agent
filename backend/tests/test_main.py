@@ -224,6 +224,58 @@ def test_agent_used_as_a_tool_gets_no_tool_span(monkeypatch):
     assert trace.names == ["researcher", "search_pokemon"]
 
 
+def test_tool_result_carries_its_status():
+    assert _tool_events("search_pokemon", None)[1]["status"] == "success"
+    assert _tool_events("search_pokemon", None, status="error")[1]["status"] == "error"
+
+
+def test_sub_agent_tools_are_tagged_and_mount_no_widget():
+    # Dexter calls `bill`; Bill calls a UI-bound MCP tool and one of his own.
+    events: list[dict] = []
+    root = main._ToolTrace(events.append)
+    sub = root.for_sub_agent("bill")
+    ui = SimpleNamespace(mcp_tool=SimpleNamespace(meta={"ui": {"resourceUri": STATS_URI}}))
+    result = {"status": "success", "content": [{"text": "ok"}]}
+
+    def call(trace, uid, name, selected):
+        return trace._on_call(SimpleNamespace(tool_use={"toolUseId": uid, "name": name, "input": {}}, selected_tool=selected))
+
+    def finish(trace, uid, name, selected):
+        tool_use = {"toolUseId": uid, "name": name, "input": {}}
+        return trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=selected))
+
+    agent_tool = SimpleNamespace(tool_type="agent")
+    call(root, "tu-1", "bill", agent_tool)
+    call(sub, "tu-2", "analyze_team", ui)
+    finish(sub, "tu-2", "analyze_team", ui)
+    call(sub, "tu-3", "box_list", SimpleNamespace())
+    finish(sub, "tu-3", "box_list", SimpleNamespace())
+    finish(root, "tu-1", "bill", agent_tool)
+    call(root, "tu-4", "analyze_team", ui)
+    finish(root, "tu-4", "analyze_team", ui)
+
+    assert [(e["type"], e["tool"], e.get("agent")) for e in events] == [
+        ("tool_call", "bill", None),
+        ("tool_call", "analyze_team", "bill"),
+        ("tool_result", "analyze_team", "bill"),
+        ("tool_call", "box_list", "bill"),
+        ("tool_result", "box_list", "bill"),
+        ("tool_result", "bill", None),
+        ("tool_call", "analyze_team", None),
+        ("tool_result", "analyze_team", None),
+        ("ui_resource", "analyze_team", None),  # the root's call of the same tool does mount it
+    ]
+    assert all("agent" not in e for e in events if e["tool"] == "bill")
+    # One index per call across both agents, and each result keeps its call's.
+    calls = {e["tool_id"]: e["index"] for e in events if e["type"] == "tool_call"}
+    assert sorted(calls.values()) == [0, 1, 2, 3]
+    assert all(e["index"] == calls[e["tool_id"]] for e in events)
+    # What the query log, `done` and the rule evals read is the root agent's only.
+    assert root.names == ["bill", "analyze_team"] and root.count == 2
+    assert [o.name for o in root.observations] == ["bill", "analyze_team"]
+    assert sub.names == ["analyze_team", "box_list"]
+
+
 # --- /api/agent/run turn counter ----------------------------------------------------
 
 
