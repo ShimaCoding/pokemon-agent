@@ -14,6 +14,8 @@ Routes:
 Security:
   - API key auth: set API_KEY env var; clients send the X-API-Key header.
     Authenticated requests skip the agent rate limit and get the larger model.
+  - Admin (/admin/api/*): same header, checked against ADMIN_API_KEY; without it,
+    against API_KEY. With neither set the admin API rejects everything.
   - Rate limiting: /api/agent/run is capped at 3 req/min per IP via slowapi.
     Local eval runs can lift that cap with RATE_LIMIT_DISABLED=1, which is
     ignored (with a warning) when DD_ENV is prod or preview.
@@ -79,12 +81,30 @@ _req_api_key: ContextVar[str] = ContextVar("req_api_key", default="")
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def _key_matches(provided: str | None, env_name: str) -> bool:
+    """True when ``provided`` is the key configured in ``env_name``; an unset key matches nothing."""
+    expected = os.environ.get(env_name, "").strip()
+    if not expected or not provided:
+        return False
+    # As bytes: compare_digest refuses non-ASCII str, and a header can carry anything.
+    return hmac.compare_digest(provided.encode(), expected.encode())
+
+
 def _is_valid_api_key(api_key: str | None) -> bool:
     """Return True if the provided key matches the configured API_KEY."""
-    expected = os.environ.get("API_KEY", "").strip()
-    if not expected or not api_key:
-        return False
-    return hmac.compare_digest(api_key, expected)
+    return _key_matches(api_key, "API_KEY")
+
+
+def _is_valid_admin_key(api_key: str | None) -> bool:
+    """The key that opens /admin/api/*: ADMIN_API_KEY, or API_KEY when the admin has no key of its own.
+
+    They are separate because API_KEY changes the public chat (/config tells every visitor
+    a key exists, and the settings dialog opens), and whoever holds it should not read
+    what other visitors asked. With ADMIN_API_KEY set, API_KEY no longer opens the admin.
+    """
+    if os.environ.get("ADMIN_API_KEY", "").strip():
+        return _key_matches(api_key, "ADMIN_API_KEY")
+    return _key_matches(api_key, "API_KEY")
 
 
 def _is_authenticated_request() -> bool:
@@ -757,8 +777,8 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
 
 
 async def _verify_admin(api_key: str = Security(_api_key_header)) -> None:
-    """Reject admin API calls when API_KEY is set but header is missing/wrong."""
-    if not _is_valid_api_key(api_key):
+    """Reject admin API calls without the admin key (see ``_is_valid_admin_key``); no key configured = all rejected."""
+    if not _is_valid_admin_key(api_key):
         raise HTTPException(status_code=401, detail="Admin access denied")
 
 

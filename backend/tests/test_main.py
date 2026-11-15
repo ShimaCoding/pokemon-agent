@@ -458,3 +458,56 @@ def test_rate_limit_flag_has_no_effect_in_prod(quick_run, monkeypatch):
     monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
     monkeypatch.setenv("DD_ENV", "prod")
     assert [quick_run() for _ in range(4)] == [200, 200, 200, 429]
+
+
+# --- Admin key --------------------------------------------------------------------------
+
+ADMIN_PATHS = ["/admin/api/stats", "/admin/api/queries", "/admin/api/traces"]
+
+
+@pytest.fixture
+def admin_api(client, monkeypatch):
+    """The admin endpoints over stubs, so only the key decides the answer."""
+    from backend import traces
+
+    monkeypatch.setattr(main, "get_stats", lambda: {})
+    monkeypatch.setattr(main, "get_queries", lambda **kw: {})
+    monkeypatch.setattr(traces, "reader", lambda: SimpleNamespace(list_traces=lambda limit: []))
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("ADMIN_API_KEY", raising=False)
+
+    def statuses(key: str | bytes | None) -> set[int]:
+        headers = {"X-API-Key": key} if key else {}
+        return {client.get(path, headers=headers).status_code for path in ADMIN_PATHS}
+
+    return statuses
+
+
+def test_admin_api_is_closed_without_any_key_configured(admin_api):
+    assert admin_api(None) == {401}
+    assert admin_api("anything") == {401}
+
+
+def test_admin_key_opens_the_admin_and_the_chat_key_no_longer_does(admin_api, client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "chat-key")
+    monkeypatch.setenv("ADMIN_API_KEY", "admin-key")
+    assert admin_api("admin-key") == {200}
+    assert admin_api("chat-key") == {401}  # skipping the rate limit is not reading what visitors asked
+    assert admin_api(None) == {401}
+    # A header with non-ASCII bytes is a wrong key, not a crash.
+    assert admin_api("clave-ñ".encode("latin-1")) == {401}
+    # And the admin key is no chat key: it does not lift the rate limit.
+    assert main._is_valid_api_key("admin-key") is False
+
+
+def test_admin_key_alone_leaves_the_public_chat_untouched(admin_api, client, monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", "admin-key")
+    assert admin_api("admin-key") == {200}
+    # No API_KEY: /config must not tell visitors a key exists (it opens the settings dialog).
+    assert client.get("/config").json() == {"require_api_key": False}
+
+
+def test_chat_key_opens_the_admin_when_it_has_no_key_of_its_own(admin_api, monkeypatch):
+    monkeypatch.setenv("API_KEY", "chat-key")
+    assert admin_api("chat-key") == {200}
+    assert admin_api("admin-key") == {401}
