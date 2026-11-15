@@ -402,7 +402,11 @@ class _ToolTrace:
         index = self._next_index
         self._next_index += 1
         self._index_by_id[uid] = index
-        self._spans[uid] = telemetry.start_tool_span(name)
+        # An agent used as a tool (Agent.as_tool()) gets no tool span: its own agent span
+        # (telemetry.SubAgentTrace) has the input, the output and the latency, and hangs
+        # straight from this agent.
+        if getattr(getattr(event, "selected_tool", None), "tool_type", None) != "agent":
+            self._spans[uid] = telemetry.start_tool_span(name)
         self.names.append(name)
         args = dict(event.tool_use.get("input") or {})
         logger.info("[TOOL] Llamando tool #%d: %s | args: %s", index, name, str(args)[:120])
