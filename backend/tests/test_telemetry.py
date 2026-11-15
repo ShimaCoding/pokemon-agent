@@ -1142,6 +1142,42 @@ def test_built_sub_agent_owns_its_tool_spans_and_keeps_its_text_out_of_the_chat(
     assert sorted(indexes) == [0, 1]
 
 
+def test_dexter_delegating_to_bill_traces_dexter_bill_and_his_steps(px, monkeypatch, tmp_path):
+    """create_agent end to end: dexter → bill → {chat, tool, chat}, one root, Bill's tool under Bill."""
+    from backend import box
+    from backend.tests.test_bill import ASH, Stage, _delegate, _store_then_report
+
+    _, exporter, _ = px
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    stage = Stage(monkeypatch, tmp_path)
+    stage.scripts["dexter"] = _delegate("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    stage.scripts["bill"] = _store_then_report(["pikachu"])
+    dexter = stage.agent(trainer_id=ASH)
+
+    async def run():
+        with telemetry.agent_span("conv-12345678"):
+            return str(await dexter.invoke_async("guarda a pikachu en mi caja"))
+
+    try:
+        assert asyncio.run(run()).strip() == "Pikachu queda almacenado. Ocupas 1 de 30."
+    finally:
+        dexter.cleanup()
+
+    assert _tree(exporter) == {
+        None: ["dexter"],
+        "dexter": ["chat", "bill", "chat"],
+        "bill": ["chat", "box_store", "chat"],
+    }
+    spans = _by_name(exporter)
+    assert spans["bill"].attributes["openinference.span.kind"] == "AGENT"
+    assert spans["bill"].attributes["graph.node.parent_id"] == "dexter"
+    assert spans["bill"].attributes["input.value"] == "guarda a pikachu"
+    assert spans["box_store"].attributes["openinference.span.kind"] == "TOOL"
+    # The trainer id is in no attribute of any span.
+    for span in exporter.get_finished_spans():
+        assert ASH not in json.dumps(dict(span.attributes), default=str)
+
+
 def test_strands_sub_agent_failure_marks_its_span(px, scripted_model):
     from strands import Agent
 

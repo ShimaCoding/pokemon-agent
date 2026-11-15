@@ -52,6 +52,8 @@ UNAVAILABLE = (
     "El usuario debe recargar la página; no se guardó ni se sacó nada."
 )
 BOX_ERROR = "La caja no respondió: la operación no se aplicó."
+# What Dexter reads instead of a failure inside Bill (agent.ReplaceAgentError).
+FAILED = "Bill no respondió: no afirmes nada sobre la caja. Informa la falla y sugiere reintentar."
 
 BILL_PROMPT = f"""
 Eres Bill, el sistema de almacenamiento de Pokémon. No hablas con el usuario: respondes a Dexter, otro agente, que te envía un pedido sobre la caja del entrenador.

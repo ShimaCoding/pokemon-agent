@@ -571,6 +571,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     Event sequence:
       {"type": "start",         "provider": str, "conversation_id": str}
       {"type": "agent_init",    "mcp_tools_count": int, "tool_names": list, "skill_loaded": str, ...}
+                                # tool_names also lists the agents used as tools (bill); mcp_tools_count does not
                                 # skill_loaded: the narration protocol, always inline in SYSTEM_PROMPT
                                 # turn: 1-based turn of the conversation; history_messages: after the last compaction
       {"type": "llm_call",      "call_index": int, "model": str, "messages": list, "timestamp_ms": int,
@@ -600,7 +601,7 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
     ``agent`` names the sub-agent whose step the event is (an agent used as a tool);
     absent = the root agent. ``index`` is unique across the agents of a run.
     """
-    from backend.agent import SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_entry_names
+    from backend.agent import AGENT_TOOLS, SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_entry_names
     from backend.context import next_turn
 
     start_time = time.time()
@@ -687,13 +688,14 @@ async def _sse_generator(query: str, conversation_id: str, authenticated: bool =
                 authenticated=authenticated,
                 trace=on_model_event,
                 hooks=[tool_trace],
+                sub_agent_hooks=lambda name: [tool_trace.for_sub_agent(name)],
             )
             tool_names = list(agent.tool_names)
             turn = next_turn(agent)
             yield _sse(
                 {
                     "type": "agent_init",
-                    "mcp_tools_count": len(tool_names),
+                    "mcp_tools_count": len([name for name in tool_names if name not in AGENT_TOOLS]),
                     "tool_names": tool_names,
                     "skill_loaded": SKILL_NAME,
                     "system_prompt_preview": SYSTEM_PROMPT.strip()[:200],

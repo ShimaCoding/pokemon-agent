@@ -390,3 +390,44 @@ def test_stub_forbids_quoting_from_memory():
     assert "ya no están disponibles" in TOOL_RESULT_STUB
     assert "No los cites de memoria" in TOOL_RESULT_STUB
     assert "vuelve a llamar a la herramienta" in TOOL_RESULT_STUB
+
+
+# --- A past turn that called bill (#76) -----------------------------------------------------
+
+
+def _bill_turn(request: str, reply: str) -> list[dict]:
+    use = {"toolUseId": "tu-bill", "name": "bill", "input": {"input": request}}
+    return [
+        {"role": "user", "content": [{"text": "guarda a pikachu en mi caja"}]},
+        {"role": "assistant", "content": [{"toolUse": use}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": "tu-bill", "status": "success", "content": [{"text": "Guardado: pikachu. 1 de 30."}]}}]},
+        {"role": "assistant", "content": [{"text": reply}]},
+    ]
+
+
+def test_a_past_bill_result_becomes_the_call_again_stub():
+    # The box changes between turns, so "call the tool again" is exactly right for it.
+    messages = _with_new_turn(_bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30."), "¿qué hay en mi caja?")
+    assert compact_history(messages)
+    [result] = _blocks(messages, "toolResult")
+    assert result["content"] == [{"text": TOOL_RESULT_STUB}]
+    assert "Guardado: pikachu" not in json.dumps(messages, ensure_ascii=False)
+    # The call itself stays: the model still sees what it asked Bill.
+    assert _blocks(messages, "toolUse")[0]["input"] == {"input": "guarda a pikachu"}
+
+
+def test_a_dropped_bill_turn_is_indexed_by_its_request():
+    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado.")
+    filler = [
+        m
+        for i in range(MAX_PAST_TURNS)
+        for m in (
+            {"role": "user", "content": [{"text": f"pregunta {i}"}]},
+            {"role": "assistant", "content": [{"text": f"respuesta {i}"}]},
+        )
+    ]
+    messages = _with_new_turn(past + filler, "¿qué hay en mi caja?")
+    assert compact_history(messages)
+    index = messages[0]["content"][0]["text"]
+    assert index.startswith(INDEX_PREFIX)
+    assert "1) guarda a pikachu (bill)" in index

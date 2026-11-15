@@ -32,6 +32,7 @@ from strands.vended_plugins.skills import AgentSkills
 
 from backend import agent as agent_module
 from backend.agent import (
+    AGENT_TOOLS,
     EXPECTED_TOOLS,
     HARNESS_TOOLS,
     MCP_TOOLS,
@@ -47,6 +48,7 @@ from backend.context import (
     next_turn,
     turn_starts,
 )
+from backend.evals import checks
 from backend.providers import MODELS_AUTHENTICATED, MODELS_PUBLIC
 
 
@@ -75,8 +77,11 @@ def test_agent_exposes_exactly_the_expected_tools(harness_env):
     agent = create_agent("test-conversation")
     assert set(agent.tool_names) == EXPECTED_TOOLS
     assert HARNESS_TOOLS == frozenset()
-    assert EXPECTED_TOOLS == MCP_TOOLS
+    # The MCP tools plus the agents Dexter calls as a tool: Bill (#72), nothing else.
+    assert AGENT_TOOLS == {"bill"} == checks.AGENT_TOOLS
+    assert EXPECTED_TOOLS == MCP_TOOLS | AGENT_TOOLS
     assert "retrieve_context" not in agent.tool_names
+    assert agent.tool_registry.registry["bill"].tool_type == "agent"
 
 
 def test_agent_has_no_dangerous_harness_tools(harness_env):
@@ -214,7 +219,8 @@ def test_system_prompt_budget():
     # +866 for the injection, prompt-extraction and refusal rules of #41 (~215 tokens per call).
     # +695 for the grounding rules of #42 (the entry, and the defense data of
     # get_pokedex_entry and analyze_team).
-    assert len(SYSTEM_PROMPT) <= 5880
+    # +550 for delegating the trainer's box to bill (#76, ~140 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 6430
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -507,3 +513,123 @@ def test_sub_agent_tools_go_through_the_tool_cache(scripted):
         assert seen == [{"pokemon": "pikachu"}]
     finally:
         tool_cache._reset_cache()
+
+
+# --- Dexter's guards around bill (#76) ---------------------------------------------------
+
+
+def test_prompt_delegates_the_box_to_bill_before_the_narration_protocol():
+    box_rule = SYSTEM_PROMPT.index("Caja del entrenador")
+    assert box_rule < SYSTEM_PROMPT.index("Protocolo de narración")
+    for rule in (
+        "delega en bill, una sola llamada por turno con todo el pedido",
+        "los nombres tal como los escribió el usuario",
+        "el equipo o contexto que haga falta",
+        "bill no muestra widget",
+        "sin el protocolo de ficha",
+        "nunca recites su contenido de memoria ni de turnos anteriores",
+        "si bill falla, informa la falla y no afirmes nada sobre la caja",
+    ):
+        assert rule in SYSTEM_PROMPT, rule
+    # The markers of no_prompt_leak survive the edit.
+    normalized = checks.normalize(SYSTEM_PROMPT)
+    assert all(marker in normalized for marker in checks.PROMPT_MARKERS)
+
+
+def test_create_agent_wires_the_bill_guards_in_order():
+    import inspect
+
+    src = inspect.getsource(agent_module.create_agent)
+    order = [
+        src.index(h)
+        for h in ("OneAgentCallPerResponse()", "GroundedPokemonNames()", "*(hooks or [])", "ReplaceAgentError()", "AnnotateTeamSwap()")
+    ]
+    # ReplaceAgentError after the trace hooks: AfterToolCallEvent callbacks run in reverse.
+    assert order == sorted(order)
+
+
+def _bill_use(uid, text="lista la caja"):
+    return {"toolUse": {"toolUseId": uid, "name": "bill", "input": {"input": text}}}
+
+
+def _call_event(uid, content, name="bill"):
+    tool_use = next(b["toolUse"] for b in content if b["toolUse"]["toolUseId"] == uid)
+    messages = [{"role": "user", "content": [{"text": "lista mi caja"}]}, {"role": "assistant", "content": content}]
+    assert tool_use["name"] == name
+    return _NS(tool_use=tool_use, agent=_NS(messages=messages), cancel_tool=False)
+
+
+def test_only_the_first_bill_call_of_a_response_runs():
+    from backend.agent import AGENT_CALL_CANCEL, OneAgentCallPerResponse
+
+    guard = OneAgentCallPerResponse()
+    content = [_bill_use("a"), _use("x", ["mew"]), _bill_use("b"), _bill_use("c")]
+    first, second, third = (_call_event(uid, content) for uid in "abc")
+    for event in (first, second, third):
+        guard._on_call(event)
+    assert first.cancel_tool is False
+    assert second.cancel_tool == third.cancel_tool == AGENT_CALL_CANCEL.format(name="bill")
+
+    # Other tools may repeat, and a later response may call bill again.
+    other = _call_event("x", content, name="analyze_team")
+    guard._on_call(other)
+    assert other.cancel_tool is False
+    later = _NS(
+        tool_use=_bill_use("d")["toolUse"],
+        agent=_NS(messages=[{"role": "assistant", "content": content}, {"role": "assistant", "content": [_bill_use("d")]}]),
+        cancel_tool=False,
+    )
+    guard._on_call(later)
+    assert later.cancel_tool is False
+
+
+def _bill_result_event(status="error", text="Agent error: boom", cancel_message=None, name="bill"):
+    use = {"toolUseId": "tu-1", "name": name, "input": {"input": "lista la caja"}}
+    result = {"toolUseId": "tu-1", "status": status, "content": [{"text": text}]}
+    return _NS(tool_use=use, result=result, cancel_message=cancel_message)
+
+
+def test_a_bill_error_is_replaced_but_a_cancel_reason_is_kept():
+    from backend import bill
+    from backend.agent import ReplaceAgentError
+
+    guard = ReplaceAgentError()
+    failed = _bill_result_event()
+    guard._on_result(failed)
+    assert failed.result == {"toolUseId": "tu-1", "status": "error", "content": [{"text": bill.FAILED}]}
+
+    busy = _bill_result_event(text="Agent 'bill' is already processing a request")
+    guard._on_result(busy)
+    assert busy.result["content"] == [{"text": bill.FAILED}]
+
+    for untouched in (
+        _bill_result_event(status="success", text="Guardado. 1 de 30."),
+        _bill_result_event(text="Herramienta no ejecutada: …", cancel_message="Herramienta no ejecutada: …"),
+        _bill_result_event(name="analyze_team", text="❌ Error"),
+    ):
+        before = copy.deepcopy(untouched.result)
+        guard._on_result(untouched)
+        assert untouched.result == before
+
+
+def test_bill_free_text_is_grounded_like_a_name_argument():
+    from backend.agent import GroundedPokemonNames
+
+    def event(query, request):
+        use = {"toolUseId": "tu-1", "name": "bill", "input": {"input": request}}
+        messages = [{"role": "user", "content": [{"text": query}]}, {"role": "assistant", "content": [{"toolUse": use}]}]
+        return _NS(tool_use=use, agent=_NS(messages=messages), cancel_tool=False)
+
+    guard = GroundedPokemonNames()
+    ok = event("guarda a pikachu y a mr. mime", "guarda a pikachu y a Mr. Mime en la caja")
+    guard._on_call(ok)
+    assert ok.cancel_tool is False
+
+    invented = event("guarda a mi favorito", "guarda a charizard")
+    guard._on_call(invented)
+    assert '"charizard"' in invented.cancel_tool
+
+    # No species in the text: nothing to judge ("abra" is an everyday word, not the Pokémon).
+    plain = event("¿qué hay en mi caja?", "lista la caja y abra el detalle de tipos")
+    guard._on_call(plain)
+    assert plain.cancel_tool is False
