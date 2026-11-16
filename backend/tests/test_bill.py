@@ -95,6 +95,7 @@ def test_store_keeps_only_real_pokemon():
         "full": [],
         "count": 2,
         "capacity": box.MAX_POKEMON,
+        "occupancy": f"2 de {box.MAX_POKEMON}",
     }
     assert lookup.asked == ["pikachu", "pikachuzard", "Mr. Mime"]
     listed = run(listing())
@@ -151,8 +152,10 @@ def test_release_matches_names_as_the_model_writes_them():
         "not_in_box": ["mew"],
         "count": 0,
         "capacity": box.MAX_POKEMON,
+        "occupancy": f"0 de {box.MAX_POKEMON}",
     }
-    assert run(listing())["pokemon"] == []
+    listed = run(listing())
+    assert listed["pokemon"] == [] and listed["occupancy"] == f"0 de {box.MAX_POKEMON}"
 
 
 @pytest.mark.parametrize(
@@ -245,7 +248,11 @@ def test_tools_run_through_the_generic_tool_stream():
 def test_bill_prompt_is_dry_spanish_and_reports_the_occupancy():
     prompt = bill.BILL_PROMPT
     assert prompt.lstrip().startswith("Eres Bill")
-    assert f'"N de {box.MAX_POKEMON}"' in prompt
+    # The occupancy is copied from the tool result, never composed: no "N de 30" template to echo.
+    assert "copia el occupancy del último resultado tal cual" in prompt and f'"0 de {box.MAX_POKEMON}"' in prompt
+    assert '"N de' not in prompt
+    assert "Nunca devuelvas el JSON de una herramienta" in prompt
+    assert "No añadas datos que el resultado no trae" in prompt
     assert "sin personalidad" in prompt
     # One box only, and no "empty the box".
     assert "es la única que existe para ti" in prompt

@@ -219,8 +219,8 @@ def test_system_prompt_budget():
     # +866 for the injection, prompt-extraction and refusal rules of #41 (~215 tokens per call).
     # +695 for the grounding rules of #42 (the entry, and the defense data of
     # get_pokedex_entry and analyze_team).
-    # +550 for delegating the trainer's box to bill (#76, ~140 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 6430
+    # +615 for delegating the trainer's box to bill (#76, ~155 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 6495
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -527,7 +527,8 @@ def test_prompt_delegates_the_box_to_bill_before_the_narration_protocol():
         "el equipo o contexto que haga falta",
         "bill no muestra widget",
         "sin el protocolo de ficha",
-        "nunca recites su contenido de memoria ni de turnos anteriores",
+        'cita siempre la ocupación que informe ("3 de 30", "0 de 30") tal cual',
+        "nunca recites ni des por sabido su contenido de memoria ni de turnos anteriores, pregúntale a bill cada vez",
         "si bill falla, informa la falla y no afirmes nada sobre la caja",
     ):
         assert rule in SYSTEM_PROMPT, rule
