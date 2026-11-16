@@ -13,8 +13,29 @@ const TRAINER_ID_RE = /^[a-z0-9-]{32,64}$/
 
 let current: string | null = null
 
-/** This browser's trainer id, created on first use. */
-export function trainerId(): string {
+/**
+ * A random UUID. `crypto.randomUUID` only exists on secure origins (https, localhost) and
+ * recent browsers; `getRandomValues` works everywhere, so the id is built from it otherwise.
+ */
+function randomId(): string | null {
+  try {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40 // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80 // RFC 4122 variant
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * This browser's trainer id, created on first use. Undefined when no id can be made at
+ * all: the message is sent without one and the chat works, only the box is unavailable
+ * (the backend treats `trainer_id` as optional). Never throws.
+ */
+export function trainerId(): string | undefined {
   if (current) return current
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -22,11 +43,15 @@ export function trainerId(): string {
       current = stored
       return current
     }
-    current = crypto.randomUUID()
+  } catch {
+    /* storage blocked (private mode, disabled cookies) */
+  }
+  current = randomId()
+  if (!current) return undefined
+  try {
     localStorage.setItem(STORAGE_KEY, current)
   } catch {
-    // Storage blocked (private mode, disabled cookies): the box lasts until the page reloads.
-    current ??= crypto.randomUUID()
+    // Not saved: the box lasts until the page reloads.
   }
   return current
 }
