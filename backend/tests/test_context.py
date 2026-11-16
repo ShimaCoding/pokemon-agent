@@ -431,3 +431,52 @@ def test_a_dropped_bill_turn_is_indexed_by_its_request():
     index = messages[0]["content"][0]["text"]
     assert index.startswith(INDEX_PREFIX)
     assert "1) guarda a pikachu (bill)" in index
+
+
+# --- agent_report_view: the narration of bill's report sees the current turn only (#78) -------
+
+from backend.context import agent_report_view  # noqa: E402
+
+
+def _result_of(uid: str, text: str = "Guardado. 2 de 30") -> dict:
+    return {"role": "user", "content": [{"toolResult": {"toolUseId": uid, "status": "success", "content": [{"text": text}]}}]}
+
+
+def _call(uid: str, name: str, tool_input: dict) -> dict:
+    return {"role": "assistant", "content": [{"toolUse": {"toolUseId": uid, "name": name, "input": tool_input}}]}
+
+
+def test_narrating_bills_report_sees_only_the_current_turn():
+    view = agent_report_view({"bill"})
+    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    current = [
+        {"role": "user", "content": [{"text": "guarda a eevee en mi caja"}]},
+        _call("tu-2", "bill", {"input": "guarda a eevee"}),
+        _result_of("tu-2"),
+    ]
+    messages = past + current
+    before = copy.deepcopy(messages)
+    assert view(messages) == current
+    # A view, not a compaction: the history keeps every turn.
+    assert messages == before
+    # The first turn is already just itself.
+    assert view(current) == current
+
+
+def test_other_calls_see_the_whole_history():
+    view = agent_report_view({"bill"})
+    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado.")
+    question = {"role": "user", "content": [{"text": "guarda ese equipo en mi caja"}]}
+    # The call that decides to delegate needs the earlier turns ("ese equipo").
+    assert view(past + [question]) == past + [question]
+    # After an MCP tool, and after bill together with an MCP tool, nothing is hidden.
+    mcp = past + [question, _call("tu-3", "get_pokedex_entry", {"pokemon": "eevee"}), _result_of("tu-3", "{}")]
+    assert view(mcp) == mcp
+    both_calls = {
+        "role": "assistant",
+        "content": [*_call("tu-4", "bill", {"input": "x"})["content"], *_call("tu-5", "analyze_team", {})["content"]],
+    }
+    both_results = {"role": "user", "content": [*_result_of("tu-4")["content"], *_result_of("tu-5")["content"]]}
+    mixed = past + [question, both_calls, both_results]
+    assert view(mixed) == mixed
+    assert view([]) == [] and view([question]) == [question]

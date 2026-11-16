@@ -39,7 +39,7 @@ from strands_harness import create_harness
 
 from backend import bill, guards, telemetry, tool_cache
 from backend.evals import checks
-from backend.context import build_context_manager
+from backend.context import agent_report_view, build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
 
@@ -635,7 +635,8 @@ def create_agent(
     (its tool trace), like ``hooks`` for Dexter.
     """
     agent = create_harness(
-        model=build_model(authenticated, trace=trace),
+        # The call that narrates bill's report sees the current turn only (see agent_report_view).
+        model=build_model(authenticated, trace=trace, view=agent_report_view(AGENT_TOOLS)),
         system_prompt=SYSTEM_PROMPT,
         mcp_servers={
             "pokemon": {"url": MCP_SERVER_URL, "prefix": "", "continue_on_error": False},
