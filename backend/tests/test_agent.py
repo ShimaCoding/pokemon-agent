@@ -546,6 +546,7 @@ def test_create_agent_wires_the_bill_guards_in_order():
         src.index(h)
         for h in (
             "OneAgentCallPerResponse()",
+            "BoxQuestionsGoToBill()",
             "GroundedPokemonNames()",
             "*(hooks or [])",
             "AppendBoxOccupancy(trainer_id)",
@@ -677,3 +678,41 @@ def test_bill_free_text_is_grounded_like_a_name_argument():
     plain = event("¿qué hay en mi caja?", "lista la caja y abra el detalle de tipos")
     guard._on_call(plain)
     assert plain.cancel_tool is False
+
+
+def test_a_box_question_is_not_answered_by_analysing_an_assumed_box():
+    from backend.agent import BOX_FIRST_CANCEL, BoxQuestionsGoToBill
+
+    def event(query, tool, history=(), same_response=()):
+        use = {"toolUseId": "now", "name": tool, "input": {"pokemon_names": ["charizard", "gyarados"]}}
+        messages = [
+            {"role": "user", "content": [{"text": "guarda a charizard y a gyarados en mi caja"}]},
+            {"role": "assistant", "content": [_bill_use("old")]},
+            {"role": "assistant", "content": [{"text": "Almacenados."}]},
+            {"role": "user", "content": [{"text": query}]},
+            *history,
+            {"role": "assistant", "content": [*same_response, {"toolUse": use}]},
+        ]
+        return _NS(tool_use=use, agent=_NS(messages=messages), cancel_tool=False)
+
+    guard = BoxQuestionsGoToBill()
+    question = "¿quién de mi caja es débil a los ataques de tipo Roca?"
+    for tool in ("analyze_team", "compare_pokemon"):
+        blocked = event(question, tool)
+        guard._on_call(blocked)
+        assert blocked.cancel_tool == BOX_FIRST_CANCEL
+    blocked = event("compara los de mi colección", "compare_pokemon")
+    guard._on_call(blocked)
+    assert blocked.cancel_tool == BOX_FIRST_CANCEL
+
+    # After asking bill in this turn (an earlier response or the same one), the analysis may run.
+    asked = [{"role": "assistant", "content": [_bill_use("b1")]}, {"role": "user", "content": [{"toolResult": {"toolUseId": "b1", "status": "success", "content": [{"text": "charizard, gyarados"}]}}]}]
+    for allowed in (
+        event(question, "analyze_team", history=asked),
+        event(question, "analyze_team", same_response=[_bill_use("b2")]),
+        event("analiza mi equipo: charizard y gyarados", "analyze_team"),  # not about the box
+        event("¿cuál encaja mejor?", "compare_pokemon"),  # "encaja" is not "caja"
+        event(question, "get_pokedex_entry"),  # a single entry is not an assumed box
+    ):
+        guard._on_call(allowed)
+        assert allowed.cancel_tool is False

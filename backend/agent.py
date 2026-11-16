@@ -464,6 +464,46 @@ class OneAgentCallPerResponse:
                 return
 
 
+BOX_FIRST_CANCEL = (
+    "Herramienta no ejecutada: la consulta es sobre la caja del entrenador y no se sabe qué contiene "
+    "sin preguntarle a bill. Llama a bill con la pregunta completa; no asumas su contenido."
+)
+# Tools that take a list of Pokémon: what the model reaches for to analyse a box it assumes.
+_TEAM_TOOLS = frozenset({"analyze_team", "compare_pokemon"})
+_BOX_WORDS = frozenset({"caja", "cajas", "coleccion"})
+
+
+class BoxQuestionsGoToBill:
+    """Cancel a team analysis of the box that did not ask Bill what the box holds.
+
+    "¿Quién de mi caja es débil a Roca?" was answered with ``analyze_team`` over the Pokémon
+    an earlier turn had stored (7 of 7 runs of the box evals, #78, also with the prompt rule
+    spelled out): right only while nothing changed the box since, from this conversation or
+    another. When the user's message is about the box, ``analyze_team`` and
+    ``compare_pokemon`` only run in a turn that already called ``bill``; the reason goes
+    back to the model, which then delegates.
+    """
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import BeforeToolCallEvent
+
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+
+    def _on_call(self, event) -> None:
+        if event.tool_use.get("name") not in _TEAM_TOOLS:
+            return
+        messages = getattr(event.agent, "messages", []) or []
+        if not _BOX_WORDS & set(checks.normalize(turn_query(messages)).split()):
+            return
+        for message in reversed(messages):
+            blocks = [b for b in message.get("content", []) if isinstance(b, dict)]
+            if any("toolUse" in b and b["toolUse"].get("name") in AGENT_TOOLS for b in blocks):
+                return
+            if message.get("role") == "user" and not any("toolResult" in b for b in blocks):
+                break
+        event.cancel_tool = BOX_FIRST_CANCEL
+
+
 class ReplaceAgentError:
     """Replace the error result of an agent-tool with a fixed line.
 
@@ -682,6 +722,7 @@ def create_agent(
         hooks=[
             RetryMalformedToolCalls(),
             OneAgentCallPerResponse(),
+            BoxQuestionsGoToBill(),
             GroundedPokemonNames(),
             NormalizePokemonNames(),
             *(hooks or []),
