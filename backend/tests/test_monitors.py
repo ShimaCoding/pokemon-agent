@@ -21,9 +21,9 @@ SCOPE = f"@ml_app:{telemetry.DEFAULT_ML_APP.lower()} env:prod @meta.span.kind:ag
 # out of a low-traffic hour from paging (1/20 = 5%, not > 5).
 QUERY_RE = re.compile(r'formula\("(\w+) / clamp_min\(all, (\d+)\) \* 100"\)\.last\("1h"\) > 5')
 
-# Issue #22 thresholds: agent latency p95 > 5 s, error % > 5%, tokens per query p95 > 15k.
+# Issue #22 thresholds: agent latency p95 > 6 s (5 s until #72, see test_grafana_alerts.py), error % > 5%, tokens per query p95 > 15k.
 BAD_FILTERS = {
-    "@duration:>5000000000",  # nanoseconds
+    "@duration:>6000000000",  # nanoseconds
     "@status:error",
     "@metrics.total_tokens:>15000",
 }

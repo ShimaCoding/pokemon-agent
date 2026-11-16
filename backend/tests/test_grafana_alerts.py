@@ -18,9 +18,10 @@ GRAFANA = Path(__file__).resolve().parents[2] / "observability" / "grafana"
 DATASOURCE_UID = "phoenix-pg"
 PROD_PROJECT = f"{telemetry.DEFAULT_PHOENIX_PROJECT}-prod"
 
-# Issue #22 thresholds, as SQL over the agent root spans: latency > 5 s, error, tokens > 15k.
+# Issue #22 thresholds, as SQL over the agent root spans: latency > 6 s, error, tokens > 15k.
+# Latency was 5 s until #72: a turn that delegates to Bill adds two model calls (p95 5.4 s in the box evals).
 BAD_FILTERS = {
-    "mcpokedex-latency": "s.end_time - s.start_time > interval '5 seconds'",
+    "mcpokedex-latency": "s.end_time - s.start_time > interval '6 seconds'",
     "mcpokedex-errors": "s.status_code = 'ERROR'",
     "mcpokedex-tokens": "s.cumulative_llm_token_count_prompt + s.cumulative_llm_token_count_completion > 15000",
 }
