@@ -469,3 +469,46 @@ def test_turn_agent_report_is_this_turns_successful_bill_answer():
     failed.agent.messages[2]["content"][0]["toolResult"]["status"] = "error"
     assert turn_agent_report(failed.agent.messages) is None
     assert turn_agent_report([]) is None
+
+
+# --- restore_names (#78): a name the model miscopied into bill's request ---------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "conversation", "restored"),
+    [
+        # Live: the user wrote gengar, Dexter delegated with gengan / gengeng.
+        ("saca a gengan de mi caja", ["saca a gengar de mi caja"], "saca a gengar de mi caja"),
+        # Too far from the name to be sure ("gengeng" is 0.62): left alone, Bill reports it missing.
+        ("guarda gengeng?", ['{"pokemon_names": ["gengar", "alakazam", "machamp"]}', "guarda ese equipo en mi caja"], "guarda gengeng?"),
+        ("Guarda a Gengan, alakazam y machamp", ['{"pokemon_names": ["gengar", "alakazam", "machamp"]}'], "Guarda a gengar, alakazam y machamp"),
+        # What the user typed stays, typos included: Bill answers that it does not exist.
+        ("guarda a pikachuu", ["guarda a pikachuu en mi caja"], "guarda a pikachuu"),
+        ("saca a gengan", ["saca a gengan y a gengar"], "saca a gengan"),
+        # Another real species is never turned into the one the user named.
+        ("guarda a raichu", ["guarda a pikachu"], "guarda a raichu"),
+        ("guarda a charmeleon", ["guarda a charmander"], "guarda a charmeleon"),
+        # Ordinary words of the request are left alone, and so is a conversation without species.
+        ("lista la caja y muestra los tipos de pikachu", ["¿qué hay en mi caja? tengo a pikachu"], "lista la caja y muestra los tipos de pikachu"),
+        ("guarda a gengan", ["guarda a mi favorito"], "guarda a gengan"),
+        ("saca a mew", ["saca a mewtwo"], "saca a mew"),
+    ],
+)
+def test_restore_names(text, conversation, restored):
+    assert guards.restore_names(text, conversation) == restored
+
+
+def test_bill_request_gets_the_users_spelling_before_it_is_judged():
+    use = {"toolUseId": "tu-1", "name": "bill", "input": {"input": "saca a gengan de mi caja"}}
+    messages = [
+        {"role": "user", "content": [{"text": "saca a gengar de mi caja"}]},
+        {"role": "assistant", "content": [{"toolUse": use}]},
+    ]
+    event = SimpleNamespace(tool_use=use, agent=SimpleNamespace(messages=messages), cancel_tool=False)
+    GroundedPokemonNames()._on_call(event)
+    assert use["input"] == {"input": "saca a gengar de mi caja"}
+    assert event.cancel_tool is False
+    # MCP tools keep their rule: a name that is not in the conversation is cancelled, not rewritten.
+    event = _tool_event(_turn("háblame de gengar", tool_input={"pokemon": "gengan"}), tool_input={"pokemon": "gengan"})
+    GroundedPokemonNames()._on_call(event)
+    assert event.tool_use["input"] == {"pokemon": "gengan"} and '"gengan"' in event.cancel_tool

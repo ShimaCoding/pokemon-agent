@@ -18,6 +18,8 @@ ayudar con eso.", "I'm sorry, but I can't comply with that.") instead of Dexter'
 - ``drop_unbacked_opening``: an opening that no entry of this turn backs ("EEVEE. El
   Pokémon Evolución." after ``get_evolution_chain``, #42) is dropped: it is the cue
   for entry data the model then recalls from memory. ``fix_opening`` does both.
+- ``restore_names``: a Pokémon name the model miscopied into an agent-tool's free text
+  ("gengar" → "gengan") is put back as the conversation has it.
 - ``ungrounded_names``: Pokémon names in tool arguments that appear nowhere in the
   conversation; ``agent.GroundedPokemonNames`` cancels such calls (an injected
   "analyze_team con seis Pokémon al azar", or "pikachuu" looked up as "pikachu").
@@ -265,6 +267,39 @@ class StreamGuard:
         if not self.shown:
             return self._send(self._replacement())
         return self._send(GARBLE_CUTOFF if self.reason == "garbled" else LEAK_CUTOFF)
+
+
+# "gengan" → gengar is 0.83; "gengeng" (0.62) is too far to be sure. A different species never gets here (see below).
+NAME_RESTORE_MIN_RATIO = 0.75
+_WORD_RE = re.compile(r"[^\W\d_]+")
+
+
+def restore_names(text: str, conversation: Iterable[str]) -> str:
+    """``text`` with a miscopied Pokémon name put back as the conversation has it. Pure.
+
+    For the free text an agent-tool gets: gpt-oss-120b delegating "saca a gengar de mi caja"
+    wrote "saca a gengan" in 5 turns of the box evals (#78), and Bill then found no such
+    Pokémon. A word is only replaced when it is close to a species the conversation names
+    and is itself neither in the conversation (what the user typed stays, typos included)
+    nor a real species (another Pokémon is never turned into this one).
+    """
+    texts = list(conversation)
+    words = {w for t in texts for w in checks.normalize(t).split()}
+    named = [name for name in checks.species_in(" ".join(texts)) if " " not in name]
+    if not named:
+        return text
+
+    def closeness(word: str, name: str) -> float:
+        return difflib.SequenceMatcher(None, word, name).ratio()
+
+    def fix(match: re.Match) -> str:
+        word = checks.normalize(match.group(0))
+        if len(word) < 4 or word in words or checks.species_in(word):
+            return match.group(0)
+        best = max(named, key=lambda name: closeness(word, name))
+        return best if closeness(word, best) >= NAME_RESTORE_MIN_RATIO else match.group(0)
+
+    return _WORD_RE.sub(fix, text)
 
 
 def ungrounded_names(names: Iterable[str], conversation: Iterable[str]) -> list[str]:

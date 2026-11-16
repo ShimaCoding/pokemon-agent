@@ -272,8 +272,14 @@ class GroundedPokemonNames:
         tool_name = event.tool_use.get("name")
         if not isinstance(tool_input, dict):
             return
+        context = conversation_texts(getattr(event.agent, "messages", []) or [], event.tool_use.get("toolUseId", ""))
         names: list[str] = []
         if tool_name in self._prose:
+            if context is not None:
+                # A name the model miscopied ("gengan") goes back to what the conversation says.
+                for key, value in tool_input.items():
+                    if isinstance(value, str):
+                        tool_input[key] = guards.restore_names(value, context)
             names = checks.species_in(" ".join(v for v in tool_input.values() if isinstance(v, str)))
         elif tool_name in self._tools:
             for key in POKEMON_NAME_ARGS & tool_input.keys():
@@ -281,7 +287,6 @@ class GroundedPokemonNames:
                 names.extend(str(v) for v in (value if isinstance(value, list) else [value]) if isinstance(v, (str, int)))
         if not names:
             return
-        context = conversation_texts(getattr(event.agent, "messages", []) or [], event.tool_use.get("toolUseId", ""))
         if context is not None and (missing := guards.ungrounded_names(names, context)):
             event.cancel_tool = GROUNDING_CANCEL.format(names=", ".join(f'"{n}"' for n in missing))
 
