@@ -50,6 +50,15 @@ def test_issue_thresholds_are_covered():
     assert bad == BAD_FILTERS
 
 
+def test_message_and_links_use_the_monitored_threshold():
+    # The text people read and the Trazas link must name the same threshold the query alerts on.
+    latency, _, tokens = _monitors()
+    assert "6 s" in latency["name"] and "5 s" not in latency["name"] + latency["message"]
+    assert latency["message"].count("6 s") >= 3  # alert, its "p95 >" gloss and the recovery
+    assert "%40duration%3A%3E6000000000" in latency["message"] and "5000000000" not in json.dumps(latency)
+    assert "15.000 tokens" in tokens["message"]
+
+
 def test_query_is_share_of_bad_requests(monitor):
     match = QUERY_RE.fullmatch(monitor["query"])
     assert match, monitor["query"]

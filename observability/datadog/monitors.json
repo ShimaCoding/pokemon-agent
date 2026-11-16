@@ -3,7 +3,7 @@
     "name": "[MCPokédex] Latencia p95 del agente > 6 s",
     "type": "llm-observability alert",
     "query": "formula(\"slow / clamp_min(all, 20) * 100\").last(\"1h\") > 5",
-    "message": "{{#is_alert}}Más del 5% de las consultas al agente Dexter tardaron más de 6 s en la última hora (equivale a p95 > 6 s). Valor: {{value}}% (con menos de 20 consultas/hora el denominador se fija en 20, así que hacen falta al menos 2 consultas lentas).\n\nRevisar: modelo de fallback (models_tried), llamadas LLM por consulta, latencia de tools MCP.\n{{/is_alert}}\n{{#is_recovery}}La latencia p95 del agente volvió a estar bajo 5 s.{{/is_recovery}}\n\nDashboard: https://app.datadoghq.com/dashboard/795-e3v-q9e\nTrazas: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Amcpokedexagent%20%40meta.span.kind%3Aagent%20agent_level%3Aroot%20%40duration%3A%3E5000000000",
+    "message": "{{#is_alert}}Más del 5% de las consultas al agente Dexter tardaron más de 6 s en la última hora (equivale a p95 > 6 s). Valor: {{value}}% (con menos de 20 consultas/hora el denominador se fija en 20, así que hacen falta al menos 2 consultas lentas).\n\nRevisar: modelo de fallback (models_tried), llamadas LLM por consulta, latencia de tools MCP.\n{{/is_alert}}\n{{#is_recovery}}La latencia p95 del agente volvió a estar bajo 6 s.{{/is_recovery}}\n\nDashboard: https://app.datadoghq.com/dashboard/795-e3v-q9e\nTrazas: https://app.datadoghq.com/llm/traces?query=%40ml_app%3Amcpokedexagent%20%40meta.span.kind%3Aagent%20agent_level%3Aroot%20%40duration%3A%3E6000000000",
     "tags": [
       "service:mcpokedexagent",
       "ml_app:mcpokedexagent",
