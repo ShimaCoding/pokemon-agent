@@ -9,3 +9,11 @@ def _reset_model_cooldowns():
     CooldownFallbackStrategy.reset()
     yield
     CooldownFallbackStrategy.reset()
+
+
+@pytest.fixture(autouse=True)
+def _box_in_a_temp_file(monkeypatch, tmp_path):
+    """Trainer boxes never touch the developer's data/queries.db: the app's hourly purge opens it."""
+    from backend import box
+
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box-default.db"))

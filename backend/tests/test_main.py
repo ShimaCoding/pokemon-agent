@@ -40,6 +40,107 @@ def test_run_requires_conversation_id(client):
     assert res.status_code == 422
 
 
+def test_lifespan_purges_inactive_boxes(monkeypatch, tmp_path):
+    # Next to the session cleanup: both start with the app and stop with it.
+    from backend import box
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(main, "init_db", lambda: None)
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    old = "c" * 36
+    box.store(old, [box.Entry(name="pikachu", pokemon_id=25, types=["electric"], base_stats={"hp": 35})], now=0)
+    with TestClient(main.app) as c:
+        assert c.get("/health").status_code == 200
+        for _ in range(200):
+            if box.list_box(old, now=0)["count"] == 0:
+                break
+            import time
+
+            time.sleep(0.01)
+    assert box.list_box(old, now=0)["count"] == 0
+
+
+# --- trainer_id (#77) ----------------------------------------------------------------
+
+TRAINER = "0f8fad5b-d9cb-469f-a165-70867728950e"
+
+
+@pytest.fixture
+def captured_run(client, monkeypatch):
+    """/api/agent/run without the agent: returns what reached _sse_generator."""
+    seen: list[dict] = []
+
+    async def gen(query, conversation_id, *, authenticated, trainer_id=None):
+        seen.append({"conversation_id": conversation_id, "trainer_id": trainer_id})
+        yield "data: {}\n\n"
+
+    monkeypatch.setattr(main, "_sse_generator", gen)
+    return seen
+
+
+@pytest.mark.parametrize(
+    "trainer_id",
+    [
+        "short-id",  # the conversation pattern (8+) is not enough for a credential
+        "a" * 31,
+        "a" * 65,
+        TRAINER.upper(),
+        "../../../../../../../../../../../etc/passwd",
+        "0f8fad5b d9cb 469f a165 70867728950e",
+        "",
+    ],
+)
+def test_run_rejects_bad_trainer_ids(client, captured_run, trainer_id):
+    body = {"query": "hola", "conversation_id": "conv-12345678", "trainer_id": trainer_id}
+    assert client.post("/api/agent/run", json=body).status_code == 422
+    assert captured_run == []
+
+
+@pytest.mark.parametrize("trainer_id", [TRAINER, "a" * 32, "a" * 64])
+def test_run_passes_the_trainer_id_to_the_agent_run(client, captured_run, trainer_id):
+    body = {"query": "hola", "conversation_id": "conv-12345678", "trainer_id": trainer_id}
+    assert client.post("/api/agent/run", json=body).status_code == 200
+    assert captured_run == [{"conversation_id": "conv-12345678", "trainer_id": trainer_id}]
+
+
+def test_run_works_without_a_trainer_id(client, captured_run):
+    # A bundle cached before the box existed: the turn runs, and Bill reports the box unavailable.
+    assert client.post("/api/agent/run", json={"query": "hola", "conversation_id": "conv-12345678"}).status_code == 200
+    assert captured_run == [{"conversation_id": "conv-12345678", "trainer_id": None}]
+
+
+def test_the_trainer_id_never_leaves_the_server(client, monkeypatch, tmp_path, caplog):
+    """A whole turn through the real agents: no SSE frame, log record or query-log row carries the id."""
+    import logging
+
+    from backend import box
+    from backend.tests.test_bill import Stage, _delegate, _store_then_report
+
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    stage = Stage(monkeypatch, tmp_path)
+    stage.scripts["dexter"] = _delegate("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    stage.scripts["bill"] = _store_then_report(["pikachu"])
+    logged: list[dict] = []
+    monkeypatch.setattr(main, "log_query", lambda **kw: logged.append(kw))
+
+    body = {"query": "guarda a pikachu en mi caja", "conversation_id": "conv-12345678", "trainer_id": TRAINER}
+    with caplog.at_level(logging.DEBUG):
+        res = client.post("/api/agent/run", json=body)
+
+    events = _sse_events(res)
+    assert [e["type"] for e in events][-1] == "done" and "error" not in [e["type"] for e in events]
+    # The id did its job: the Pokémon is in that trainer's box, through Bill's tools.
+    assert [p["name"] for p in box.list_box(TRAINER)["pokemon"]] == ["pikachu"]
+    assert [e.get("agent") for e in events if e["type"] == "tool_call"] == [None, "bill"]
+    init = next(e for e in events if e["type"] == "agent_init")
+    assert "bill" in init["tool_names"] and init["mcp_tools_count"] == len(init["tool_names"]) - 1
+
+    assert TRAINER not in res.text
+    assert TRAINER not in caplog.text
+    assert all(TRAINER not in str(record.__dict__) for record in caplog.records)
+    assert logged and TRAINER not in str(logged)
+
+
 # --- Telemetry on setup failures ----------------------------------------------------
 
 
@@ -222,6 +323,81 @@ def test_agent_used_as_a_tool_gets_no_tool_span(monkeypatch):
         ("tool_result", "search_pokemon"),
     ]
     assert trace.names == ["researcher", "search_pokemon"]
+
+
+def test_tool_result_carries_its_status():
+    assert _tool_events("search_pokemon", None)[1]["status"] == "success"
+    assert _tool_events("search_pokemon", None, status="error")[1]["status"] == "error"
+
+
+def test_sub_agent_tools_are_tagged_and_mount_no_widget():
+    # Dexter calls `bill`; Bill calls a UI-bound MCP tool and one of his own.
+    events: list[dict] = []
+    root = main._ToolTrace(events.append)
+    sub = root.for_sub_agent("bill")
+    ui = SimpleNamespace(mcp_tool=SimpleNamespace(meta={"ui": {"resourceUri": STATS_URI}}))
+    result = {"status": "success", "content": [{"text": "ok"}]}
+
+    def call(trace, uid, name, selected):
+        return trace._on_call(SimpleNamespace(tool_use={"toolUseId": uid, "name": name, "input": {}}, selected_tool=selected))
+
+    def finish(trace, uid, name, selected):
+        tool_use = {"toolUseId": uid, "name": name, "input": {}}
+        return trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=selected))
+
+    agent_tool = SimpleNamespace(tool_type="agent")
+    call(root, "tu-1", "bill", agent_tool)
+    call(sub, "tu-2", "analyze_team", ui)
+    finish(sub, "tu-2", "analyze_team", ui)
+    call(sub, "tu-3", "box_list", SimpleNamespace())
+    finish(sub, "tu-3", "box_list", SimpleNamespace())
+    finish(root, "tu-1", "bill", agent_tool)
+    call(root, "tu-4", "analyze_team", ui)
+    finish(root, "tu-4", "analyze_team", ui)
+
+    assert [(e["type"], e["tool"], e.get("agent")) for e in events] == [
+        ("tool_call", "bill", None),
+        ("tool_call", "analyze_team", "bill"),
+        ("tool_result", "analyze_team", "bill"),
+        ("tool_call", "box_list", "bill"),
+        ("tool_result", "box_list", "bill"),
+        ("tool_result", "bill", None),
+        ("tool_call", "analyze_team", None),
+        ("tool_result", "analyze_team", None),
+        ("ui_resource", "analyze_team", None),  # the root's call of the same tool does mount it
+    ]
+    assert all("agent" not in e for e in events if e["tool"] == "bill")
+    # One index per call across both agents, and each result keeps its call's.
+    calls = {e["tool_id"]: e["index"] for e in events if e["type"] == "tool_call"}
+    assert sorted(calls.values()) == [0, 1, 2, 3]
+    assert all(e["index"] == calls[e["tool_id"]] for e in events)
+    # What the query log, `done` and the rule evals read is the root agent's only.
+    assert root.names == ["bill", "analyze_team"] and root.count == 2
+    assert [o.name for o in root.observations] == ["bill", "analyze_team"]
+    assert sub.names == ["analyze_team", "box_list"]
+
+
+def test_a_cancelled_call_is_tagged_and_is_not_an_error_span(monkeypatch):
+    from backend import telemetry
+
+    finished: list[dict] = []
+    monkeypatch.setattr(telemetry, "start_tool_span", lambda name: name)
+    monkeypatch.setattr(telemetry, "finish_tool_span", lambda span, **kw: finished.append({"span": span, **kw}))
+    events: list[dict] = []
+    trace = main._ToolTrace(events.append)
+    reason = {"status": "error", "content": [{"text": "Herramienta no ejecutada: …"}]}
+    failure = {"status": "error", "content": [{"text": "❌ Error: PokeAPI no responde"}]}
+    for uid, result, cancel_message in (("tu-1", reason, "Herramienta no ejecutada: …"), ("tu-2", failure, None)):
+        tool_use = {"toolUseId": uid, "name": "analyze_team", "input": {}}
+        trace._on_call(SimpleNamespace(tool_use=tool_use))
+        trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=None, cancel_message=cancel_message))
+
+    cancelled, failed = finished
+    assert (cancelled["error"], cancelled["tags"]) == (False, {"cancelled": "true"})
+    assert (failed["error"], failed["tags"]) == (True, None)
+    # The SSE contract is unchanged: the harness reads status and cancelled.
+    results = [e for e in events if e["type"] == "tool_result"]
+    assert [(e["status"], e["cancelled"]) for e in results] == [("error", True), ("error", False)]
 
 
 # --- /api/agent/run turn counter ----------------------------------------------------
@@ -408,6 +584,85 @@ def test_eval_errors_never_break_the_stream(fake_run, monkeypatch):
     assert "error" not in [e["type"] for e in events]
 
 
+# --- Tokens of a run with a sub-agent -------------------------------------------------
+
+
+def _model_events(*, text=None, tool=None, usage):
+    """Stream events of one scripted model call: a reply or a tool call, with its token usage."""
+    import json
+
+    if tool:
+        name, arguments = tool
+        body = [
+            {"contentBlockStart": {"start": {"toolUse": {"name": name, "toolUseId": f"call-{name}"}}}},
+            {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(arguments)}}}},
+        ]
+    else:
+        body = [{"contentBlockDelta": {"delta": {"text": text}}}]
+    return [
+        {"messageStart": {"role": "assistant"}},
+        *body,
+        {"contentBlockStop": {}},
+        {"messageStop": {"stopReason": "tool_use" if tool else "end_turn"}},
+        {"metadata": {"usage": usage, "metrics": {"latencyMs": 1}}},
+    ]
+
+
+def _usage(inp, out, cached=None):
+    usage = {"inputTokens": inp, "outputTokens": out, "totalTokens": inp + out}
+    return usage if cached is None else {**usage, "cacheReadInputTokens": cached}
+
+
+def test_done_counts_the_tokens_of_the_sub_agent_too(monkeypatch):
+    # Two real Strands agents: metrics.accumulated_usage of the root's result leaves the sub-agent out.
+    import asyncio
+    import json
+
+    from strands import Agent
+    from strands.models.litellm import LiteLLMModel
+
+    from backend import agent as agent_module
+    from backend.providers import TracedLiteLLMModel
+
+    def dexter_script(messages):
+        if any("toolResult" in b for m in messages for b in m["content"]):
+            return _model_events(text="Pikachu queda almacenado.", usage=_usage(200, 20, cached=50))
+        return _model_events(tool=("bill", {"input": "guarda a pikachu"}), usage=_usage(100, 5))
+
+    scripts = {"dexter": dexter_script, "bill": lambda messages: _model_events(text="Guardado. 1 de 30.", usage=_usage(10, 2))}
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        for event in scripts[system_prompt](messages):
+            yield event
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+    model = lambda: TracedLiteLLMModel(model_id="groq/openai/gpt-oss-20b")  # noqa: E731
+    bill = Agent(name="bill", model=model(), system_prompt="bill", callback_handler=None)
+    dexter = Agent(name="dexter", model=model(), system_prompt="dexter", tools=[bill.as_tool()], callback_handler=None)
+
+    logged: dict = {}
+    monkeypatch.setattr(agent_module, "create_agent", lambda conversation_id, **kw: dexter)
+    monkeypatch.setattr(main, "log_query", lambda **kw: logged.update(kw))
+
+    async def collect():
+        return [json.loads(f[len("data: ") :]) async for f in main._sse_generator("guarda a pikachu", "conv-12345678")]
+
+    done = asyncio.run(collect())[-1]
+    assert done["type"] == "done"
+    assert (done["input_tokens"], done["output_tokens"], done["total_tokens"]) == (310, 27, 337)
+    assert done["cached_tokens"] == 50
+    assert (logged["input_tokens"], logged["output_tokens"], logged["total_tokens"]) == (310, 27, 337)
+
+
+def test_run_usage_falls_back_to_the_root_metrics():
+    usage = {"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}
+    without_context = SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=usage))
+    assert main._run_usage(without_context) == usage
+    empty_context = SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=usage), invocation_context=None)
+    assert main._run_usage(empty_context) == usage
+    assert main._run_usage(SimpleNamespace(metrics=SimpleNamespace(accumulated_usage=None))) == {}
+
+
 # --- RATE_LIMIT_DISABLED (local evals only) ---------------------------------------
 
 
@@ -415,7 +670,7 @@ def test_eval_errors_never_break_the_stream(fake_run, monkeypatch):
 def quick_run(client, monkeypatch):
     """/api/agent/run without the agent: each call is one hit on the rate limit."""
 
-    async def gen(query, conversation_id, *, authenticated):
+    async def gen(query, conversation_id, *, authenticated, trainer_id=None):
         yield "data: {}\n\n"
 
     monkeypatch.setattr(main, "_sse_generator", gen)

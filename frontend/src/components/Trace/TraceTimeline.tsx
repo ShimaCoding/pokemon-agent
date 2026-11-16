@@ -4,7 +4,7 @@ import type { TraceEvent } from '../../types'
 import { useLessonFor } from '../../hooks/useWikiContent'
 import { tryParseJson } from '../../lib/json'
 import { JsonViewer } from './JsonViewer'
-import { argSummary, buildSteps, formatMs, shortModel, type Step, type ToolRun } from './steps'
+import { argSummary, buildSteps, formatMs, isAgentTool, shortModel, type Step, type ToolRun } from './steps'
 import styles from './TraceTimeline.module.css'
 
 // ── Lesson link ───────────────────────────────────────────────────
@@ -73,8 +73,11 @@ function summarize(step: Step, next: Step | undefined, finished: boolean): Summa
       const pending = step.runs.some((r) => !r.result)
       const count = step.runs.length > 1 ? ` ×${step.runs.length}` : ''
       if (tools.size === 1) {
+        const tool = step.runs[0].call.tool
         const sub = step.runs.map((r) => argSummary(r.call.args)).filter(Boolean).join(' · ')
-        return { icon: '■', tone: 'tool', label: `Consultó ${step.runs[0].call.tool}${count}`, sub, pending }
+        // An agent used as a tool: its own steps are nested in the detail.
+        const verb = isAgentTool(tool) ? 'Delegó en' : 'Consultó'
+        return { icon: '■', tone: 'tool', label: `${verb} ${tool}${count}`, sub, pending }
       }
       return { icon: '■', tone: 'tool', label: `Usó ${tools.size} herramientas${count}`, sub: [...tools].join(' · '), pending }
     }
@@ -111,9 +114,21 @@ function ResultView({ result }: { result: string }) {
 function RunDetail({ run }: { run: ToolRun }) {
   return (
     <div className={styles.run}>
-      <div className={styles.runName}>{run.call.tool}</div>
+      <div className={styles.runName}>
+        {run.call.tool}
+        {run.result?.cancelled && <span className={styles.flag}> · no ejecutada</span>}
+        {run.result?.status === 'error' && !run.result.cancelled && <span className={styles.flag}> · falló</span>}
+      </div>
       <div className={styles.field}>Entrada</div>
       <JsonViewer data={run.call.args ?? {}} maxHeight="120px" />
+      {run.steps && run.steps.length > 0 && (
+        <>
+          <div className={styles.field}>Pasos de {run.call.tool}</div>
+          <div className={styles.nested}>
+            <StepList steps={run.steps} finished={Boolean(run.result)} />
+          </div>
+        </>
+      )}
       <div className={styles.field}>Resultado</div>
       {run.result ? <ResultView result={String(run.result.result ?? '')} /> : <p className={styles.muted}>Esperando…</p>}
     </div>
@@ -185,14 +200,8 @@ function StepDetail({ step }: { step: Step }) {
 
 // ── Timeline ──────────────────────────────────────────────────────
 
-interface Props {
-  traces: TraceEvent[]
-  finished: boolean
-}
-
-/** One row per step; clicking a row reveals its inputs, outputs and lesson. */
-export default function TraceTimeline({ traces, finished }: Props) {
-  const steps = useMemo(() => buildSteps(traces), [traces])
+/** One row per step; clicking a row reveals its inputs, outputs and lesson. A sub-agent's steps nest the same list. */
+function StepList({ steps, finished }: { steps: Step[]; finished: boolean }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const baseId = useId()
 
@@ -231,4 +240,14 @@ export default function TraceTimeline({ traces, finished }: Props) {
       })}
     </ol>
   )
+}
+
+interface Props {
+  traces: TraceEvent[]
+  finished: boolean
+}
+
+export default function TraceTimeline({ traces, finished }: Props) {
+  const steps = useMemo(() => buildSteps(traces), [traces])
+  return <StepList steps={steps} finished={finished} />
 }

@@ -201,6 +201,51 @@ def compact_history(messages: list[dict[str, Any]]) -> bool:
     return changed
 
 
+def agent_report_view(agent_tools: Any) -> Any:
+    """The view of the history for a model call that narrates an agent-tool's report.
+
+    Returns ``view(messages)``: when the last message is the result of a call to one of
+    ``agent_tools`` (``bill``), the call sees the past turns without their tool calls and
+    tool results (the user's texts and the heads of the replies stay) and the current turn
+    whole; any other call sees everything. Nothing is removed from the history: only what
+    that one request carries.
+
+    Why: with whole past turns in view (tool call, result and reply), gpt-oss-120b answers
+    this particular call with noise (zero-width and non-breaking spaces, ellipses) in
+    10-60 % of the cases, measured with the box evals (#78). Replaying a captured request,
+    it stopped as soon as the past turns lost either their tool traffic or their replies
+    (0 of 20 each, against 11 of 20). The texts must stay: with the current turn alone the
+    model narrated "guarda ese equipo" as a request it could not understand, although Bill
+    had stored the team. The call that decides to delegate still sees the whole conversation.
+    """
+    names = frozenset(agent_tools)
+
+    def without_tool_traffic(message: dict[str, Any]) -> dict[str, Any] | None:
+        content = [b for b in message.get("content", []) if not (isinstance(b, dict) and ("toolUse" in b or "toolResult" in b))]
+        if not content:
+            return None
+        return message if len(content) == len(message.get("content", [])) else {**message, "content": content}
+
+    def view(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if len(messages) < 2 or messages[-1].get("role") != "user":
+            return messages
+        results = [b["toolResult"] for b in messages[-1].get("content", []) if isinstance(b, dict) and "toolResult" in b]
+        calls = {
+            b["toolUse"].get("toolUseId"): b["toolUse"].get("name")
+            for b in messages[-2].get("content", [])
+            if isinstance(b, dict) and "toolUse" in b
+        }
+        if not results or not all(calls.get(r.get("toolUseId")) in names for r in results):
+            return messages
+        starts = turn_starts(messages)
+        if not starts or starts[-1] == 0:
+            return messages
+        past = [kept for m in messages[: starts[-1]] if (kept := without_tool_traffic(m)) is not None]
+        return [*past, *messages[starts[-1] :]]
+
+    return view
+
+
 class CompactPastTurns:
     """strands ``ContextStrategy`` that runs ``compact_history`` before each model call."""
 

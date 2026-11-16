@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AssistantMessage, TraceEvent } from '../../types'
-import { buildSteps, formatMs } from '../Trace/steps'
+import { buildSteps, formatMs, isAgentTool } from '../Trace/steps'
 import TraceTimeline from '../Trace/TraceTimeline'
 import styles from './ThinkingPanel.module.css'
 
@@ -21,6 +21,10 @@ const LOADING_PHRASES = [
 function liveStep(traces: TraceEvent[]): string | null {
   const last = traces[traces.length - 1]
   if (!last) return null
+  // A sub-agent's step: Dexter is waiting for it.
+  if ('agent' in last && last.agent) {
+    return last.type === 'tool_call' ? `${last.agent} consulta ${last.tool}` : `${last.agent} está trabajando`
+  }
   switch (last.type) {
     case 'agent_init':
       return 'preparando herramientas'
@@ -29,6 +33,7 @@ function liveStep(traces: TraceEvent[]): string | null {
     case 'model_attempt':
       return last.status === 'success' ? 'pensando' : `falló ${last.model.split('/').pop()}, probando de nuevo`
     case 'tool_call':
+      if (isAgentTool(last.tool)) return `${last.tool} está trabajando`
       return last.tool === 'skills' ? 'cargando instrucciones de Dexter' : `consultando ${last.tool}`
     case 'tool_result':
       return last.cached ? 'analizando resultados (caché)' : 'analizando resultados'

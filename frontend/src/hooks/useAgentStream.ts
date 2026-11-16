@@ -1,4 +1,5 @@
 import { authHeaders } from '../lib/api'
+import { trainerId } from '../lib/trainer'
 import { useChat } from '../store/useStore'
 import type { DoneEvent, SseEvent } from '../types'
 
@@ -65,7 +66,7 @@ export async function sendChatMessage(rawQuery: string): Promise<void> {
     const res = await fetch('/api/agent/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ query, conversation_id: chat.conversationId }),
+      body: JSON.stringify({ query, conversation_id: chat.conversationId, trainer_id: trainerId() }),
     })
 
     if (res.status === 429) {

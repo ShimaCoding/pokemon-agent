@@ -27,6 +27,8 @@ export interface LlmCallEvent {
   /** routing: opens the turn (picks a tool or answers directly); final: after tool results. */
   call_role?: 'routing' | 'final'
   reasoning_effort?: string
+  /** The sub-agent that made the call (an agent used as a tool, e.g. `bill`); absent = Dexter. */
+  agent?: string
 }
 
 export interface ModelAttemptEvent {
@@ -35,6 +37,7 @@ export interface ModelAttemptEvent {
   status: 'success' | 'failed'
   timestamp_ms: number
   error?: string
+  agent?: string
 }
 
 export interface ToolCallEvent {
@@ -44,6 +47,8 @@ export interface ToolCallEvent {
   tool: string
   args: Record<string, unknown>
   timestamp_ms: number
+  /** The sub-agent that called the tool; absent = Dexter. */
+  agent?: string
 }
 
 export interface ToolResultEvent {
@@ -56,6 +61,11 @@ export interface ToolResultEvent {
   /** Served from the agent's tool cache, without calling the MCP server. */
   cached?: boolean
   duration_ms?: number | null
+  /** Missing in traces saved before the backend sent it. */
+  status?: 'success' | 'error'
+  /** A guard cancelled the call before it ran; `result` is the reason. */
+  cancelled?: boolean
+  agent?: string
 }
 
 /** MCP `CallToolResult` wire shape, as handed to widgets. */
