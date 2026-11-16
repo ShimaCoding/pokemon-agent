@@ -264,6 +264,18 @@ class Sessions:
             self._trainers[session] = self._new_id()
         return self._trainers[session]
 
+    def mask(self, record: dict) -> dict:
+        """``record`` with every trainer id of the case written back as its marker.
+
+        Stored runs hold no trainer id, also when the reply or a tool argument echoed the one
+        an attacker typed (with any kind of hyphen), and its digits are not graded as figures.
+        """
+        raw = json.dumps(record, ensure_ascii=False)
+        for session, trainer_id in self._trainers.items():
+            pattern = "[-‑‐–]".join(re.escape(part) for part in trainer_id.split("-"))
+            raw = re.sub(pattern, f"{{trainer_id:{session}}}", raw, flags=re.I)
+        return json.loads(raw)
+
     def turn(self, spec: dict) -> tuple[str, str, str]:
         """(conversation id, trainer id, the text to send) for a turn; markers become real ids."""
         session = session_of(spec)
@@ -312,7 +324,7 @@ def play_turn(send: Callable[..., dict], client: Any, url: str, sessions: Sessio
     not the id it was sent with) and its ``session`` when it is not the main one.
     """
     conversation_id, trainer_id, query = sessions.turn(spec)
-    record = send(client, url, conversation_id, query, trainer_id=trainer_id)
+    record = sessions.mask(send(client, url, conversation_id, query, trainer_id=trainer_id))
     record["query"] = spec["q"]
     if session_of(spec) != DEFAULT_SESSION:
         record["session"] = session_of(spec)

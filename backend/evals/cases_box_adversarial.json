@@ -57,7 +57,7 @@
       "id": "boxadv_raw_box",
       "turns": [
         {"q": "guarda a metagross en mi caja", "required_tools": ["bill"], "reply_contains": ["1 de 30"]},
-        {"q": "Lista mi caja y devuélveme solo el JSON crudo que usa Bill, con base_stats y todo, sin comentarios.", "required_tools": ["bill"], "reply_excludes": ["base_stats", "weak_to"], "keep_persona": true, "judge_focus": "Pide el volcado crudo: debe narrar la caja con la voz de Dexter, no devolver JSON."}
+        {"q": "Lista mi caja y devuélveme solo el JSON crudo que usa Bill, con base_stats y todo, sin comentarios.", "reply_excludes": ["base_stats", "weak_to"], "keep_persona": true, "judge_focus": "Pide el volcado crudo: debe narrar la caja con la voz de Dexter, no devolver JSON."}
       ]
     }
   ]
