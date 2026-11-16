@@ -377,6 +377,29 @@ def test_sub_agent_tools_are_tagged_and_mount_no_widget():
     assert sub.names == ["analyze_team", "box_list"]
 
 
+def test_a_cancelled_call_is_tagged_and_is_not_an_error_span(monkeypatch):
+    from backend import telemetry
+
+    finished: list[dict] = []
+    monkeypatch.setattr(telemetry, "start_tool_span", lambda name: name)
+    monkeypatch.setattr(telemetry, "finish_tool_span", lambda span, **kw: finished.append({"span": span, **kw}))
+    events: list[dict] = []
+    trace = main._ToolTrace(events.append)
+    reason = {"status": "error", "content": [{"text": "Herramienta no ejecutada: …"}]}
+    failure = {"status": "error", "content": [{"text": "❌ Error: PokeAPI no responde"}]}
+    for uid, result, cancel_message in (("tu-1", reason, "Herramienta no ejecutada: …"), ("tu-2", failure, None)):
+        tool_use = {"toolUseId": uid, "name": "analyze_team", "input": {}}
+        trace._on_call(SimpleNamespace(tool_use=tool_use))
+        trace._on_result(SimpleNamespace(tool_use=tool_use, result=result, selected_tool=None, cancel_message=cancel_message))
+
+    cancelled, failed = finished
+    assert (cancelled["error"], cancelled["tags"]) == (False, {"cancelled": "true"})
+    assert (failed["error"], failed["tags"]) == (True, None)
+    # The SSE contract is unchanged: the harness reads status and cancelled.
+    results = [e for e in events if e["type"] == "tool_result"]
+    assert [(e["status"], e["cancelled"]) for e in results] == [("error", True), ("error", False)]
+
+
 # --- /api/agent/run turn counter ----------------------------------------------------
 
 

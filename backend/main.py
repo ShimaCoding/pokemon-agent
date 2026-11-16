@@ -468,16 +468,20 @@ class _ToolTrace:
         duration = getattr(event, "duration", None)
         duration_ms = round(duration * 1000, 2) if duration is not None else None
         error = event.result.get("status") == "error"
+        cancelled = getattr(event, "cancel_message", None) is not None
         self._send({"type": "tool_result", "index": index, "tool_id": uid, "tool": name, "result": display,
                     "status": "error" if error else "success",
                     "cached": cache in ("hit", "stale"), "duration_ms": duration_ms,
-                    "cancelled": getattr(event, "cancel_message", None) is not None})
+                    "cancelled": cancelled})
+        # A call a guard cancelled is the agent working as designed (it reads the reason and
+        # calls again): tagged, not an error span, or the run view flags a good turn as failed.
+        tags = {**({"cache": cache} if cache else {}), **({"cancelled": "true"} if cancelled else {})}
         telemetry.finish_tool_span(
             self._spans.pop(uid, None),
             input_data=dict(event.tool_use.get("input") or {}),
             output_data=display,
-            error=error,
-            tags={"cache": cache} if cache else None,
+            error=error and not cancelled,
+            tags=tags or None,
         )
         self.observations.append(
             checks.ToolObservation(
