@@ -143,6 +143,16 @@ def test_purge_removes_only_inactive_boxes():
     assert box.purge_inactive(days=10, now=120 * day) == 1
 
 
+def test_occupancy_counts_without_counting_as_activity():
+    day = 86_400
+    assert box.occupancy(ASH) == (0, box.MAX_POKEMON)
+    box.store(ASH, [_entry("pikachu"), _entry("eevee")], now=0)
+    assert box.occupancy(ASH) == (2, box.MAX_POKEMON)
+    assert box.occupancy(MISTY) == (0, box.MAX_POKEMON)
+    # Unlike list_box, it does not keep an idle box alive.
+    assert box.purge_inactive(now=100 * day) == 1
+
+
 def test_listing_an_unknown_trainer_creates_no_row(db):
     box.list_box(ASH)
     box.release(ASH, ["pikachu"])

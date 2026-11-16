@@ -95,7 +95,6 @@ def test_store_keeps_only_real_pokemon():
         "full": [],
         "count": 2,
         "capacity": box.MAX_POKEMON,
-        "occupancy": f"2 de {box.MAX_POKEMON}",
     }
     assert lookup.asked == ["pikachu", "pikachuzard", "Mr. Mime"]
     listed = run(listing())
@@ -152,10 +151,8 @@ def test_release_matches_names_as_the_model_writes_them():
         "not_in_box": ["mew"],
         "count": 0,
         "capacity": box.MAX_POKEMON,
-        "occupancy": f"0 de {box.MAX_POKEMON}",
     }
-    listed = run(listing())
-    assert listed["pokemon"] == [] and listed["occupancy"] == f"0 de {box.MAX_POKEMON}"
+    assert run(listing())["pokemon"] == []
 
 
 @pytest.mark.parametrize(
@@ -248,9 +245,9 @@ def test_tools_run_through_the_generic_tool_stream():
 def test_bill_prompt_is_dry_spanish_and_reports_the_occupancy():
     prompt = bill.BILL_PROMPT
     assert prompt.lstrip().startswith("Eres Bill")
-    # The occupancy is copied from the tool result, never composed: no "N de 30" template to echo.
-    assert "copia el occupancy del último resultado tal cual" in prompt and f'"0 de {box.MAX_POKEMON}"' in prompt
-    assert '"N de' not in prompt
+    # The occupancy is stated by code (bill.occupancy_line), never written by the model.
+    assert "No escribas la ocupación de la caja" in prompt and "el sistema la añade" in prompt
+    assert '"N de' not in prompt and "occupancy" not in prompt
     assert "Nunca devuelvas el JSON de una herramienta" in prompt
     assert "No añadas datos que el resultado no trae" in prompt
     assert "sin personalidad" in prompt
@@ -262,6 +259,15 @@ def test_bill_prompt_is_dry_spanish_and_reports_the_occupancy():
     # Nothing of Dexter's persona, and no placeholder for a trainer id.
     assert "Dexter, otro agente" in prompt and "sarc" not in prompt
     assert "{" not in prompt and "trainer_id" not in prompt
+
+
+def test_occupancy_line_is_read_from_the_box():
+    assert bill.occupancy_line(ASH) == f"Ocupación de la caja: 0 de {box.MAX_POKEMON}."
+    box.store(ASH, [bill.entry_from_result(entry_result("pikachu")), bill.entry_from_result(entry_result("gengar"))])
+    assert bill.occupancy_line(ASH) == f"Ocupación de la caja: 2 de {box.MAX_POKEMON}."
+    assert bill.occupancy_line(MISTY) == f"Ocupación de la caja: 0 de {box.MAX_POKEMON}."
+    assert bill.occupancy_line(None) is None
+    assert ASH not in bill.occupancy_line(ASH)
 
 
 def test_bill_models_prefer_the_small_model():
@@ -408,7 +414,9 @@ def test_dexter_delegates_storing_and_only_real_pokemon_are_kept(stage):
     # What Dexter read back is Bill's text, and the SSE marks Bill's own steps.
     [bill_result] = stage.tool_events("tool_result", "bill")
     assert bill_result["status"] == "success" and "agent" not in bill_result
-    stored = json.loads(bill_result["result"].removeprefix("Resultado: "))
+    report, occupancy = bill_result["result"].split("\n\n")
+    assert occupancy == "Ocupación de la caja: 1 de 30."
+    stored = json.loads(report.removeprefix("Resultado: "))
     assert (stored["stored"], stored["not_found"], stored["count"]) == (["pikachu"], ["pikachuzard"], 1)
     assert [e["agent"] for e in stage.tool_events("tool_call", "box_store")] == ["bill"]
     assert [e.get("agent") for e in stage.events if e["type"] == "llm_call"] == [None, "bill", "bill", None]
@@ -657,7 +665,7 @@ def test_when_every_narration_is_garbled_the_user_gets_bills_report(stage, monke
     from backend import guards
 
     text = "".join(e["delta"] for e in events if e["type"] == "text")
-    assert text == guards.garbled_reply("Caja vacía. 0 de 30")
+    assert text == guards.garbled_reply("Caja vacía. 0 de 30\n\nOcupación de la caja: 0 de 30.")
     assert events[-1]["guard"] == "garbled"
     # Two retries, then the fallback: three narration attempts in all.
     assert [who for who, _ in stage.model_calls].count("dexter") == 4

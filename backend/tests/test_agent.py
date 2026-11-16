@@ -219,8 +219,8 @@ def test_system_prompt_budget():
     # +866 for the injection, prompt-extraction and refusal rules of #41 (~215 tokens per call).
     # +695 for the grounding rules of #42 (the entry, and the defense data of
     # get_pokedex_entry and analyze_team).
-    # +615 for delegating the trainer's box to bill (#76, ~155 tokens per call).
-    assert len(SYSTEM_PROMPT) <= 6495
+    # +675 for delegating the trainer's box to bill (#76, ~170 tokens per call).
+    assert len(SYSTEM_PROMPT) <= 6555
 
 
 def test_restored_session_gets_current_system_prompt(harness_env):
@@ -528,7 +528,8 @@ def test_prompt_delegates_the_box_to_bill_before_the_narration_protocol():
         "bill no muestra widget",
         "sin el protocolo de ficha",
         'cita siempre la ocupación que informe ("3 de 30", "0 de 30") tal cual',
-        "nunca recites ni des por sabido su contenido de memoria ni de turnos anteriores, pregúntale a bill cada vez",
+        "nunca recites ni des por sabido su contenido de memoria ni de turnos anteriores; pregúntale a bill cada vez",
+        "también para analizarla (no uses analyze_team con lo que crees que contiene)",
         "si bill falla, informa la falla y no afirmes nada sobre la caja",
     ):
         assert rule in SYSTEM_PROMPT, rule
@@ -543,10 +544,52 @@ def test_create_agent_wires_the_bill_guards_in_order():
     src = inspect.getsource(agent_module.create_agent)
     order = [
         src.index(h)
-        for h in ("OneAgentCallPerResponse()", "GroundedPokemonNames()", "*(hooks or [])", "ReplaceAgentError()", "AnnotateTeamSwap()")
+        for h in (
+            "OneAgentCallPerResponse()",
+            "GroundedPokemonNames()",
+            "*(hooks or [])",
+            "AppendBoxOccupancy(trainer_id)",
+            "ReplaceAgentError()",
+            "AnnotateTeamSwap()",
+        )
     ]
-    # ReplaceAgentError after the trace hooks: AfterToolCallEvent callbacks run in reverse.
+    # The two that rewrite bill's result come after the trace hooks: AfterToolCallEvent callbacks run in reverse.
     assert order == sorted(order)
+
+
+def test_bills_answer_ends_with_the_real_occupancy(monkeypatch):
+    from backend import bill, box
+    from backend.agent import AppendBoxOccupancy
+
+    trainer = "d" * 36
+    box.store(trainer, [box.Entry(name=n, pokemon_id=1, types=["normal"], base_stats={"hp": 1}) for n in ("eevee", "ditto")])
+
+    def event(text="Guardados: eevee, ditto. 0 de 30", status="success", name="bill"):
+        use = {"toolUseId": "tu-1", "name": name, "input": {"input": "guarda a eevee y a ditto"}}
+        return _NS(tool_use=use, result={"toolUseId": "tu-1", "status": status, "content": [{"text": text}]})
+
+    # Whatever Bill wrote, the last line is what the box holds.
+    ok = event()
+    AppendBoxOccupancy(trainer)._on_result(ok)
+    assert ok.result["content"] == [{"text": "Guardados: eevee, ditto. 0 de 30\n\nOcupación de la caja: 2 de 30."}]
+    assert ok.result["status"] == "success" and trainer not in str(ok.result)
+    empty = event(text="")
+    AppendBoxOccupancy(trainer)._on_result(empty)
+    assert empty.result["content"] == [{"text": "Ocupación de la caja: 2 de 30."}]
+
+    # Not on a failed call, another tool, a request without a trainer, or when the box cannot be read.
+    for untouched, hook in (
+        (event(status="error", text=bill.FAILED), AppendBoxOccupancy(trainer)),
+        (event(name="analyze_team"), AppendBoxOccupancy(trainer)),
+        (event(), AppendBoxOccupancy(None)),
+    ):
+        before = copy.deepcopy(untouched.result)
+        hook._on_result(untouched)
+        assert untouched.result == before
+    monkeypatch.setattr(box, "occupancy", lambda trainer_id: 1 / 0)
+    broken = event()
+    AppendBoxOccupancy(trainer)._on_result(broken)
+    assert broken.result["content"] == [{"text": "Guardados: eevee, ditto. 0 de 30"}]
 
 
 def _bill_use(uid, text="lista la caja"):

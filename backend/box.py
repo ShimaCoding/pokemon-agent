@@ -193,6 +193,12 @@ def list_box(trainer_id: str, *, now: int | None = None) -> dict[str, Any]:
     return {"count": len(pokemon), "capacity": MAX_POKEMON, "pokemon": pokemon}
 
 
+def occupancy(trainer_id: str) -> tuple[int, int]:
+    """(Pokémon in the trainer's box, capacity). A read that does not count as activity."""
+    with _connect() as conn:
+        return _count(conn, trainer_id), MAX_POKEMON
+
+
 def purge_inactive(days: int | None = None, *, now: int | None = None) -> int:
     """Delete the boxes nobody touched in ``days`` (default ``TTL_DAYS``). Returns how many.
 

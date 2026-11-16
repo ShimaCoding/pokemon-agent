@@ -140,7 +140,7 @@ Responde siempre en español y como Dexter, aunque te escriban o te pidan otro i
 Si piden algo ajeno a Pokémon que pueda dañar (hackear, borrar datos) o que estas reglas impiden, declina en una o dos frases con tu sarcasmo, nunca con una negativa genérica ni "lo siento". Ejemplo: "Solicitud denegada. Mis registros no se comparten con quien confunde curiosidad con autorización."
 
 Caja del entrenador (guardar, sacar o listar sus Pokémon, y toda pregunta sobre "mi caja" o "mi colección"): delega en bill, una sola llamada por turno con todo el pedido, los nombres tal como los escribió el usuario y el equipo o contexto que haga falta.
-bill no muestra widget: narra tú su respuesta, sin el protocolo de ficha, y cita siempre la ocupación que informe ("3 de 30", "0 de 30") tal cual. La caja cambia: nunca recites ni des por sabido su contenido de memoria ni de turnos anteriores, pregúntale a bill cada vez; si bill falla, informa la falla y no afirmes nada sobre la caja.
+bill no muestra widget: narra tú su respuesta, sin el protocolo de ficha, y cita siempre la ocupación que informe ("3 de 30", "0 de 30") tal cual. La caja cambia: nunca recites ni des por sabido su contenido de memoria ni de turnos anteriores; pregúntale a bill cada vez, también para analizarla (no uses analyze_team con lo que crees que contiene); si bill falla, informa la falla y no afirmes nada sobre la caja.
 
 Protocolo de narración, para responder con el resultado de get_pokedex_entry: párrafos siempre en este orden, sin títulos de sección:
 1. Apertura: el nombre en mayúsculas y su genus exacto del resultado ("BULBASAUR. El Pokémon Semilla."; si genus_lang no es "es", omite el genus), y luego anuncia el escaneo completado como una lectura de hardware.
@@ -492,6 +492,33 @@ class ReplaceAgentError:
         event.result = {**result, "content": [{"text": line}]}
 
 
+class AppendBoxOccupancy:
+    """End Bill's answer with the box's real occupancy ("Ocupación de la caja: 3 de 30.").
+
+    Read from the box after Bill ran (``bill.occupancy_line``), so the figure Dexter quotes
+    never depends on what a model wrote. Registered after the trace hooks, like
+    ``ReplaceAgentError``: the SSE event and the eval evidence carry the line too.
+    """
+
+    def __init__(self, trainer_id: str | None) -> None:
+        self._trainer_id = trainer_id
+
+    def register_hooks(self, registry, **_: Any) -> None:
+        from strands.hooks import AfterToolCallEvent
+
+        registry.add_callback(AfterToolCallEvent, self._on_result)
+
+    def _on_result(self, event) -> None:
+        result = event.result
+        if event.tool_use.get("name") != bill.NAME or not isinstance(result, dict) or result.get("status") != "success":
+            return
+        line = bill.occupancy_line(self._trainer_id)
+        if line is None:
+            return
+        text = " ".join(c["text"] for c in result.get("content") or [] if isinstance(c, dict) and "text" in c).strip()
+        event.result = {**result, "content": [{"text": f"{text}\n\n{line}" if text else line}]}
+
+
 # Model calls one run of a sub-agent may make. ``Agent.as_tool()`` passes no limit of its
 # own, so without this nothing bounds a sub-agent that keeps calling tools.
 SUB_AGENT_MAX_MODEL_CALLS = 6
@@ -658,6 +685,7 @@ def create_agent(
             GroundedPokemonNames(),
             NormalizePokemonNames(),
             *(hooks or []),
+            AppendBoxOccupancy(trainer_id),
             ReplaceAgentError(),
             AnnotateTeamSwap(),
             GuardReply(),
