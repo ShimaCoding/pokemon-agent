@@ -1075,6 +1075,109 @@ def test_strands_agent_as_tool_nests_under_the_calling_agent(px, scripted_model)
     assert "Mew pesa 4 kg." in events[1]["result"]
 
 
+def test_built_sub_agent_owns_its_tool_spans_and_keeps_its_text_out_of_the_chat(px, scripted_model, monkeypatch):
+    """build_sub_agent + _ToolTrace.for_sub_agent: dexter → sub → {chat, tool}, and no top-level text."""
+    from strands import Agent
+    from strands.tools.tools import PythonAgentTool
+
+    from backend import main
+    from backend.agent import build_sub_agent
+
+    _, exporter, _ = px
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    spec = {"name": "box_list", "description": "x", "inputSchema": {"json": {"type": "object", "properties": {}}}}
+    box_list = PythonAgentTool(
+        "box_list",
+        spec,
+        lambda tool_use, **_: {"toolUseId": tool_use["toolUseId"], "status": "success", "content": [{"text": '{"count": 1}'}]},
+    )
+    scripted_model(
+        "bill",
+        lambda messages: _reply("Caja: pikachu. 1 de 30.") if _has_tool_result(messages) else _tool_call("box_list", {}),
+    )
+    events: list[dict] = []
+    tool_trace = main._ToolTrace(events.append)
+    bill = build_sub_agent(
+        "bill", system_prompt="bill", tools=[box_list], trace=events.append, hooks=[tool_trace.for_sub_agent("bill")]
+    )
+    dexter = Agent(
+        name="dexter",
+        model=scripted_model(
+            "dexter",
+            lambda messages: _reply("Tu caja contiene a Pikachu.")
+            if _has_tool_result(messages)
+            else _tool_call("bill", {"input": "lista la caja"}),
+        ),
+        system_prompt="dexter",
+        tools=[bill.as_tool(name="bill", delegate=False)],
+        hooks=[tool_trace],
+        callback_handler=None,
+    )
+
+    async def run():
+        chat: list[str] = []
+        with telemetry.agent_span("conv-12345678"):
+            async for event in dexter.stream_async("¿qué hay en mi caja?"):
+                if event.get("data"):
+                    chat.append(event["data"])
+        return "".join(chat)
+
+    # Only Dexter's words are top-level `data`: Bill's text stays inside the tool stream.
+    assert asyncio.run(run()) == "Tu caja contiene a Pikachu."
+
+    assert _tree(exporter) == {
+        None: ["dexter"],
+        "dexter": ["chat", "bill", "chat"],
+        "bill": ["chat", "box_list", "chat"],
+    }
+    tool = _by_name(exporter)["box_list"]
+    assert tool.attributes["openinference.span.kind"] == "TOOL"
+    assert _parent_name(exporter, tool) == "bill"
+    # SSE: Bill's steps are tagged, Dexter's are not, and no index repeats.
+    tagged = [(e["type"], e.get("tool") or e.get("model"), e.get("agent")) for e in events]
+    assert ("tool_call", "bill", None) in tagged and ("tool_result", "bill", None) in tagged
+    assert ("tool_call", "box_list", "bill") in tagged and ("tool_result", "box_list", "bill") in tagged
+    assert [e["agent"] for e in events if e["type"] == "llm_call"] == ["bill", "bill"]
+    indexes = [e["index"] for e in events if e["type"] == "tool_call"]
+    assert sorted(indexes) == [0, 1]
+
+
+def test_dexter_delegating_to_bill_traces_dexter_bill_and_his_steps(px, monkeypatch, tmp_path):
+    """create_agent end to end: dexter → bill → {chat, tool, chat}, one root, Bill's tool under Bill."""
+    from backend import box
+    from backend.tests.test_bill import ASH, Stage, _delegate, _store_then_report
+
+    _, exporter, _ = px
+    monkeypatch.setattr(box, "DB_PATH", str(tmp_path / "box.db"))
+    stage = Stage(monkeypatch, tmp_path)
+    stage.scripts["dexter"] = _delegate("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    stage.scripts["bill"] = _store_then_report(["pikachu"])
+    dexter = stage.agent(trainer_id=ASH)
+
+    async def run():
+        with telemetry.agent_span("conv-12345678"):
+            return str(await dexter.invoke_async("guarda a pikachu en mi caja"))
+
+    try:
+        assert asyncio.run(run()).strip() == "Pikachu queda almacenado. Ocupas 1 de 30."
+    finally:
+        dexter.cleanup()
+
+    assert _tree(exporter) == {
+        None: ["dexter"],
+        "dexter": ["chat", "bill", "chat"],
+        "bill": ["chat", "box_store", "chat"],
+    }
+    spans = _by_name(exporter)
+    assert spans["bill"].attributes["openinference.span.kind"] == "AGENT"
+    assert spans["bill"].attributes["graph.node.parent_id"] == "dexter"
+    assert spans["bill"].attributes["input.value"] == "guarda a pikachu"
+    assert spans["box_store"].attributes["openinference.span.kind"] == "TOOL"
+    # The trainer id is in no attribute of any span.
+    for span in exporter.get_finished_spans():
+        assert ASH not in json.dumps(dict(span.attributes), default=str)
+
+
 def test_strands_sub_agent_failure_marks_its_span(px, scripted_model):
     from strands import Agent
 

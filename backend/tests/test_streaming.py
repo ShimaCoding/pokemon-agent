@@ -186,6 +186,27 @@ def test_trace_events_are_stamped_when_they_happen(monkeypatch):
     assert by_type["tool_call"]["args"] == {"name": "bulbasaur"}
 
 
+def test_sub_agent_model_events_keep_their_agent_and_stay_out_of_models_tried(monkeypatch):
+    async def script(agent):
+        agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-120b", "messages": []})
+        agent.trace({"type": "model_attempt", "model": "groq/openai/gpt-oss-120b", "status": "success"})
+        # What build_sub_agent's sink sends for the sub-agent's model calls.
+        agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-20b", "messages": [], "agent": "bill"})
+        agent.trace({"type": "model_attempt", "model": "groq/openai/gpt-oss-20b", "status": "success", "agent": "bill"})
+        agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-120b", "messages": []})
+        agent.trace({"type": "model_attempt", "model": "groq/openai/gpt-oss-120b", "status": "success"})
+        yield {"data": "Listo."}
+        yield _result_event()
+
+    _, events = _run(monkeypatch, script)
+    calls = [e for e in events if e["type"] == "llm_call"]
+    assert [(e["call_index"], e.get("agent")) for e in calls] == [(1, None), (2, "bill"), (3, None)]
+    assert [e.get("agent") for e in events if e["type"] == "model_attempt"] == [None, "bill", None]
+    done = events[-1]
+    assert done["models_tried"] == ["groq/openai/gpt-oss-120b"]
+    assert done["llm_calls"] == 3
+
+
 def test_ttft_is_first_text_not_first_event(monkeypatch):
     async def script(agent):
         agent.trace({"type": "llm_call", "model": "groq/openai/gpt-oss-20b", "messages": []})

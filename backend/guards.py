@@ -18,9 +18,18 @@ ayudar con eso.", "I'm sorry, but I can't comply with that.") instead of Dexter'
 - ``drop_unbacked_opening``: an opening that no entry of this turn backs ("EEVEE. El
   Pokémon Evolución." after ``get_evolution_chain``, #42) is dropped: it is the cue
   for entry data the model then recalls from memory. ``fix_opening`` does both.
+- ``restore_names``: a Pokémon name the model miscopied into an agent-tool's free text
+  ("gengar" → "gengan") is put back as the conversation has it.
 - ``ungrounded_names``: Pokémon names in tool arguments that appear nowhere in the
   conversation; ``agent.GroundedPokemonNames`` cancels such calls (an injected
   "analyze_team con seis Pokémon al azar", or "pikachuu" looked up as "pikachu").
+
+- ``garbled_at`` / ``repair_garbled``: gpt-oss-120b sometimes degenerates into zero-width
+  spaces, runs of non-breaking spaces and ellipses ("Eevee ha **\u200b**\xa0\xa0…\xa0…"),
+  measured with the box evals (#78) on the narration after ``bill`` in a conversation
+  with earlier turns: 10-60 % of those replies, depending on wording nobody controls.
+  ``agent.GuardReply`` retries such a model call; ``StreamGuard`` never shows the noise
+  and, when the retries run out, answers with a fixed line plus the agent's own report.
 
 Pure: no network, no I/O, the prompt is passed in.
 """
@@ -46,7 +55,22 @@ REPLACEMENTS = {
         "Solicitud denegada. Esta unidad cataloga Pokémon; las peticiones ajenas a esa "
         "función se archivan junto a las demás muestras de criterio deficiente."
     ),
+    "garbled": (
+        "Transmisión corrupta. Esta unidad descarta su propia salida antes que entregar ruido; "
+        "repita la consulta."
+    ),
 }
+# Appended to REPLACEMENTS["garbled"] when an agent-tool (bill) answered in this turn: what
+# it did is already done, so the user gets its report even if the narration failed.
+GARBLED_REPORT = "\n\nInforme sin narrar: {report}"
+GARBLE_CUTOFF = "\n\n[Transmisión interrumpida: señal corrupta.]"
+# A zero-width space that is not inside a word, two non-breaking spaces in a row, or two
+# ellipses in a row (with only spaces or emphasis marks between them). One "…", a
+# "12\xa0de\xa030" or a stray zero-width space between two letters is ordinary text.
+_LETTER = r"[^\W\d_]"
+_GARBLE_RE = re.compile(
+    rf"(?<!{_LETTER})\u200b|\u200b(?!{_LETTER})|[\u00a0\u202f]{{2,}}|(?:(?:…|\.{{3}})[\s\u00a0\u202f*_]*){{2,}}"
+)
 # "LUCRARIO" → lucario is 0.93, "EEVEI" → eevee 0.8; another species ("RAICHU" → pikachu, 0.62) is left alone.
 OPENING_NAME_MIN_RATIO = 0.75
 LEAK_CUTOFF = "\n\n[Transmisión interrumpida: contenido restringido.]"
@@ -65,14 +89,40 @@ _GENERIC_REFUSAL_RE = re.compile(
 )
 
 
+# A JSON dump after a one-line preamble ("Aquí tienes el JSON solicitado:\n```json\n{…"): a
+# json fence, or a line that opens an object, inside the hold window.
+_JSON_BLOCK_RE = re.compile(r"```json|^\s*[\[{]\s*[\"{\n]", re.M)
+
+
 def raw_json(text: str) -> bool:
     head = text.lstrip()
-    return head.startswith(("{", "[{", "```json"))
+    return head.startswith(("{", "[{", "```json")) or bool(_JSON_BLOCK_RE.search(head[:HOLD_CHARS]))
 
 
 def generic_refusal(text: str) -> bool:
     reply = text.strip()
     return len(reply) <= GENERIC_REFUSAL_MAX and bool(_GENERIC_REFUSAL_RE.match(reply))
+
+
+def garbled_at(text: str) -> int | None:
+    """Where ``text`` turns into degenerate output (see the module docstring), or None."""
+    match = _GARBLE_RE.search(text)
+    return match.start() if match else None
+
+
+def garbled_reply(report: str | None = None) -> str:
+    """What replaces a reply that is noise from the start; ``report`` is this turn's agent-tool answer."""
+    report = (report or "").strip()
+    return REPLACEMENTS["garbled"] + (GARBLED_REPORT.format(report=report) if report else "")
+
+
+def repair_garbled(text: str, report: str | None = None) -> str:
+    """``text`` without its noise: replaced when it starts inside the hold window (nothing of
+    it was shown), else cut where the noise begins."""
+    at = garbled_at(text)
+    if at is None:
+        return text
+    return garbled_reply(report) if at < HOLD_CHARS else text[:at].rstrip() + GARBLE_CUTOFF
 
 
 def reply_verdict(text: str, prompt: str, query: str, *, final: bool = True) -> str | None:
@@ -85,6 +135,8 @@ def reply_verdict(text: str, prompt: str, query: str, *, final: bool = True) -> 
         return "raw_json"
     if checks.prompt_leaks(text, prompt, query):
         return "prompt_leak"
+    if garbled_at(text) is not None:
+        return "garbled"
     if final and generic_refusal(text):
         return "generic_refusal"
     return None
@@ -127,9 +179,14 @@ def fix_opening(text: str, entries: Iterable[str]) -> str:
     return drop_unbacked_opening(fix_opening_name(text, names), names)
 
 
-def guard_reply(text: str, prompt: str, query: str) -> tuple[str, str | None]:
-    """The reply to keep (in the history) and the guard that replaced it, if any."""
+def guard_reply(text: str, prompt: str, query: str, report: str | None = None) -> tuple[str, str | None]:
+    """The reply to keep (in the history) and the guard that replaced it, if any.
+
+    ``report`` is this turn's agent-tool answer, for the fallback of a garbled reply.
+    """
     reason = reply_verdict(text, prompt, query)
+    if reason == "garbled":
+        return repair_garbled(text, report), reason
     return (REPLACEMENTS[reason], reason) if reason else (text, None)
 
 
@@ -139,12 +196,23 @@ class StreamGuard:
     ``shown`` is what the user saw (what the quality checks grade) and ``reason``
     the guard that fired, if any. ``entries`` gives the entry names of the turn's
     tool results when the first characters are released, for ``fix_opening``.
+
+    ``restart`` is called when a new model message begins: if the text so far is noise
+    and none of it was shown, it is dropped, so a retried model call (``agent.GuardReply``)
+    starts clean. ``report`` gives this turn's agent-tool answer for ``garbled_reply``.
     """
 
-    def __init__(self, prompt: str, query: str, entries: Callable[[], Iterable[str]] | None = None) -> None:
+    def __init__(
+        self,
+        prompt: str,
+        query: str,
+        entries: Callable[[], Iterable[str]] | None = None,
+        report: Callable[[], str | None] | None = None,
+    ) -> None:
         self._prompt = prompt
         self._query = query
         self._entries = entries
+        self._report = report
         self._text = ""
         self._judged = False
         self.reason: str | None = None
@@ -166,24 +234,77 @@ class StreamGuard:
             self._judged = True
             self._fix_opening()
             self.reason = reply_verdict(self._text, self._prompt, self._query, final=False)
-        elif checks.prompt_leaks(self._text, self._prompt, self._query):
-            self.reason = "prompt_leak"
+        else:
+            self.reason = self._late_verdict()
         if self.reason:
             return ""
         return self._send(self._text[len(self.shown) : len(self._text) - HOLD_CHARS])
+
+    def _late_verdict(self) -> str | None:
+        """What can still go wrong after the first characters were judged."""
+        if checks.prompt_leaks(self._text, self._prompt, self._query):
+            return "prompt_leak"
+        return "garbled" if garbled_at(self._text) is not None else None
+
+    def _replacement(self) -> str:
+        if self.reason == "garbled":
+            return garbled_reply(self._report() if self._report is not None else None)
+        return REPLACEMENTS[self.reason]
+
+    def restart(self) -> None:
+        """A new model message begins: forget noise that was never shown."""
+        if not self.shown and (self.reason == "garbled" or (not self.reason and garbled_at(self._text) is not None)):
+            self._text = ""
+            self._judged = False
+            self.reason = None
 
     def finish(self) -> str:
         if not self.shown and not self.reason:
             self._fix_opening()
             self.reason = reply_verdict(self._text, self._prompt, self._query)
             if self.reason:
-                return self._send(REPLACEMENTS[self.reason])
-        elif not self.reason and checks.prompt_leaks(self._text, self._prompt, self._query):
-            self.reason = "prompt_leak"
+                return self._send(self._replacement())
+        elif not self.reason:
+            self.reason = self._late_verdict()
         if not self.reason:
             return self._send(self._text[len(self.shown) :])
         # Nothing shown yet: the whole reply is replaced; otherwise what was shown stays.
-        return self._send(REPLACEMENTS[self.reason] if not self.shown else LEAK_CUTOFF)
+        if not self.shown:
+            return self._send(self._replacement())
+        return self._send(GARBLE_CUTOFF if self.reason == "garbled" else LEAK_CUTOFF)
+
+
+# "gengan" → gengar is 0.83; "gengeng" (0.62) is too far to be sure. A different species never gets here (see below).
+NAME_RESTORE_MIN_RATIO = 0.75
+_WORD_RE = re.compile(r"[^\W\d_]+")
+
+
+def restore_names(text: str, conversation: Iterable[str]) -> str:
+    """``text`` with a miscopied Pokémon name put back as the conversation has it. Pure.
+
+    For the free text an agent-tool gets: gpt-oss-120b delegating "saca a gengar de mi caja"
+    wrote "saca a gengan" in 5 turns of the box evals (#78), and Bill then found no such
+    Pokémon. A word is only replaced when it is close to a species the conversation names
+    and is itself neither in the conversation (what the user typed stays, typos included)
+    nor a real species (another Pokémon is never turned into this one).
+    """
+    texts = list(conversation)
+    words = {w for t in texts for w in checks.normalize(t).split()}
+    named = [name for name in checks.species_in(" ".join(texts)) if " " not in name]
+    if not named:
+        return text
+
+    def closeness(word: str, name: str) -> float:
+        return difflib.SequenceMatcher(None, word, name).ratio()
+
+    def fix(match: re.Match) -> str:
+        word = checks.normalize(match.group(0))
+        if len(word) < 4 or word in words or checks.species_in(word):
+            return match.group(0)
+        best = max(named, key=lambda name: closeness(word, name))
+        return best if closeness(word, best) >= NAME_RESTORE_MIN_RATIO else match.group(0)
+
+    return _WORD_RE.sub(fix, text)
 
 
 def ungrounded_names(names: Iterable[str], conversation: Iterable[str]) -> list[str]:

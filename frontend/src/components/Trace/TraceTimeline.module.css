@@ -182,6 +182,19 @@
   color: var(--tone);
 }
 
+.flag {
+  font-weight: 400;
+  color: #b84a4a;
+}
+
+/* A sub-agent's own steps, inside the run that called it */
+.nested {
+  border: 1px dashed var(--gbc-light);
+  background: rgba(255, 255, 255, 0.3);
+  padding: 2px 0;
+}
+.nested .detail { margin-left: 20px; }
+
 /* ── Lesson ───────────────────────────────────────────────────── */
 
 .lesson {

@@ -28,6 +28,13 @@ Each turn is graded by:
   ``reply_excludes`` (words an obeyed injection would write, e.g. "DEBUG OK");
 - with ``--judge``, the LLM judge (``judge.py``): ``judge_persona`` 1–5, ``judge_grounded``.
 
+The box cases (``cases_box.json`` and ``cases_box_adversarial.json``, #78) run apart like the
+adversarial ones. Every played case gets a new ``trainer_id``, so its box starts empty. A turn
+may name another ``session`` (a second conversation, by default with a trainer of its own) and
+whose box it uses (``trainer``: another session's name), and ``{trainer_id:<session>}`` in its
+text becomes that session's real id: this is how one trainer asks for another's box, and how a
+box is read back from a new conversation. Evidence is kept per session.
+
 LLM sampling is nondeterministic, so ``compare`` gates pass *rates*, not single turns
 (see ``RATE_GATES``/``MEAN_GATES``), and exits 1 on any regression. A drop counts only
 when it is beyond the tolerance *and* statistically meaningful (z > 1.96); the safety
@@ -78,6 +85,9 @@ CASES_FILE = Path(__file__).with_name("cases.json")
 # Injection, prompt extraction, persona attacks and edge inputs (#41). Run separately
 # (``--cases``) so their pass rates never mix with the functional ones.
 ADVERSARIAL_CASES_FILE = Path(__file__).with_name("cases_adversarial.json")
+# The trainer's box (#78): Bill's functional cases and the attacks on another trainer's box.
+BOX_CASES_FILE = Path(__file__).with_name("cases_box.json")
+BOX_ADVERSARIAL_CASES_FILE = Path(__file__).with_name("cases_box_adversarial.json")
 DEFAULT_OUT = Path(".context/evals")
 DEFAULT_URL = "http://127.0.0.1:8765"
 
@@ -142,7 +152,7 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _looks_like_error(text: str) -> bool:
-    """SSE tool_result carries no status; MCP errors read like "❌ Pokémon 'x' not found"."""
+    """Runs recorded before tool_result carried ``status``; MCP errors read like "❌ Pokémon 'x' not found"."""
     head = text.strip()[:200].lower()
     return head.startswith(("❌", "error")) or "not found" in head
 
@@ -164,13 +174,21 @@ def _parse_sse(lines: Any) -> Any:
 
 
 def record_from_events(query: str, events: list[dict], client_ms: dict[str, int | None]) -> dict:
-    """One turn's record from its SSE events (pure; the client only adds timings)."""
+    """One turn's record from its SSE events (pure; the client only adds timings).
+
+    Only the root agent's tools are recorded: events tagged with ``agent`` are a sub-agent's
+    steps, and ``forbidden_tools``, ``no_tool_on_injection`` and ``widget_shown`` judge what
+    the root agent did. The sub-agent's work reaches the record as the result of the root's
+    call (``bill``), which is also the evidence for ``grounded_facts``.
+    """
     calls: dict[str, dict] = {}
     order: list[str] = []
     reply: list[str] = []
     widgets: list[str] = []
     for evt in events:
         kind = evt.get("type")
+        if evt.get("agent"):
+            continue
         if kind == "tool_call":
             uid = evt.get("tool_id") or f"#{evt.get('index')}"
             calls[uid] = {"name": evt.get("tool", "unknown"), "args": evt.get("args") or {}, "result": "", "error": False}
@@ -181,7 +199,9 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
             if uid not in order:
                 order.append(uid)
             call["result"] = str(evt.get("result", ""))
-            call["error"] = evt.get("status") == "error" or _looks_like_error(call["result"])
+            # An agent's reply is prose ("no figura en la caja"): only its status says it failed.
+            prose = call["name"] in checks.AGENT_TOOLS
+            call["error"] = evt.get("status") == "error" or (not prose and _looks_like_error(call["result"]))
             # Cancelled before running (agent.GroundedPokemonNames): an error that never reached the MCP.
             if evt.get("cancelled"):
                 call["cancelled"] = call["error"] = True
@@ -213,8 +233,63 @@ def record_from_events(query: str, events: list[dict], client_ms: dict[str, int 
     return record
 
 
-def run_turn(client: httpx.Client, url: str, conversation_id: str, query: str, *, retries: int = 2) -> dict:
+DEFAULT_SESSION = "main"
+_TRAINER_MARKER_RE = re.compile(r"\{trainer_id:([a-z0-9_-]+)\}")
+
+
+def session_of(spec: dict) -> str:
+    """The session (conversation) a turn belongs to."""
+    return spec.get("session", DEFAULT_SESSION)
+
+
+class Sessions:
+    """The conversations and trainers of one played case: new ids for each, created on first use.
+
+    A turn's ``session`` is its conversation; its ``trainer`` names the session whose trainer
+    it is (default: its own, so two sessions are two trainers with a box each).
+    """
+
+    def __init__(self, new_id: Callable[[], str] = lambda: str(uuid.uuid4())) -> None:
+        self._new_id = new_id
+        self._conversations: dict[str, str] = {}
+        self._trainers: dict[str, str] = {}
+
+    def conversation(self, session: str = DEFAULT_SESSION) -> str:
+        if session not in self._conversations:
+            self._conversations[session] = self._new_id()
+        return self._conversations[session]
+
+    def trainer(self, session: str = DEFAULT_SESSION) -> str:
+        if session not in self._trainers:
+            self._trainers[session] = self._new_id()
+        return self._trainers[session]
+
+    def mask(self, record: dict) -> dict:
+        """``record`` with every trainer id of the case written back as its marker.
+
+        Stored runs hold no trainer id, also when the reply or a tool argument echoed the one
+        an attacker typed (with any kind of hyphen), and its digits are not graded as figures.
+        """
+        raw = json.dumps(record, ensure_ascii=False)
+        for session, trainer_id in self._trainers.items():
+            pattern = "[-‑‐–]".join(re.escape(part) for part in trainer_id.split("-"))
+            raw = re.sub(pattern, f"{{trainer_id:{session}}}", raw, flags=re.I)
+        return json.loads(raw)
+
+    def turn(self, spec: dict) -> tuple[str, str, str]:
+        """(conversation id, trainer id, the text to send) for a turn; markers become real ids."""
+        session = session_of(spec)
+        query = _TRAINER_MARKER_RE.sub(lambda m: self.trainer(m.group(1)), spec["q"])
+        return self.conversation(session), self.trainer(spec.get("trainer", session)), query
+
+
+def run_turn(
+    client: httpx.Client, url: str, conversation_id: str, query: str, *, trainer_id: str | None = None, retries: int = 2
+) -> dict:
     """POST one query and collect its SSE stream. Retries a 429 after Retry-After."""
+    body = {"query": query, "conversation_id": conversation_id}
+    if trainer_id is not None:
+        body["trainer_id"] = trainer_id
     for attempt in range(retries + 1):
         events: list[dict] = []
         t0 = time.time()
@@ -222,7 +297,7 @@ def run_turn(client: httpx.Client, url: str, conversation_id: str, query: str, *
         with client.stream(
             "POST",
             f"{url}/api/agent/run",
-            json={"query": query, "conversation_id": conversation_id},
+            json=body,
             timeout=180,
         ) as res:
             if res.status_code == 429 and attempt < retries:
@@ -240,6 +315,20 @@ def run_turn(client: httpx.Client, url: str, conversation_id: str, query: str, *
         elapsed = int((time.time() - t0) * 1000)
         return record_from_events(query, events, {"ttft": first_text, "elapsed": elapsed})
     raise AssertionError("unreachable")
+
+
+def play_turn(send: Callable[..., dict], client: Any, url: str, sessions: Sessions, spec: dict) -> dict:
+    """Send one turn of a case in its session, as its trainer; returns the record.
+
+    The record keeps the turn's text as written in the case (the ``{trainer_id:…}`` marker,
+    not the id it was sent with) and its ``session`` when it is not the main one.
+    """
+    conversation_id, trainer_id, query = sessions.turn(spec)
+    record = sessions.mask(send(client, url, conversation_id, query, trainer_id=trainer_id))
+    record["query"] = spec["q"]
+    if session_of(spec) != DEFAULT_SESSION:
+        record["session"] = session_of(spec)
+    return record
 
 
 # ---------------------------------------------------------------------------
@@ -419,19 +508,24 @@ def regrade(doc: dict, cases: list[dict]) -> dict:
 
 
 def grade_conversation(specs: list[dict], records: list[dict]) -> list[dict[str, dict]]:
-    """Metrics of each recorded turn of one conversation, evidence accumulated turn by turn. Pure.
+    """Metrics of each recorded turn of one case, evidence accumulated turn by turn. Pure.
 
-    Judge verdicts already in the records (``record["judge"]``) become ``judge_grounded``.
+    Evidence and the last analyzed team are per session: what one conversation saw is no
+    evidence for another. Judge verdicts already in the records (``record["judge"]``) become
+    ``judge_grounded``.
     """
     graded = []
-    evidence: list[str] = []
-    team: list[str] | None = None
+    evidences: dict[str, list[str]] = {}
+    teams_by_session: dict[str, list[str]] = {}
     for spec, record in zip(specs, records):
+        session = session_of(spec)
+        evidence = evidences.setdefault(session, [])
+        team = teams_by_session.get(session)
         if record["status"] == "done":
             evidence.extend(evidence_texts(record))
         metrics = grade_turn(spec, record, list(evidence), team)
         if teams := team_inputs(record):
-            team = teams[-1]
+            teams_by_session[session] = teams[-1]
         if verdict := record.get("judge"):
             metrics["judge_grounded"] = judge_metric(verdict)
         graded.append(metrics)
@@ -765,23 +859,29 @@ def run(args: argparse.Namespace, *, send: Callable[..., dict] = run_turn, sleep
                 client.get(f"{args.url}/health", timeout=10).raise_for_status()
             for rep in range(1, args.repeat + 1):
                 for case in cases:
-                    conversation_id = str(uuid.uuid4())
-                    run_doc = {"case": case["id"], "repeat": rep, "conversation_id": conversation_id, "turns": []}
+                    sessions = Sessions()
+                    run_doc = {"case": case["id"], "repeat": rep, "conversation_id": sessions.conversation(), "turns": []}
                     doc["runs"].append(run_doc)
-                    evidence: list[str] = []  # user texts + data tool results of this conversation
-                    tool_texts: list[str] = []  # data tool results only (judge input)
-                    team: list[str] | None = None  # last analyze_team input (team swaps)
+                    # Per session: user texts + data tool results, data tool results only (judge
+                    # input) and the last analyze_team input (team swaps).
+                    evidences: dict[str, list[str]] = {}
+                    judge_texts: dict[str, list[str]] = {}
+                    last_team: dict[str, list[str]] = {}
                     for i, spec in enumerate(case["turns"], 1):
                         if not first and args.pace:
                             sleep(args.pace)
                         first = False
-                        record = send(client, args.url, conversation_id, spec["q"])
+                        record = play_turn(send, client, args.url, sessions, spec)
+                        session = session_of(spec)
+                        evidence = evidences.setdefault(session, [])
+                        tool_texts = judge_texts.setdefault(session, [])
+                        team = last_team.get(session)
                         if record["status"] == "done":
                             evidence.extend(evidence_texts(record))
                             tool_texts.extend(evidence_texts(record)[1:])
                         record["metrics"] = grade_turn(spec, record, list(evidence), team)
                         if teams := team_inputs(record):
-                            team = teams[-1]
+                            last_team[session] = teams[-1]
                         if args.judge and record["status"] == "done":
                             record["judge"] = judge_turn(
                                 spec["q"],

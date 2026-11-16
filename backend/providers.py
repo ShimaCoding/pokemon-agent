@@ -51,6 +51,8 @@ MODELS_PUBLIC = list(MODELS_AUTHENTICATED)
 CONTEXT_WINDOW = 131_072
 
 TraceSink = Callable[[dict[str, Any]], None]
+# What of the history one model call carries (``context.agent_report_view``); the history itself is untouched.
+MessagesView = Callable[[list[dict[str, Any]]], list[dict[str, Any]]]
 
 # Groq's gpt-oss accepts low | medium | high and defaults to medium. The model
 # reasons before any visible output, so effort is pure latency: the call that
@@ -193,6 +195,9 @@ class TracedLiteLLMModel(LiteLLMModel):
     Also sets ``reasoning_effort`` per call from ``call_role(messages)``. It is a
     pure function of the messages, so retries and fallback candidates of the
     same call get the same effort.
+
+    ``view`` picks what of the history a call carries; the trace events and spans
+    report those messages, the ones the model actually read.
     """
 
     def __init__(
@@ -200,10 +205,12 @@ class TracedLiteLLMModel(LiteLLMModel):
         *,
         trace: TraceSink | None = None,
         reasoning_effort: dict[str, str] | None = None,
+        view: MessagesView | None = None,
         **config: Any,
     ) -> None:
         super().__init__(**config)
         self._trace = trace
+        self._view = view
         self._effort = reasoning_effort or {"routing": REASONING_EFFORT_ROUTING, "final": REASONING_EFFORT_FINAL}
 
     def reasoning_effort_for(self, messages: list[dict[str, Any]]) -> str:
@@ -223,6 +230,8 @@ class TracedLiteLLMModel(LiteLLMModel):
 
     async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):  # type: ignore[override]
         model_id = self.get_config()["model_id"]
+        if self._view is not None:
+            messages = self._view(messages)
         role, effort = call_role(messages), self.reasoning_effort_for(messages)
         self._emit(
             {
@@ -298,25 +307,38 @@ class RetryMalformedToolCalls:
         event.retry = True
 
 
-def build_model(authenticated: bool, trace: TraceSink | None = None) -> ModelRouter:
+def build_model(
+    authenticated: bool,
+    trace: TraceSink | None = None,
+    *,
+    models: list[str] | None = None,
+    view: MessagesView | None = None,
+) -> ModelRouter:
     """Build a ModelRouter over the Groq models allowed for this request.
 
     A fresh router and fresh model instances per request keep the trace sink
     request-scoped; model health across requests lives in CooldownFallbackStrategy.
 
+    ``models`` is an explicit list, preferred model first, for an agent that does not
+    use the request's (a sub-agent with its own order); ``authenticated`` is then ignored.
+    ``view`` is passed to every model (see ``TracedLiteLLMModel``).
+
     Raises:
         RuntimeError: If GROQ_API_KEY is not set.
+        ValueError: If ``models`` is an empty list.
     """
     if not groq_configured():
         raise RuntimeError(f"No LLM provider configured. Set {API_KEY_ENV}.")
+    if models is not None and not models:
+        raise ValueError("models must name at least one model")
     # Candidate name = model id: CooldownFallbackStrategy keys its process-wide table on it.
     return ModelRouter(
         [
             RoutingCandidate(
-                model=TracedLiteLLMModel(model_id=m, trace=trace, context_window_limit=CONTEXT_WINDOW),
+                model=TracedLiteLLMModel(model_id=m, trace=trace, view=view, context_window_limit=CONTEXT_WINDOW),
                 name=m,
             )
-            for m in model_ids(authenticated)
+            for m in (models if models is not None else model_ids(authenticated))
         ],
         strategy=CooldownFallbackStrategy(),
     )

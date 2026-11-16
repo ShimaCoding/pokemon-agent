@@ -412,3 +412,116 @@ def test_evolution_chain_is_cacheable_only_when_every_stage_has_an_id():
     not_found = {"status": "error", "toolUseId": "x", "content": [{"text": "❌ Pokémon 'x' not found."}]}
     assert not tool_cache.is_cacheable("get_evolution_chain", not_found)
     assert "get_evolution_chain" in tool_cache.CACHEABLE_TOOLS
+
+
+# --- fetch: a cacheable tool read outside the agent loop ---------------------------------
+
+
+class _Tool:
+    """A tool object with the generic ``stream``: yields a progress event, then the result."""
+
+    def __init__(self, name="get_pokedex_entry", make=_ok):
+        self.tool_name = name
+        self.make = make
+        self.inputs: list[dict] = []
+
+    async def stream(self, tool_use, invocation_state, **kwargs):
+        self.inputs.append(tool_use["input"])
+        yield {"progress": len(self.inputs)}
+        yield ToolResultEvent(self.make(tool_use["toolUseId"]))
+
+
+def _fetch(tool, tool_input=None):
+    return asyncio.run(tool_cache.fetch(tool, {"pokemon": "pikachu"} if tool_input is None else tool_input))
+
+
+def _text(result) -> dict:
+    return json.loads(result["content"][0]["text"])
+
+
+def test_fetch_stores_a_miss_and_then_hits():
+    tool = _Tool()
+    first = _fetch(tool)
+    second = _fetch(tool, {"pokemon": " Pikachu "})
+    assert tool.inputs == [{"pokemon": "pikachu"}]
+    assert _text(first) == _text(second) == _entry()
+    assert second["status"] == "success" and "toolUseId" not in second
+
+
+def test_fetch_and_the_agent_share_the_cache():
+    tool = _Tool()
+    _fetch(tool)
+    live = _Live()
+    ctx = _ctx()
+    _run(ctx, live)
+    assert live.calls == 0 and _outcome(ctx) == "hit"
+
+    # And the other way round: what the agent cached, fetch reads without calling the tool.
+    tool_cache._reset_cache()
+    _run(_ctx(), live)
+    other = _Tool()
+    assert _text(_fetch(other)) == _entry()
+    assert other.inputs == []
+
+
+def test_fetch_does_not_store_an_incomplete_result():
+    tool = _Tool(make=lambda uid: _ok(uid, _entry(evolution_chain=[])))
+    assert _text(_fetch(tool))["evolution_chain"] == []
+    _fetch(tool)
+    assert len(tool.inputs) == 2
+
+
+def test_fetch_returns_an_error_result_and_does_not_store_it():
+    tool = _Tool(make=_err)
+    result = _fetch(tool)
+    assert result["status"] == "error" and "PokeAPI" in result["content"][0]["text"]
+    _fetch(tool)
+    assert len(tool.inputs) == 2
+
+
+def test_fetch_serves_an_expired_copy_when_the_live_call_fails(monkeypatch):
+    _fetch(_Tool())
+    monkeypatch.setattr(tool_cache, "TTL_SECONDS", 0)
+    broken = _Tool(make=_err)
+    assert _text(_fetch(broken)) == _entry()
+    assert broken.inputs == [{"pokemon": "pikachu"}]
+
+
+def test_fetch_passes_other_tools_through():
+    tool = _Tool(name="search_pokemon")
+    _fetch(tool, {"query": "pika"})
+    _fetch(tool, {"query": "pika"})
+    assert len(tool.inputs) == 2
+
+
+def test_fetch_with_the_cache_disabled(monkeypatch):
+    monkeypatch.setenv("TOOL_CACHE_ENABLED", "0")
+    tool = _Tool()
+    _fetch(tool)
+    _fetch(tool)
+    assert len(tool.inputs) == 2
+
+
+def test_fetch_runs_a_real_tool_object():
+    calls = []
+
+    def func(tool_use, **_):
+        calls.append(tool_use["input"])
+        return _ok(tool_use["toolUseId"])
+
+    spec = {"name": "get_pokedex_entry", "description": "x", "inputSchema": {"json": {"type": "object", "properties": {}}}}
+    tool = PythonAgentTool("get_pokedex_entry", spec, func)
+    assert _text(_fetch(tool)) == _entry()
+    assert _text(_fetch(tool)) == _entry()
+    assert calls == [{"pokemon": "pikachu"}]
+
+
+def test_fetch_without_a_result_is_an_error():
+    class Silent:
+        tool_name = "search_pokemon"
+
+        async def stream(self, tool_use, invocation_state, **kwargs):
+            return
+            yield  # pragma: no cover
+
+    assert _fetch(Silent())["status"] == "error"

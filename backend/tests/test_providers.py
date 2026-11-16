@@ -47,6 +47,47 @@ def test_build_model_candidates(monkeypatch, authenticated, expected):
     assert [c.model.get_config()["model_id"] for c in router.candidates] == expected
 
 
+def test_build_model_takes_an_explicit_model_list(monkeypatch):
+    # A sub-agent with its own order: small model first, the large one as fallback.
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    order = list(reversed(MODELS_AUTHENTICATED))
+    for authenticated in (False, True):
+        router = build_model(authenticated, models=order)
+        assert [c.model.get_config()["model_id"] for c in router.candidates] == order
+        assert [c.name for c in router.candidates] == order  # the cooldown table keys on the name
+    assert len(build_model(False, models=order[:1]).candidates) == 1
+    with pytest.raises(ValueError):
+        build_model(False, models=[])
+
+
+def test_traced_model_sends_and_reports_its_view_of_the_messages(monkeypatch):
+    # The model reads what the view returns, and the trace shows exactly that.
+    sent: list[list[dict]] = []
+
+    async def fake_stream(self, messages, tool_specs=None, system_prompt=None, **kwargs):
+        sent.append(messages)
+        yield {"messageStart": {"role": "assistant"}}
+
+    monkeypatch.setattr(LiteLLMModel, "stream", fake_stream)
+    history = [
+        {"role": "user", "content": [{"text": "turno viejo"}]},
+        {"role": "assistant", "content": [{"text": "respuesta vieja"}]},
+        {"role": "user", "content": [{"text": "turno actual"}]},
+    ]
+    events: list[dict] = []
+    model = TracedLiteLLMModel(model_id="groq/openai/gpt-oss-20b", trace=events.append, view=lambda messages: messages[-1:])
+    _collect(model, history)
+
+    assert sent == [history[-1:]]
+    assert events[0]["messages"] == [{"role": "user", "content": "turno actual"}]
+    assert len(history) == 3
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    view = lambda messages: messages  # noqa: E731
+    assert all(c.model._view is view for c in build_model(False, view=view).candidates)
+    assert all(c.model._view is None for c in build_model(False).candidates)
+
+
 def _collect(model, messages):
     async def run():
         return [e async for e in model.stream(messages)]

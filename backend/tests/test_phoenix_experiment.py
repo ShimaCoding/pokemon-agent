@@ -76,10 +76,12 @@ def test_persona_evaluation_is_the_judge_mean():
 
 def test_task_plays_one_conversation_with_pace_and_judge():
     sent, judged, slept = [], [], []
+    trainers: set = set()
     clock = iter(range(0, 1000, 5))
 
-    def send(http, url, conversation_id, query):
+    def send(http, url, conversation_id, query, *, trainer_id=None):
         sent.append((url, conversation_id, query))
+        trainers.add(trainer_id)
         return _record(query, pokemon="charmander" if "charmander" in query else "bulbasaur")
 
     def judge(query, reply, tool_texts, *, model, focus=None):
@@ -94,6 +96,8 @@ def test_task_plays_one_conversation_with_pace_and_judge():
 
     assert [q for _, _, q in sent] == ["háblame de bulbasaur", "¿y la de charmander?"]
     assert len({cid for _, cid, _ in sent}) == 1 and out["conversation_id"] == sent[0][1]
+    # One trainer for the whole case (its box starts empty), and the id is not the conversation's.
+    assert len(trainers) == 1 and None not in trainers and sent[0][1] not in trainers
     assert slept == [16]  # 21 s pace, 5 s already elapsed on the fake clock
     # The judge sees the data tool results accumulated so far, as in harness.run.
     assert judged == [("háblame de bulbasaur", 1, "judge-m"), ("¿y la de charmander?", 2, "judge-m")]
@@ -102,7 +106,7 @@ def test_task_plays_one_conversation_with_pace_and_judge():
 
 
 def test_task_without_judge_and_failed_turns():
-    def send(http, url, conversation_id, query):
+    def send(http, url, conversation_id, query, *, trainer_id=None):
         return {"query": query, "status": "http_500", "error": "boom", "reply": "", "tools": []}
 
     task = px.make_task("http://b", pacer=px.Pacer(0), send=send, judge=lambda *a, **k: pytest.fail("no judge"))

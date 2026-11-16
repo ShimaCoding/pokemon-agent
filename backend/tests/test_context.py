@@ -390,3 +390,107 @@ def test_stub_forbids_quoting_from_memory():
     assert "ya no están disponibles" in TOOL_RESULT_STUB
     assert "No los cites de memoria" in TOOL_RESULT_STUB
     assert "vuelve a llamar a la herramienta" in TOOL_RESULT_STUB
+
+
+# --- A past turn that called bill (#76) -----------------------------------------------------
+
+
+def _bill_turn(request: str, reply: str) -> list[dict]:
+    use = {"toolUseId": "tu-bill", "name": "bill", "input": {"input": request}}
+    return [
+        {"role": "user", "content": [{"text": "guarda a pikachu en mi caja"}]},
+        {"role": "assistant", "content": [{"toolUse": use}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": "tu-bill", "status": "success", "content": [{"text": "Guardado: pikachu. 1 de 30."}]}}]},
+        {"role": "assistant", "content": [{"text": reply}]},
+    ]
+
+
+def test_a_past_bill_result_becomes_the_call_again_stub():
+    # The box changes between turns, so "call the tool again" is exactly right for it.
+    messages = _with_new_turn(_bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30."), "¿qué hay en mi caja?")
+    assert compact_history(messages)
+    [result] = _blocks(messages, "toolResult")
+    assert result["content"] == [{"text": TOOL_RESULT_STUB}]
+    assert "Guardado: pikachu" not in json.dumps(messages, ensure_ascii=False)
+    # The call itself stays: the model still sees what it asked Bill.
+    assert _blocks(messages, "toolUse")[0]["input"] == {"input": "guarda a pikachu"}
+
+
+def test_a_dropped_bill_turn_is_indexed_by_its_request():
+    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado.")
+    filler = [
+        m
+        for i in range(MAX_PAST_TURNS)
+        for m in (
+            {"role": "user", "content": [{"text": f"pregunta {i}"}]},
+            {"role": "assistant", "content": [{"text": f"respuesta {i}"}]},
+        )
+    ]
+    messages = _with_new_turn(past + filler, "¿qué hay en mi caja?")
+    assert compact_history(messages)
+    index = messages[0]["content"][0]["text"]
+    assert index.startswith(INDEX_PREFIX)
+    assert "1) guarda a pikachu (bill)" in index
+
+
+# --- agent_report_view: the narration of bill's report sees the current turn only (#78) -------
+
+from backend.context import agent_report_view  # noqa: E402
+
+
+def _result_of(uid: str, text: str = "Guardado. 2 de 30") -> dict:
+    return {"role": "user", "content": [{"toolResult": {"toolUseId": uid, "status": "success", "content": [{"text": text}]}}]}
+
+
+def _call(uid: str, name: str, tool_input: dict) -> dict:
+    return {"role": "assistant", "content": [{"toolUse": {"toolUseId": uid, "name": name, "input": tool_input}}]}
+
+
+def test_narrating_bills_report_sees_past_turns_without_their_tool_traffic():
+    view = agent_report_view({"bill"})
+    analysis = [
+        {"role": "user", "content": [{"text": "[Turnos anteriores resumidos: 1) pikachu (get_pokedex_entry)]"}, {"text": "analiza mi equipo: gengar, alakazam y machamp"}]},
+        {"role": "assistant", "content": [{"text": "Veamos."}, _call("tu-0", "analyze_team", {"pokemon_names": ["gengar", "alakazam", "machamp"]})["content"][0]]},
+        _result_of("tu-0", TOOL_RESULT_STUB),
+        {"role": "assistant", "content": [{"text": "Equipo frágil ante Siniestro."}]},
+    ]
+    past = analysis + _bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    current = [
+        {"role": "user", "content": [{"text": "guarda ese equipo en mi caja"}]},
+        _call("tu-2", "bill", {"input": "guarda a gengar, alakazam y machamp"}),
+        _result_of("tu-2"),
+    ]
+    messages = past + current
+    before = copy.deepcopy(messages)
+    seen = view(messages)
+
+    # The current turn is whole; of the past, what was said stays and the tool traffic goes.
+    assert seen[-3:] == current
+    assert not _blocks(seen[:-3], "toolUse") and not _blocks(seen[:-3], "toolResult")
+    assert [m["role"] for m in seen[:-3]] == ["user", "assistant", "assistant", "user", "assistant"]
+    assert seen[0] == analysis[0]  # the index and the team the user named
+    assert seen[1]["content"] == [{"text": "Veamos."}]
+    assert seen[2] == analysis[3] and seen[4]["content"] == [{"text": "Pikachu queda almacenado. Ocupas 1 de 30."}]
+    # A view, not a compaction: the history keeps every block.
+    assert messages == before
+    # The first turn is already just itself.
+    assert view(current) == current
+
+
+def test_other_calls_see_the_whole_history():
+    view = agent_report_view({"bill"})
+    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado.")
+    question = {"role": "user", "content": [{"text": "guarda ese equipo en mi caja"}]}
+    # The call that decides to delegate needs the earlier turns ("ese equipo").
+    assert view(past + [question]) == past + [question]
+    # After an MCP tool, and after bill together with an MCP tool, nothing is hidden.
+    mcp = past + [question, _call("tu-3", "get_pokedex_entry", {"pokemon": "eevee"}), _result_of("tu-3", "{}")]
+    assert view(mcp) == mcp
+    both_calls = {
+        "role": "assistant",
+        "content": [*_call("tu-4", "bill", {"input": "x"})["content"], *_call("tu-5", "analyze_team", {})["content"]],
+    }
+    both_results = {"role": "user", "content": [*_result_of("tu-4")["content"], *_result_of("tu-5")["content"]]}
+    mixed = past + [question, both_calls, both_results]
+    assert view(mixed) == mixed
+    assert view([]) == [] and view([question]) == [question]
