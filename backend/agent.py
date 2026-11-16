@@ -26,6 +26,7 @@ request with ``build_sub_agent`` that owns the trainer's box (#72). Dexter stays
 the only voice of the chat.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -543,6 +544,10 @@ class AppendBoxOccupancy:
     Read from the box after Bill ran (``bill.occupancy_line``), so the figure Dexter quotes
     never depends on what a model wrote. Registered after the trace hooks, like
     ``ReplaceAgentError``: the SSE event and the eval evidence carry the line too.
+
+    An async callback (Strands awaits those): the read goes to a worker thread like every
+    other box access. On the event loop it could wait up to ``box.BUSY_TIMEOUT_SECONDS`` on
+    a writer's lock (the hourly purge, another request storing) and stall every stream.
     """
 
     def __init__(self, trainer_id: str | None) -> None:
@@ -553,11 +558,11 @@ class AppendBoxOccupancy:
 
         registry.add_callback(AfterToolCallEvent, self._on_result)
 
-    def _on_result(self, event) -> None:
+    async def _on_result(self, event) -> None:
         result = event.result
         if event.tool_use.get("name") != bill.NAME or not isinstance(result, dict) or result.get("status") != "success":
             return
-        line = bill.occupancy_line(self._trainer_id)
+        line = await asyncio.to_thread(bill.occupancy_line, self._trainer_id)
         if line is None:
             return
         text = " ".join(c["text"] for c in result.get("content") or [] if isinstance(c, dict) and "text" in c).strip()

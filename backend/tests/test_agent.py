@@ -559,8 +559,14 @@ def test_create_agent_wires_the_bill_guards_in_order():
 
 
 def test_bills_answer_ends_with_the_real_occupancy(monkeypatch):
+    import asyncio
+    import threading
+
     from backend import bill, box
     from backend.agent import AppendBoxOccupancy
+
+    def run(hook, event):
+        asyncio.run(hook._on_result(event))
 
     trainer = "d" * 36
     box.store(trainer, [box.Entry(name=n, pokemon_id=1, types=["normal"], base_stats={"hp": 1}) for n in ("eevee", "ditto")])
@@ -571,11 +577,11 @@ def test_bills_answer_ends_with_the_real_occupancy(monkeypatch):
 
     # Whatever Bill wrote, the last line is what the box holds.
     ok = event()
-    AppendBoxOccupancy(trainer)._on_result(ok)
+    run(AppendBoxOccupancy(trainer), ok)
     assert ok.result["content"] == [{"text": "Guardados: eevee, ditto. 0 de 30\n\nOcupación de la caja: 2 de 30."}]
     assert ok.result["status"] == "success" and trainer not in str(ok.result)
     empty = event(text="")
-    AppendBoxOccupancy(trainer)._on_result(empty)
+    run(AppendBoxOccupancy(trainer), empty)
     assert empty.result["content"] == [{"text": "Ocupación de la caja: 2 de 30."}]
 
     # Not on a failed call, another tool, a request without a trainer, or when the box cannot be read.
@@ -585,12 +591,18 @@ def test_bills_answer_ends_with_the_real_occupancy(monkeypatch):
         (event(), AppendBoxOccupancy(None)),
     ):
         before = copy.deepcopy(untouched.result)
-        hook._on_result(untouched)
+        run(hook, untouched)
         assert untouched.result == before
     monkeypatch.setattr(box, "occupancy", lambda trainer_id: 1 / 0)
     broken = event()
-    AppendBoxOccupancy(trainer)._on_result(broken)
+    run(AppendBoxOccupancy(trainer), broken)
     assert broken.result["content"] == [{"text": "Guardados: eevee, ditto. 0 de 30"}]
+
+    # The SQLite read never runs on the event loop's thread: a locked database must not stall the streams.
+    threads: list[str] = []
+    monkeypatch.setattr(box, "occupancy", lambda trainer_id: threads.append(threading.current_thread().name) or (2, 30))
+    run(AppendBoxOccupancy(trainer), event())
+    assert threads and threads[0] != threading.main_thread().name
 
 
 def _bill_use(uid, text="lista la caja"):
