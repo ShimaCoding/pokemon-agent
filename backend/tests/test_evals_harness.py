@@ -876,7 +876,12 @@ def test_box_cases_cover_the_issue_scenarios():
     full = by_id["box_full"]["turns"]
     stored = [name for turn in full[:-1] for name in checks.species_in(turn["q"])]
     assert len(stored) == len(set(stored)) == 30 and len(full) == 6
-    assert full[-1]["reply_contains"] == ["30 de 30"]
+    assert full[-1]["reply_contains"] == ["30 de", "30"]
+    # The occupancy is asserted as count + capacity, not as one literal: "3 de los 30 espacios" is right too.
+    record = {"query": "q", "status": "done", "reply": "Ocupas 30 de los 30 espacios.", "tools": []}
+    assert harness.grade_turn(full[-1], record, [])["reply_contains"]["passed"]
+    record["reply"] = "Ocupas 29 de los 30 espacios."
+    assert not harness.grade_turn(full[-1], record, [])["reply_contains"]["passed"]
     # A later turn asks again after an unrelated one, so bill's earlier result is already a stub.
     later = by_id["box_followup_later_turn"]["turns"]
     assert later[1]["forbidden_tools"] == ["bill"] and later[2]["required_tools"] == ["bill"]
