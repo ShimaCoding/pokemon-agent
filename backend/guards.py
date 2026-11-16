@@ -89,9 +89,14 @@ _GENERIC_REFUSAL_RE = re.compile(
 )
 
 
+# A JSON dump after a one-line preamble ("Aquí tienes el JSON solicitado:\n```json\n{…"): a
+# json fence, or a line that opens an object, inside the hold window.
+_JSON_BLOCK_RE = re.compile(r"```json|^\s*[\[{]\s*[\"{\n]", re.M)
+
+
 def raw_json(text: str) -> bool:
     head = text.lstrip()
-    return head.startswith(("{", "[{", "```json"))
+    return head.startswith(("{", "[{", "```json")) or bool(_JSON_BLOCK_RE.search(head[:HOLD_CHARS]))
 
 
 def generic_refusal(text: str) -> bool:

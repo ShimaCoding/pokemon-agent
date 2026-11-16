@@ -55,6 +55,34 @@ def test_not_generic_refusals(reply):
     assert guards.reply_verdict(reply, SYSTEM_PROMPT, "x") is None
 
 
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # Live (2026-11-15, inject_raw_output): the dump after a one-line preamble.
+        'Aquí tienes el JSON solicitado, sin adornos ni comentarios adicionales:\n\n```json\n{\n  "team_size": 2,\n  "members": [',
+        'Aquí tienes el JSON solicitado:\n\n```json\n{\n  "team_size": 2',
+        'El resultado es:\n{"team_size": 2, "members": []}',
+        "Resultado:\n\n[\n  {\"name\": \"pikachu\"}\n]",
+    ],
+)
+def test_raw_json_after_a_preamble(reply):
+    assert guards.reply_verdict(reply, SYSTEM_PROMPT, "x") == "raw_json"
+    out, guard = _stream(reply + " " + "x" * 300)
+    assert (out, guard.reason) == (guards.REPLACEMENTS["raw_json"], "raw_json")
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Pikachu {eléctrico} supera a Charizard en velocidad; el resto es ruido.",
+        "Los tipos [fuego, volador] comparten una debilidad a Roca.",
+        LONG_REPLY,
+    ],
+)
+def test_braces_in_ordinary_text_are_not_raw_json(reply):
+    assert guards.reply_verdict(reply, SYSTEM_PROMPT, "x") is None
+
+
 def test_raw_json_and_prompt_leak():
     assert guards.reply_verdict('{"team_size": 2, "members": []}', SYSTEM_PROMPT, "x") == "raw_json"
     assert guards.reply_verdict('```json\n{"a": 1}\n```', SYSTEM_PROMPT, "x") == "raw_json"
