@@ -582,14 +582,17 @@ def test_bills_mcp_tools_are_dexters_objects_and_get_slugs(stage):
     assert set(bill_tools) == bill.BOX_TOOLS | set(bill.MCP_TOOLS)
 
 
-def test_dexter_narrates_bills_report_without_the_earlier_turns(stage):
-    # The delegating call sees the conversation; the call that narrates bill's report, only this turn (#78).
-    seen: list[tuple[str, list[str]]] = []
+def test_dexter_narrates_bills_report_without_the_tool_traffic_of_earlier_turns(stage):
+    # The delegating call sees the conversation as it is; the call that narrates bill's report sees
+    # the earlier turns as text only (#78): what the user said stays, the tool calls and results go.
+    seen: list[tuple[str, list[str], int]] = []
 
     def dexter(messages):
         texts = [b["text"] for m in messages if m["role"] == "user" for b in m["content"] if "text" in b]
-        seen.append(("narration" if _results(messages) and "toolResult" in messages[-1]["content"][0] else "routing", texts))
-        if "toolResult" in messages[-1]["content"][0]:
+        narrating = "toolResult" in messages[-1]["content"][0]
+        tool_blocks = sum(1 for m in messages for b in m["content"] if "toolUse" in b or "toolResult" in b)
+        seen.append(("narration" if narrating else "routing", texts, tool_blocks))
+        if narrating:
             return _events(text="Operación registrada.")
         request = "guarda a pikachu" if len(texts) == 1 else "guarda a gengar"
         return _events(tools=[("bill", {"input": request}, f"tu-{len(texts)}")])
@@ -599,14 +602,16 @@ def test_dexter_narrates_bills_report_without_the_earlier_turns(stage):
     stage.ask("guarda a pikachu en mi caja")
     stage.ask("guarda a gengar en mi caja")
 
+    both = ["guarda a pikachu en mi caja", "guarda a gengar en mi caja"]
     assert seen == [
-        ("routing", ["guarda a pikachu en mi caja"]),
-        ("narration", ["guarda a pikachu en mi caja"]),
-        ("routing", ["guarda a pikachu en mi caja", "guarda a gengar en mi caja"]),
-        ("narration", ["guarda a gengar en mi caja"]),
+        ("routing", both[:1], 0),
+        ("narration", both[:1], 2),
+        ("routing", both, 2),  # the first turn's call and its (stubbed) result
+        ("narration", both, 2),  # only this turn's call and result
     ]
-    # Only the request changes: the history kept both turns.
-    assert len([m for m in stage.dexter.messages if m["role"] == "user" and "text" in m["content"][0]]) == 2
+    # Only the request changes: the history kept both turns with their tool calls.
+    history = stage.dexter.messages
+    assert sum(1 for m in history for b in m["content"] if "toolUse" in b) == 2
 
 
 # --- A garbled narration after bill: retried, never shown (#78) -------------------------------

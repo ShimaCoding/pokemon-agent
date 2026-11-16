@@ -205,17 +205,26 @@ def agent_report_view(agent_tools: Any) -> Any:
     """The view of the history for a model call that narrates an agent-tool's report.
 
     Returns ``view(messages)``: when the last message is the result of a call to one of
-    ``agent_tools`` (``bill``), the call sees the current turn only; any other call sees
-    everything. Nothing is removed from the history: only what that one request carries.
+    ``agent_tools`` (``bill``), the call sees the past turns without their tool calls and
+    tool results (the user's texts and the heads of the replies stay) and the current turn
+    whole; any other call sees everything. Nothing is removed from the history: only what
+    that one request carries.
 
-    Why: with earlier turns in view, gpt-oss-120b answers this particular call with noise
-    (zero-width and non-breaking spaces, ellipses) in 10-60 % of the cases, measured with
-    the box evals (#78); with the current turn alone it never did (0 of 40 replays of the
-    same request, 0 of about 70 first turns). The report and the user's request are in the
-    current turn, so the narration loses nothing; the call that decides to delegate still
-    sees the whole conversation.
+    Why: with whole past turns in view (tool call, result and reply), gpt-oss-120b answers
+    this particular call with noise (zero-width and non-breaking spaces, ellipses) in
+    10-60 % of the cases, measured with the box evals (#78). Replaying a captured request,
+    it stopped as soon as the past turns lost either their tool traffic or their replies
+    (0 of 20 each, against 11 of 20). The texts must stay: with the current turn alone the
+    model narrated "guarda ese equipo" as a request it could not understand, although Bill
+    had stored the team. The call that decides to delegate still sees the whole conversation.
     """
     names = frozenset(agent_tools)
+
+    def without_tool_traffic(message: dict[str, Any]) -> dict[str, Any] | None:
+        content = [b for b in message.get("content", []) if not (isinstance(b, dict) and ("toolUse" in b or "toolResult" in b))]
+        if not content:
+            return None
+        return message if len(content) == len(message.get("content", [])) else {**message, "content": content}
 
     def view(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(messages) < 2 or messages[-1].get("role") != "user":
@@ -229,7 +238,10 @@ def agent_report_view(agent_tools: Any) -> Any:
         if not results or not all(calls.get(r.get("toolUseId")) in names for r in results):
             return messages
         starts = turn_starts(messages)
-        return messages[starts[-1] :] if starts else messages
+        if not starts or starts[-1] == 0:
+            return messages
+        past = [kept for m in messages[: starts[-1]] if (kept := without_tool_traffic(m)) is not None]
+        return [*past, *messages[starts[-1] :]]
 
     return view
 

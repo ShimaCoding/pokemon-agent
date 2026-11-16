@@ -446,18 +446,32 @@ def _call(uid: str, name: str, tool_input: dict) -> dict:
     return {"role": "assistant", "content": [{"toolUse": {"toolUseId": uid, "name": name, "input": tool_input}}]}
 
 
-def test_narrating_bills_report_sees_only_the_current_turn():
+def test_narrating_bills_report_sees_past_turns_without_their_tool_traffic():
     view = agent_report_view({"bill"})
-    past = _bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
+    analysis = [
+        {"role": "user", "content": [{"text": "[Turnos anteriores resumidos: 1) pikachu (get_pokedex_entry)]"}, {"text": "analiza mi equipo: gengar, alakazam y machamp"}]},
+        {"role": "assistant", "content": [{"text": "Veamos."}, _call("tu-0", "analyze_team", {"pokemon_names": ["gengar", "alakazam", "machamp"]})["content"][0]]},
+        _result_of("tu-0", TOOL_RESULT_STUB),
+        {"role": "assistant", "content": [{"text": "Equipo frágil ante Siniestro."}]},
+    ]
+    past = analysis + _bill_turn("guarda a pikachu", "Pikachu queda almacenado. Ocupas 1 de 30.")
     current = [
-        {"role": "user", "content": [{"text": "guarda a eevee en mi caja"}]},
-        _call("tu-2", "bill", {"input": "guarda a eevee"}),
+        {"role": "user", "content": [{"text": "guarda ese equipo en mi caja"}]},
+        _call("tu-2", "bill", {"input": "guarda a gengar, alakazam y machamp"}),
         _result_of("tu-2"),
     ]
     messages = past + current
     before = copy.deepcopy(messages)
-    assert view(messages) == current
-    # A view, not a compaction: the history keeps every turn.
+    seen = view(messages)
+
+    # The current turn is whole; of the past, what was said stays and the tool traffic goes.
+    assert seen[-3:] == current
+    assert not _blocks(seen[:-3], "toolUse") and not _blocks(seen[:-3], "toolResult")
+    assert [m["role"] for m in seen[:-3]] == ["user", "assistant", "assistant", "user", "assistant"]
+    assert seen[0] == analysis[0]  # the index and the team the user named
+    assert seen[1]["content"] == [{"text": "Veamos."}]
+    assert seen[2] == analysis[3] and seen[4]["content"] == [{"text": "Pikachu queda almacenado. Ocupas 1 de 30."}]
+    # A view, not a compaction: the history keeps every block.
     assert messages == before
     # The first turn is already just itself.
     assert view(current) == current
