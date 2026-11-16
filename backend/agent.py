@@ -27,6 +27,7 @@ the only voice of the chat.
 """
 
 import json
+import logging
 import os
 import re
 import unicodedata
@@ -41,6 +42,8 @@ from backend.evals import checks
 from backend.context import build_context_manager
 from backend.providers import RetryMalformedToolCalls, TraceSink, build_model
 from backend.sessions import SESSIONS_DIR
+
+logger = logging.getLogger(__name__)
 
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or "https://mcp.mcpokedex.com/mcp"
 
@@ -305,6 +308,25 @@ def turn_entry_names(messages: list[dict]) -> set[str]:
     return checks.entry_names(texts)
 
 
+def turn_agent_report(messages: list[dict]) -> str | None:
+    """The answer of the last agent-tool (bill) that succeeded in the current turn, if any."""
+    names: dict[str, str] = {}
+    report = None
+    for message in reversed(messages):
+        blocks = [b for b in message.get("content", []) if isinstance(b, dict)]
+        if message.get("role") == "user" and not any("toolResult" in b for b in blocks):
+            break
+        for block in blocks:
+            if "toolUse" in block:
+                names[block["toolUse"].get("toolUseId", "")] = block["toolUse"].get("name", "")
+    for message in messages:
+        for block in message.get("content", []):
+            result = block.get("toolResult") if isinstance(block, dict) else None
+            if result and names.get(result.get("toolUseId", "")) in AGENT_TOOLS and result.get("status") == "success":
+                report = " ".join(c["text"] for c in result.get("content") or [] if isinstance(c, dict) and "text" in c)
+    return report
+
+
 class GuardReply:
     """Apply ``guards.guard_reply`` to each answer before it enters the history (#41).
 
@@ -312,15 +334,21 @@ class GuardReply:
     this keeps the same decision in the session snapshot, so a leaked prompt or a
     raw JSON dump is not what the next turn reads back, and fixes or drops the
     opening the same way (#42).
+
+    A garbled answer (``guards.garbled_at``) is retried, up to ``MAX_GARBLE_RETRIES`` per
+    turn, while its noise starts inside the stream guard's hold window: nothing of it
+    reached the user, and ``StreamGuard.restart`` drops it when the new call begins.
     """
+
+    MAX_GARBLE_RETRIES = 2
+    _STATE_KEY = "mcpokedex:garble_retries"
 
     def register_hooks(self, registry, **_: Any) -> None:
         from strands.hooks import AfterModelCallEvent
 
         registry.add_callback(AfterModelCallEvent, self._on_response)
 
-    @staticmethod
-    def _on_response(event) -> None:
+    def _on_response(self, event) -> None:
         response = event.stop_response
         if response is None:
             return
@@ -331,7 +359,16 @@ class GuardReply:
         if not text:
             return
         messages = getattr(event.agent, "messages", []) or []
-        kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(messages))
+        noise = guards.garbled_at(text)
+        state = getattr(event, "invocation_state", None)
+        if noise is not None and noise < guards.HOLD_CHARS and isinstance(state, dict) and not getattr(event, "retry", False):
+            retries = state.get(self._STATE_KEY, 0)
+            if retries < self.MAX_GARBLE_RETRIES:
+                state[self._STATE_KEY] = retries + 1
+                logger.warning("[GUARD] Respuesta corrupta del modelo; reintentando (%d/%d)", retries + 1, self.MAX_GARBLE_RETRIES)
+                event.retry = True
+                return
+        kept, reason = guards.guard_reply(text, SYSTEM_PROMPT, turn_query(messages), turn_agent_report(messages))
         if not reason:
             kept = guards.fix_opening(kept, turn_entry_names(messages))
         if kept != text:

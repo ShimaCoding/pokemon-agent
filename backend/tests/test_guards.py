@@ -223,19 +223,19 @@ def _response_event(content, query="x"):
 
 def test_guard_reply_rewrites_the_history_message():
     event, message = _response_event([{"reasoningContent": {"text": "…"}}, {"text": "I’m sorry, but I can’t comply with that."}])
-    GuardReply._on_response(event)
+    GuardReply()._on_response(event)
     assert message["content"] == [{"reasoningContent": {"text": "…"}}, {"text": guards.REPLACEMENTS["generic_refusal"]}]
 
 
 def test_guard_reply_leaves_tool_calls_and_good_answers():
     content = [{"text": "Consultando."}, {"toolUse": {"toolUseId": "t", "name": "get_pokedex_entry", "input": {}}}]
     event, message = _response_event(list(content))
-    GuardReply._on_response(event)
+    GuardReply()._on_response(event)
     assert message["content"] == content
     event, message = _response_event([{"text": LONG_REPLY}])
     entry = json.dumps({"id": 1, "name": "bulbasaur", "genus": "Pokémon Semilla"})
     event.agent.messages.append({"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": entry}]}}]})
-    GuardReply._on_response(event)
+    GuardReply()._on_response(event)
     assert message["content"] == [{"text": LONG_REPLY}]
 
 
@@ -308,10 +308,164 @@ def test_guard_reply_fixes_the_opening_name_from_this_turns_entry():
         {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t", "name": "get_pokedex_entry", "input": {}}}]},
         {"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": CHARMANDER_ENTRY}]}}]},
     ]
-    GuardReply._on_response(event)
+    GuardReply()._on_response(event)
     assert message["content"] == [{"text": "CHARMANDER. El Pokémon Lagartija. Escaneo completado."}]
     # An entry of an earlier turn does not count.
     event, message = _response_event([{"text": "CHARMANDEER. El Pokémon Lagartija."}])
     event.agent.messages[:0] = [{"role": "user", "content": [{"toolResult": {"toolUseId": "t", "content": [{"text": CHARMANDER_ENTRY}]}}]}]
-    GuardReply._on_response(event)
+    GuardReply()._on_response(event)
     assert message["content"] == [{"text": "CHARMANDEER. El Pokémon Lagartija."}]
+
+
+# --- garbled replies (#78): noise from the model, retried or replaced ------------------------
+
+# Live replies of the box evals (2026-11-15): gpt-oss-120b narrating after `bill` in a second turn.
+GARBLED = [
+    "Eeve **t**\xa0?\xa0\xa0……\n\nLo siento… **\xa0**\xa0\n\n\n\n",
+    "Se han guard **\u200b**\xa0\u200b\xa0\xa0\xa0\xa0\xa0\xa0\u200b\xa0\xa0\u200b\xa0\xa0…\xa0\xa0…\xa0\xa0…\xa0…",
+    "Tus **…**… ……\xa0\xa0\xa0…\xa0\xa0\xa0…\xa0\xa0…\n\n---",
+    "Me……… ……   ...……  …  ...  ....  …  ¡…   )  \u200b   …  … …… ………",
+    "Bill informa: se guardó **eee\n\n*Eevee* (\u200b).",
+    "Tus\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\xa0\u200b\xa0\xa0\xa0\n\n\n\n",
+]
+CLEAN = [
+    "Eevee ha sido almacenado. Ocupación: 2 de 30.",
+    "Bill confirma la operación:\u202feevee ha sido depositado en la caja. Ocupación\u202f: **2\xa0de\xa030**.",
+    "Su estatura de 1,9\u202fm y masa de 95\xa0kg indican una constitución maciza…",
+    "Evidentemente... no. La caja permanece vacía… como su estrategia.",
+    "Un entrenador sin sentido tá\u200btico necesita al menos un punto de referencia.",  # baseline-v2-91a257c
+    LONG_REPLY,
+]
+REPORT = "Eevee guardado.  \n2 de 30\n"
+
+
+@pytest.mark.parametrize("reply", GARBLED)
+def test_garbled_replies_are_detected(reply):
+    assert guards.garbled_at(reply) is not None
+    assert guards.reply_verdict(reply, SYSTEM_PROMPT, "x") == "garbled"
+
+
+@pytest.mark.parametrize("reply", CLEAN)
+def test_ordinary_punctuation_is_not_garble(reply):
+    assert guards.garbled_at(reply) is None
+
+
+def test_garbled_reply_carries_the_agents_report():
+    assert guards.garbled_reply() == guards.REPLACEMENTS["garbled"]
+    fallback = guards.garbled_reply(REPORT)
+    assert fallback.startswith(guards.REPLACEMENTS["garbled"]) and fallback.endswith("Eevee guardado.  \n2 de 30")
+    # Noise from the start is replaced; noise after the hold window is cut where it begins.
+    assert guards.repair_garbled(GARBLED[0], REPORT) == fallback
+    late = LONG_REPLY + " Ocupación " + GARBLED[1]
+    assert guards.repair_garbled(late) == LONG_REPLY + " Ocupación Se han guard **" + guards.GARBLE_CUTOFF
+    assert guards.repair_garbled(CLEAN[0]) == CLEAN[0]
+
+
+def test_stream_never_shows_noise_and_falls_back_to_the_report():
+    guard = guards.StreamGuard(SYSTEM_PROMPT, "guarda a eevee", report=lambda: REPORT)
+    noise = GARBLED[1] * 4
+    shown = "".join(guard.feed(noise[i : i + 9]) for i in range(0, len(noise), 9)) + guard.finish()
+    assert shown == guards.garbled_reply(REPORT) == guard.shown
+    assert guard.reason == "garbled"
+    # Short noise never reaches the hold size: judged at the end.
+    out, guard = _stream(GARBLED[4])
+    assert (out, guard.reason) == (guards.REPLACEMENTS["garbled"], "garbled")
+
+
+def test_stream_restart_drops_held_noise_so_a_retry_starts_clean():
+    good = "Eevee ha sido almacenado. Ocupación: 2 de 30. Me temo que su colección sigue siendo escasa."
+    for noise in (GARBLED[4], GARBLED[1] * 4):  # under and over the hold size
+        guard = guards.StreamGuard(SYSTEM_PROMPT, "guarda a eevee", report=lambda: REPORT)
+        assert "".join(guard.feed(noise[i : i + 9]) for i in range(0, len(noise), 9)) == ""
+        guard.restart()
+        out = "".join(guard.feed(good[i : i + 9]) for i in range(0, len(good), 9)) + guard.finish()
+        assert (out, guard.reason, guard.shown) == (good, None, good)
+
+
+def test_stream_restart_keeps_ordinary_text_and_other_verdicts():
+    # Text before a tool call, then a new model message: nothing is lost.
+    guard = guards.StreamGuard(SYSTEM_PROMPT, "x")
+    assert guard.feed("Consultando los registros. ") == ""
+    guard.restart()
+    assert guard.feed("Listo.") + guard.finish() == "Consultando los registros. Listo."
+    # A leak stays a leak across messages.
+    guard = guards.StreamGuard(SYSTEM_PROMPT, "x")
+    leak = SYSTEM_PROMPT.strip()[:400]
+    assert "".join(guard.feed(leak[i : i + 50]) for i in range(0, len(leak), 50)) == ""
+    guard.restart()
+    assert guard.reason == "prompt_leak"
+    assert guard.finish() == guards.REPLACEMENTS["prompt_leak"]
+
+
+def test_stream_cuts_noise_that_starts_after_text_was_shown():
+    text = LONG_REPLY + " " + LONG_REPLY.replace("BULBASAUR", "Además") + " " + GARBLED[1] * 3
+    out, guard = _stream(text)
+    assert guard.reason == "garbled"
+    assert out.endswith(guards.GARBLE_CUTOFF) and "\u200b" not in out
+    assert out.startswith(LONG_REPLY[:150])
+
+
+def _garbled_event(text, state=None, bill_report=REPORT):
+    use = {"toolUseId": "tu-bill", "name": "bill", "input": {"input": "guarda a eevee"}}
+    result = {"toolUseId": "tu-bill", "status": "success", "content": [{"text": bill_report}]}
+    messages = [
+        {"role": "user", "content": [{"text": "guarda a eevee en mi caja"}]},
+        {"role": "assistant", "content": [{"toolUse": use}]},
+        {"role": "user", "content": [{"toolResult": result}]},
+    ]
+    message = {"role": "assistant", "content": [{"text": text}]}
+    event = SimpleNamespace(
+        stop_response=SimpleNamespace(message=message),
+        agent=SimpleNamespace(messages=messages),
+        invocation_state={} if state is None else state,
+        retry=False,
+    )
+    return event, message
+
+
+def test_guard_reply_retries_a_garbled_answer_twice_then_keeps_the_report():
+    guard = GuardReply()
+    state: dict = {}
+    for attempt in (1, 2):
+        event, message = _garbled_event(GARBLED[0], state)
+        guard._on_response(event)
+        assert event.retry is True and message["content"] == [{"text": GARBLED[0]}]
+        assert state[GuardReply._STATE_KEY] == attempt
+    event, message = _garbled_event(GARBLED[0], state)
+    guard._on_response(event)
+    assert event.retry is False
+    assert message["content"] == [{"text": guards.garbled_reply(REPORT)}]
+
+
+def test_guard_reply_cuts_late_noise_without_a_retry():
+    # Past the hold window some of it was already shown: no second answer on top of it.
+    text = LONG_REPLY + " " + GARBLED[1] * 3
+    event, message = _garbled_event(text)
+    GuardReply()._on_response(event)
+    assert event.retry is False
+    assert message["content"] == [{"text": LONG_REPLY + " Se han guard **" + guards.GARBLE_CUTOFF}]
+
+
+def test_guard_reply_leaves_a_clean_answer_alone():
+    event, message = _garbled_event(CLEAN[1])
+    GuardReply()._on_response(event)
+    assert event.retry is False and message["content"] == [{"text": CLEAN[1]}]
+
+
+def test_turn_agent_report_is_this_turns_successful_bill_answer():
+    from backend.agent import turn_agent_report
+
+    event, _ = _garbled_event("x")
+    assert turn_agent_report(event.agent.messages) == REPORT
+    # A past turn's report does not count, nor a failed call, nor an MCP tool.
+    later = event.agent.messages + [
+        {"role": "assistant", "content": [{"text": "Eevee almacenado."}]},
+        {"role": "user", "content": [{"text": "háblame de eevee"}]},
+        {"role": "assistant", "content": [{"toolUse": {"toolUseId": "tu-2", "name": "get_pokedex_entry", "input": {"pokemon": "eevee"}}}]},
+        {"role": "user", "content": [{"toolResult": {"toolUseId": "tu-2", "status": "success", "content": [{"text": "{}"}]}}]},
+    ]
+    assert turn_agent_report(later) is None
+    failed, _ = _garbled_event("x")
+    failed.agent.messages[2]["content"][0]["toolResult"]["status"] = "error"
+    assert turn_agent_report(failed.agent.messages) is None
+    assert turn_agent_report([]) is None

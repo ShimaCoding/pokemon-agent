@@ -572,3 +572,66 @@ def test_bills_mcp_tools_are_dexters_objects_and_get_slugs(stage):
     bill_tools = dexter_tools["bill"].agent.tool_registry.registry
     assert all(bill_tools[name] is dexter_tools[name] for name in bill.MCP_TOOLS)
     assert set(bill_tools) == bill.BOX_TOOLS | set(bill.MCP_TOOLS)
+
+
+# --- A garbled narration after bill: retried, never shown (#78) -------------------------------
+
+NOISE = "Eevee ha **\u200b**\xa0\u200b\xa0\xa0\xa0\u200b\xa0\xa0…\xa0\xa0…\n\n…\xa0…… ...\xa0\n\n---"
+
+
+def _run_turn(stage, monkeypatch, query="guarda a eevee en mi caja", trainer_id=ASH) -> list[dict]:
+    """One turn through main._sse_generator with the real agents of ``stage``."""
+    monkeypatch.setattr(main, "log_query", lambda **kw: None)
+
+    async def collect():
+        frames = [f async for f in main._sse_generator(query, "conv-box-1234", trainer_id=trainer_id)]
+        return [json.loads(f[len("data: ") :]) for f in frames]
+
+    return asyncio.run(collect())
+
+
+def _narrations(replies: list[str], request: str = "guarda a eevee"):
+    """Dexter's script: call bill with ``request``, then answer with the next of ``replies`` on each attempt."""
+    attempts = iter(replies)
+    return lambda messages: (
+        _events(text=next(attempts)) if _results(messages) else _events(tools=[("bill", {"input": request}, "tu-bill")])
+    )
+
+
+def test_a_garbled_narration_is_retried_and_the_user_only_sees_the_clean_one(stage, monkeypatch):
+    clean = "Eevee ha sido almacenado. Ocupación: 1 de 30. Su colección sigue siendo tan escasa como su criterio."
+    stage.scripts["dexter"] = _narrations([NOISE, clean])
+    stage.scripts["bill"] = lambda messages: (
+        _events(text="Eevee guardado. 1 de 30") if _results(messages) else _events(tools=[("box_store", {"pokemon": ["eevee"]}, "tu-store")])
+    )
+    POKEDEX["eevee"] = {"id": 133, "types": ["normal"]}
+    try:
+        events = _run_turn(stage, monkeypatch)
+    finally:
+        del POKEDEX["eevee"]
+
+    text = "".join(e["delta"] for e in events if e["type"] == "text")
+    assert text == clean
+    done = events[-1]
+    assert done["type"] == "done" and done["guard"] is None
+    # Dexter: routing, the discarded narration and the retry; Bill: two calls. The box was written once.
+    assert [who for who, _ in stage.model_calls] == ["dexter", "bill", "bill", "dexter", "dexter"]
+    assert done["llm_calls"] == 5
+    assert box.list_box(ASH)["count"] == 1
+    assert "\u200b" not in json.dumps(events, ensure_ascii=False)
+
+
+def test_when_every_narration_is_garbled_the_user_gets_bills_report(stage, monkeypatch):
+    stage.scripts["dexter"] = _narrations([NOISE, NOISE, NOISE], request="lista la caja")
+    stage.scripts["bill"] = lambda messages: _events(text="Caja vacía. 0 de 30")
+
+    events = _run_turn(stage, monkeypatch, query="¿qué hay en mi caja?")
+
+    from backend import guards
+
+    text = "".join(e["delta"] for e in events if e["type"] == "text")
+    assert text == guards.garbled_reply("Caja vacía. 0 de 30")
+    assert events[-1]["guard"] == "garbled"
+    # Two retries, then the fallback: three narration attempts in all.
+    assert [who for who, _ in stage.model_calls].count("dexter") == 4
+    assert "\u200b" not in json.dumps(events, ensure_ascii=False)

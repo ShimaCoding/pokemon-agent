@@ -608,13 +608,14 @@ async def _sse_generator(
                                 # tokens and llm_calls: the whole run, sub-agents included
                                 "cached_tokens": int, "llm_calls": int, "ttft_ms": int | None,
                                 "guard": str | None,  # guards.REPLACEMENTS key when a guard replaced or cut the reply
+                                # (a garbled answer that a retry fixed leaves no trace here)
                                 "trace_id": str?, "span_id": str?}  # ids only when tracing is on
       {"type": "error",         "message": str}  # on exception, always followed by done
 
     ``agent`` names the sub-agent whose step the event is (an agent used as a tool);
     absent = the root agent. ``index`` is unique across the agents of a run.
     """
-    from backend.agent import AGENT_TOOLS, SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_entry_names
+    from backend.agent import AGENT_TOOLS, SKILL_NAME, SYSTEM_PROMPT, create_agent, turn_agent_report, turn_entry_names
     from backend.context import next_turn
 
     start_time = time.time()
@@ -719,7 +720,12 @@ async def _sse_generator(
                 }
             )
 
-            guard = guards.StreamGuard(SYSTEM_PROMPT, query, entries=lambda: turn_entry_names(agent.messages))
+            guard = guards.StreamGuard(
+                SYSTEM_PROMPT,
+                query,
+                entries=lambda: turn_entry_names(agent.messages),
+                report=lambda: turn_agent_report(agent.messages),
+            )
             with telemetry.agent_span(conversation_id) as agent_obs:
                 agent_span_opened = True
                 prompt = await _expand_prompt(query)
@@ -727,6 +733,11 @@ async def _sse_generator(
                 async for event in agent.stream_async(prompt):
                     for frame in drain():
                         yield frame
+
+                    # A new model message: after a retried call (agent.GuardReply), noise the
+                    # guard held back must not prefix the new answer.
+                    if "messageStart" in (event.get("event") or {}):
+                        guard.restart()
 
                     text_delta = event.get("data")
                     if text_delta:
