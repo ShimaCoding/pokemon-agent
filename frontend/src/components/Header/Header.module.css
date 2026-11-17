@@ -101,15 +101,24 @@
 }
 
 .newBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
   font-family: var(--font-pixel);
   font-size: 12px;
-  border: 1px solid var(--gbc-mid);
-  color: var(--gbc-screen);
-  padding: 4px 10px;
+  background: var(--mcp-tool);
+  border: 2px solid var(--mcp-tool);
+  color: var(--gbc-cream);
+  padding: 6px 12px;
   line-height: 1;
+  box-shadow: 2px 2px 0 #000;
+  transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
 }
-.newBtn:hover:not(:disabled) { border-color: var(--mcp-tool); color: var(--mcp-tool); }
-.newBtn:disabled { opacity: 0.35; }
+.newBtn:hover:not(:disabled) { filter: brightness(1.15); transform: translate(-1px, -1px); box-shadow: 3px 3px 0 #000; }
+.newBtn:active:not(:disabled) { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #000; }
+.newBtn:disabled { opacity: 0.45; }
+.newIcon { font-family: var(--font-read); font-size: 13px; }
 
 /* ── Mobile ─────────────────────────────────
    One compact row (logo · title · actions) plus the MCP badges. The GitHub
@@ -128,13 +137,14 @@
 
   .githubLinks { display: none; }
 
-  .newBtn,
+  /* On phones "Nueva" lives next to the input (Composer). */
+  .newBtn { display: none; }
+
   .settingsBtn {
     min-height: 32px;
     padding: 0 10px;
-    font-size: 11px;
+    font-size: 13px;
   }
-  .settingsBtn { font-size: 13px; }
 
   .mcpBadges {
     width: 100%;
