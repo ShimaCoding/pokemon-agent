@@ -315,6 +315,8 @@ class PokemonNames(Plugin):
         normalize: Iterable[str] | None = None,
     ) -> None:
         super().__init__()
+        # Read once: both guards take it, and a one-shot iterator would leave the second empty.
+        tools = frozenset(tools)
         self.grounding = GroundedPokemonNames(tools, prose)
         self.slugs = NormalizePokemonNames(tools if normalize is None else normalize)
 

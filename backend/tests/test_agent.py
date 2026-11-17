@@ -433,6 +433,21 @@ def test_bill_guards_pokemon_names_before_the_trace_hooks(scripted):
     _assert_names_guarded_before_the_trace(recorder, "box_store")
 
 
+def test_pokemon_names_reads_a_one_shot_tools_iterable_once():
+    from types import SimpleNamespace as _NS
+
+    from backend.agent import PokemonNames
+
+    plugin = PokemonNames(iter(["analyze_team"]))
+    use = {"toolUseId": "t1", "name": "analyze_team", "input": {"pokemon_names": ["Mr. Mime"]}}
+    messages = [{"role": "user", "content": [{"text": "analiza a Mr. Mime"}]}, {"role": "assistant", "content": [{"toolUse": use}]}]
+    event = _NS(tool_use=use, agent=_NS(messages=messages), cancel_tool=False)
+    plugin.grounding._on_call(event)
+    plugin.slugs._on_call(event)
+    assert event.cancel_tool is False
+    assert use["input"] == {"pokemon_names": ["mr-mime"]}
+
+
 def test_bills_box_tools_keep_the_names_as_written():
     # His report echoes them back (not_found); only the MCP tools get slugs.
     import inspect
