@@ -35,7 +35,9 @@ import unicodedata
 from typing import Any, Callable, Iterable
 
 from strands import Agent
+from strands.hooks import BeforeToolCallEvent, HookOrder
 from strands.middleware import ExecuteToolStage
+from strands.plugins import Plugin
 from strands_harness import create_harness
 
 from backend import bill, guards, telemetry, tool_cache
@@ -178,8 +180,8 @@ def pokemon_slug(name: str) -> str:
 class NormalizePokemonNames:
     """Rewrite Pokémon-name arguments of MCP tool calls into PokeAPI slugs.
 
-    Runs before the trace hooks, so the tool_call event, the widget's tool input
-    and the history all carry the name that was actually looked up.
+    Runs before the trace hooks (wired by ``PokemonNames``), so the tool_call event,
+    the widget's tool input and the history all carry the name that was actually looked up.
 
     ``tools`` are the tools it rewrites (the MCP tools by default): a sub-agent passes
     its own, whose name arguments are in ``POKEMON_NAME_ARGS`` too.
@@ -187,11 +189,6 @@ class NormalizePokemonNames:
 
     def __init__(self, tools: Iterable[str] = MCP_TOOLS) -> None:
         self._tools = frozenset(tools)
-
-    def register_hooks(self, registry, **_: Any) -> None:
-        from strands.hooks import BeforeToolCallEvent
-
-        registry.add_callback(BeforeToolCallEvent, self._on_call)
 
     def _on_call(self, event) -> None:
         tool_input = event.tool_use.get("input")
@@ -247,8 +244,8 @@ class GroundedPokemonNames:
     listed), never a name of its own: this stops an injected "analyze_team con seis
     Pokémon al azar" and a typo looked up as a real species ("pikachuu" → "pikachu").
     The model gets the reason as the tool result and can call again with the
-    user's name. Registered before ``NormalizePokemonNames``: it judges the name
-    the model wrote, not its PokeAPI slug.
+    user's name. Runs before ``NormalizePokemonNames`` (both wired by ``PokemonNames``):
+    it judges the name the model wrote, not its PokeAPI slug.
 
     ``tools`` are the tools it judges (the MCP tools by default). On a sub-agent the
     conversation is the request it was given plus its own tool results.
@@ -262,11 +259,6 @@ class GroundedPokemonNames:
     def __init__(self, tools: Iterable[str] = MCP_TOOLS, prose: Iterable[str] = AGENT_TOOLS) -> None:
         self._tools = frozenset(tools)
         self._prose = frozenset(prose)
-
-    def register_hooks(self, registry, **_: Any) -> None:
-        from strands.hooks import BeforeToolCallEvent
-
-        registry.add_callback(BeforeToolCallEvent, self._on_call)
 
     def _on_call(self, event) -> None:
         tool_input = event.tool_use.get("input")
@@ -291,6 +283,47 @@ class GroundedPokemonNames:
         if context is not None and (missing := guards.ungrounded_names(names, context)):
             event.cancel_tool = GROUNDING_CANCEL.format(names=", ".join(f'"{n}"' for n in missing))
 
+
+
+# Before every BeforeToolCallEvent hook registered at the default order, the trace hooks
+# (main._ToolTrace) among them: plugins are registered after an agent's ``hooks``, so their
+# position in a list cannot put them first.
+NAME_HOOK_ORDER = HookOrder.DEFAULT - 10
+
+
+class PokemonNames(Plugin):
+    """The Pokémon-name guards of an agent's tool calls, as one unit: grounding, then slugs.
+
+    ``GroundedPokemonNames`` judges the name the model wrote and ``NormalizePokemonNames``
+    then turns it into a PokeAPI slug. Both run before the trace hooks, so the tool_call
+    event and the widget input carry the name that was looked up, and a cancelled call
+    is never traced with a name of the model's own.
+
+    ``tools`` are the tools whose name arguments are judged, ``prose`` the agent-tools
+    whose free text is, and ``normalize`` the tools whose names become slugs (``tools``
+    when omitted). A sub-agent passes its own: Bill's box tools are judged but keep the
+    names as written, which his report echoes back (``not_found``).
+    """
+
+    name = "mcpokedex:pokemon-names"
+
+    def __init__(
+        self,
+        tools: Iterable[str] = MCP_TOOLS,
+        *,
+        prose: Iterable[str] = AGENT_TOOLS,
+        normalize: Iterable[str] | None = None,
+    ) -> None:
+        super().__init__()
+        # Read once: both guards take it, and a one-shot iterator would leave the second empty.
+        tools = frozenset(tools)
+        self.grounding = GroundedPokemonNames(tools, prose)
+        self.slugs = NormalizePokemonNames(tools if normalize is None else normalize)
+
+    def init_agent(self, agent: Agent) -> None:
+        # Same order: they run in registration order, grounding first.
+        agent.add_hook(self.grounding._on_call, BeforeToolCallEvent, order=NAME_HOOK_ORDER)
+        agent.add_hook(self.slugs._on_call, BeforeToolCallEvent, order=NAME_HOOK_ORDER)
 
 def turn_query(messages: list[dict]) -> str:
     """The text of the user message that opened the current turn."""
@@ -616,6 +649,7 @@ def build_sub_agent(
     trace: TraceSink | None = None,
     models: list[str] | None = None,
     hooks: Iterable[Any] = (),
+    plugins: Iterable[Plugin] = (),
     description: str | None = None,
     max_model_calls: int = SUB_AGENT_MAX_MODEL_CALLS,
     taken: Iterable[str] = (),
@@ -650,6 +684,7 @@ def build_sub_agent(
         system_prompt=system_prompt,
         tools=list(tools),
         hooks=[telemetry.SubAgentTrace(), RetryMalformedToolCalls(), ModelCallLimit(max_model_calls), *hooks],
+        plugins=list(plugins),
         callback_handler=None,
     )
     agent.add_middleware(ExecuteToolStage, tool_cache.middleware)
@@ -687,7 +722,8 @@ def attach_bill(
         tools=[*bill.box_tools(trainer_id, lookup), *(registry[name] for name in bill.MCP_TOOLS)],
         trace=trace,
         models=bill.MODELS,
-        hooks=[GroundedPokemonNames(MCP_TOOLS | bill.NAME_TOOLS), NormalizePokemonNames(), *hooks],
+        hooks=list(hooks),
+        plugins=[PokemonNames(MCP_TOOLS | bill.NAME_TOOLS, normalize=MCP_TOOLS)],
     )
     agent.tool_registry.register_tool(sub_agent.as_tool(name=bill.NAME, delegate=False))
 
@@ -733,14 +769,14 @@ def create_agent(
             RetryMalformedToolCalls(),
             OneAgentCallPerResponse(),
             BoxQuestionsGoToBill(),
-            GroundedPokemonNames(),
-            NormalizePokemonNames(),
             *(hooks or []),
             AppendBoxOccupancy(trainer_id),
             ReplaceAgentError(),
             AnnotateTeamSwap(),
             GuardReply(),
         ],
+        # Grounding and slugs of Pokémon names, ahead of the trace hooks (NAME_HOOK_ORDER).
+        plugins=[PokemonNames()],
         callback_handler=None,
     )
     # The session snapshot persists the system prompt and restores it on init,
