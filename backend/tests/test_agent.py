@@ -366,9 +366,79 @@ def test_annotate_runs_before_the_trace_hooks():
     from backend import agent as agent_module
 
     src = inspect.getsource(agent_module.create_agent)
-    order = [src.index(h) for h in ("GroundedPokemonNames()", "NormalizePokemonNames()", "*(hooks or [])", "AnnotateTeamSwap()")]
-    # The grounding guard judges the name the model wrote, before it becomes a slug.
+    order = [src.index(h) for h in ("*(hooks or [])", "AnnotateTeamSwap()")]
     assert order == sorted(order)
+
+
+
+class _ToolCallRecorder:
+    """A trace-like hook: what a BeforeToolCallEvent looks like at the default order."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, dict, object]] = []
+
+    def register_hooks(self, registry, **_) -> None:
+        from strands.hooks import BeforeToolCallEvent
+
+        registry.add_callback(BeforeToolCallEvent, self._on_call)
+
+    def _on_call(self, event) -> None:
+        self.seen.append((event.tool_use["name"], dict(event.tool_use["input"]), event.cancel_tool))
+
+
+def _two_name_calls(tool):
+    """A model that looks up "Mr. Mime" (the user's name), then "charizard" (its own), then stops."""
+
+    def script(messages):
+        calls = sum(1 for m in messages for b in m["content"] if "toolUse" in b)
+        if calls == 0:
+            return _stream_events(tool=(tool, {"pokemon_names": ["Mr. Mime"]}, "t1"))
+        if calls == 1:
+            return _stream_events(tool=(tool, {"pokemon_names": ["charizard"]}, "t2"))
+        return _stream_events(text="Listo.")
+
+    return script
+
+
+def _assert_names_guarded_before_the_trace(recorder, tool):
+    # The trace sees the slug that was looked up, and the call it would have run with an
+    # invented name already cancelled: the plugin's hooks ran first.
+    first, second = recorder.seen
+    assert first == (tool, {"pokemon_names": ["mr-mime"]}, False)
+    assert second[:2] == (tool, {"pokemon_names": ["charizard"]})
+    assert '"charizard"' in second[2]
+
+
+def test_dexter_guards_pokemon_names_before_the_trace_hooks(harness_env, scripted):
+    from backend.agent import SYSTEM_PROMPT, PokemonNames
+
+    recorder = _ToolCallRecorder()
+    agent = create_agent("test-conversation", hooks=[recorder])
+    assert isinstance(agent._plugin_registry._plugins[PokemonNames.name], PokemonNames)
+    scripted[SYSTEM_PROMPT] = _two_name_calls("analyze_team")
+    agent("analiza a Mr. Mime")
+    _assert_names_guarded_before_the_trace(recorder, "analyze_team")
+
+
+def test_bill_guards_pokemon_names_before_the_trace_hooks(scripted):
+    from backend.agent import PokemonNames, build_sub_agent
+
+    recorder = _ToolCallRecorder()
+    sub = build_sub_agent(
+        "bill", system_prompt="bill", tools=[_fake_mcp_tool("box_store")], hooks=[recorder],
+        plugins=[PokemonNames({"box_store"})],
+    )
+    scripted["bill"] = _two_name_calls("box_store")
+    sub("guarda a Mr. Mime")
+    _assert_names_guarded_before_the_trace(recorder, "box_store")
+
+
+def test_bills_box_tools_keep_the_names_as_written():
+    # His report echoes them back (not_found); only the MCP tools get slugs.
+    import inspect
+
+    src = inspect.getsource(agent_module.attach_bill)
+    assert "PokemonNames(MCP_TOOLS | bill.NAME_TOOLS, normalize=MCP_TOOLS)" in src
 
 
 # --- build_sub_agent (#74) --------------------------------------------------------------
@@ -547,7 +617,6 @@ def test_create_agent_wires_the_bill_guards_in_order():
         for h in (
             "OneAgentCallPerResponse()",
             "BoxQuestionsGoToBill()",
-            "GroundedPokemonNames()",
             "*(hooks or [])",
             "AppendBoxOccupancy(trainer_id)",
             "ReplaceAgentError()",
