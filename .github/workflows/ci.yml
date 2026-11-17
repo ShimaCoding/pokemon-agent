@@ -51,3 +51,29 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --prefix frontend
       - run: npm run build --prefix frontend
+
+  # backend/static is committed by hand ("build: regenerate static assets"). The image
+  # rebuilds it, but a backend started without a build serves the committed copy.
+  static-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+      - name: Committed bundle matches the build
+        run: |
+          # `git status` also lists new files, which `git diff --exit-code` does not see.
+          if [ -n "$(git status --porcelain -- backend/static)" ]; then
+            git status --short -- backend/static
+            git --no-pager diff --stat -- backend/static
+            echo "::error::backend/static is stale: run 'npm run build --prefix frontend' and commit it as 'build: regenerate static assets'."
+            exit 1
+          fi
