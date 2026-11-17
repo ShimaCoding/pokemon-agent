@@ -1,5 +1,6 @@
 import { sendChatMessage } from '../../hooks/useAgentStream'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useChat } from '../../store/useStore'
 import { useMessageInput } from './useMessageInput'
 import styles from './Composer.module.css'
 
@@ -12,6 +13,7 @@ export default function Composer() {
   const compact = useMediaQuery('(max-width: 640px)')
   // On touch screens focusing the field pops the keyboard over the answer.
   const touch = useMediaQuery('(pointer: coarse)')
+  const newConversation = useChat((s) => s.newConversation)
 
   return (
     <div className={styles.bottomBar}>
@@ -29,6 +31,16 @@ export default function Composer() {
             submit()
           }}
         >
+          <button
+            type="button"
+            className={styles.newButton}
+            onClick={newConversation}
+            disabled={inFlight}
+            title="Conversación nueva (Dexter olvida esta)"
+            aria-label="Conversación nueva"
+          >
+            ✚
+          </button>
           <textarea
             {...inputProps}
             className={styles.chatInput}

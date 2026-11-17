@@ -24,6 +24,16 @@ export default function Header() {
           <img src="/favicon.svg" alt="" className={styles.titleLogo} />
           <span className={styles.mainTitle}>MCPokédex</span>
         </div>
+        {hasMessages && (
+          <button
+            className={styles.newBtn}
+            onClick={newConversation}
+            disabled={inFlight}
+            title="Empezar una conversación nueva (Dexter olvida la anterior)"
+          >
+            <span className={styles.newIcon} aria-hidden="true">✚</span> Nueva
+          </button>
+        )}
         <div className={styles.githubLinks}>
           <img src="/github.svg" alt="GitHub" className={styles.githubIcon} />
           <a
@@ -45,14 +55,6 @@ export default function Header() {
           </a>
         </div>
         <div className={styles.actions}>
-          <button
-            className={styles.newBtn}
-            onClick={newConversation}
-            disabled={!hasMessages || inFlight}
-            title="Empezar una conversación nueva (Dexter olvida la anterior)"
-          >
-            + NUEVA
-          </button>
           <button
             className={`${styles.settingsBtn} ${apiKey ? styles.hasKey : ''}`}
             onClick={() => setSettingsOpen(true)}
