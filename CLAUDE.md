@@ -34,6 +34,16 @@ docker-compose up --build                       # production-like
 - Dokploy compose app `mcpokedex` builds from `main` (`customGitBranch`). Pushing does not deploy: call the Dokploy API `compose.deploy` for the app (or its webhook) and check that `https://mcpokedex.com/health` reports the merged SHA in `version` (~3 min).
 - Conductor workspaces are created from the repository base branch (set in the Conductor app, not in this repo); keep it on `development`.
 
+## CI
+
+`.github/workflows/ci.yml` (#86) runs on every pull request to `development` and `main` and on every push to them. Three jobs, no secrets:
+
+- `backend`: `uv sync --frozen` + `uv run --frozen pytest`. `LITELLM_LOCAL_MODEL_COST_MAP=True` keeps `import litellm` from downloading its cost map; the suite needs no network and no `.env` (locally `load_dotenv()` reads yours, so a test that forgets to fake `GROQ_API_KEY` only fails in CI).
+- `frontend`: `npm ci --prefix frontend` + `npm run build --prefix frontend`.
+- `static-bundle`: the same build, then fails when `backend/static` differs from what is committed. The build gives the same bytes on macOS and Linux, so a red job means the bundle was not regenerated.
+
+uv, Python and Node follow the Dockerfile and the actions are pinned by commit; `backend/tests/test_deploy_config.py` enforces both. The live-LLM evals never run in CI (tokens, and the Groq spend limit).
+
 ## Desarrollo con Conductor
 
 `.conductor/settings.toml` makes each Conductor workspace self-contained (`run_mode = "concurrent"`). Conductor reads it from `main` on the remote, so changes take effect once promoted.
