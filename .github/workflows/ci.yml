@@ -1,0 +1,84 @@
+name: CI
+
+# Tests and build only. The live-LLM evals stay out: they cost tokens and need a Groq key.
+# No job reads a secret, so pull requests from forks run the same way.
+on:
+  pull_request:
+    branches: [development, main]
+  push:
+    branches: [development, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Tool versions follow the Dockerfile (uv, Python, Node); backend/tests/test_deploy_config.py
+# fails when they drift apart.
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # Importing litellm downloads its model cost map from GitHub; use the packaged copy.
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen
+      - run: uv run --frozen pytest
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+
+  # backend/static is committed by hand ("build: regenerate static assets"). The image
+  # rebuilds it, but a backend started without a build serves the committed copy.
+  static-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - name: Start from an empty bundle
+        # Vite keeps what is already in backend/static (emptyOutDir: false, only assets/ is
+        # cleaned), so a file removed from frontend/public would survive the build and pass.
+        # admin.html is the one file the build does not write; the Dockerfile restores it too.
+        run: find backend/static -mindepth 1 ! -name admin.html -delete
+      - run: npm run build --prefix frontend
+      - name: Committed bundle matches the build
+        run: |
+          # `git status` also lists new files, which `git diff --exit-code` does not see.
+          if [ -n "$(git status --porcelain -- backend/static)" ]; then
+            git status --short -- backend/static
+            git --no-pager diff --stat -- backend/static
+            echo "::error::backend/static is stale: run 'npm run build --prefix frontend' and commit it as 'build: regenerate static assets'."
+            exit 1
+          fi
