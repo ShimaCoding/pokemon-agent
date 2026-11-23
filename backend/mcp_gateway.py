@@ -6,8 +6,8 @@ HTML (`ui://` resources) are fetched here and forwarded to the MCP server.
 Everything is synchronous (strands' MCPClient runs its own background loop),
 so callers run these functions in a worker thread.
 
-Tool UI metadata and widget HTML are cached for a few minutes: they only
-change when the MCP server is redeployed.
+Tool UI metadata, widget HTML and the prompt list are cached for a few
+minutes: they only change when the MCP server is redeployed.
 """
 
 import threading
@@ -24,6 +24,7 @@ CACHE_TTL_SECONDS = 300
 _cache_lock = threading.Lock()
 _ui_tools: tuple[float, dict[str, str]] | None = None
 _ui_resources: dict[str, tuple[float, dict[str, Any]]] = {}
+_prompts: tuple[float, list[dict[str, Any]]] | None = None
 
 
 def _client() -> MCPClient:
@@ -50,8 +51,13 @@ def to_call_tool_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_prompts() -> list[dict[str, Any]]:
+    """The MCP server's prompts with their declared arguments (cached; a failure is not)."""
+    global _prompts
+    with _cache_lock:
+        if _prompts and time.monotonic() - _prompts[0] < CACHE_TTL_SECONDS:
+            return _prompts[1]
     with _client() as client:
-        return [
+        prompts = [
             {
                 "name": p.name,
                 "description": p.description or "",
@@ -62,6 +68,17 @@ def list_prompts() -> list[dict[str, Any]]:
             }
             for p in client.list_prompts_sync().prompts
         ]
+    with _cache_lock:
+        _prompts = (time.monotonic(), prompts)
+    return prompts
+
+
+def prompt_argument_names(name: str) -> frozenset[str] | None:
+    """The argument names a prompt declares; None when the server has no such prompt."""
+    for prompt in list_prompts():
+        if prompt["name"] == name:
+            return frozenset(a["name"] for a in prompt["arguments"])
+    return None
 
 
 def get_prompt_text(name: str, arguments: dict[str, str]) -> str:
@@ -151,7 +168,8 @@ def call_ui_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any] | None:
 
 def _reset_cache() -> None:
     """Testing hook."""
-    global _ui_tools
+    global _ui_tools, _prompts
     with _cache_lock:
         _ui_tools = None
+        _prompts = None
         _ui_resources.clear()

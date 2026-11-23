@@ -552,20 +552,45 @@ _PROMPT_RE = re.compile(
 )
 
 
+# A pair starts at "<key>=" at the start or after spaces/commas; keys may hold digits (pokemon1).
+_PROMPT_ARG_RE = re.compile(r"(?:^|[\s,]+)([a-z_][a-z0-9_]*)\s*=", re.I)
+
+
+def _parse_prompt_args(args_str: str) -> dict[str, str]:
+    """Parse the ``key=value`` pairs of "Usa el prompt X con …".
+
+    A value runs until the next ``key=``, so commas and spaces inside it stay
+    (``user_team=pikachu,charizard`` keeps both, ``restrictions=sin legendarios`` both words).
+    Spaces around commas are dropped (``gengar, lapras`` → ``gengar,lapras``), as are the
+    commas between pairs (``a=b, c=d``). Empty values are left out instead of sent as "".
+    """
+    matches = list(_PROMPT_ARG_RE.finditer(args_str))
+    args: dict[str, str] = {}
+    for m, nxt in zip(matches, [*matches[1:], None]):
+        value = args_str[m.end() : nxt.start() if nxt else len(args_str)]
+        value = re.sub(r"\s*,\s*", ",", value.strip()).strip(",")
+        if value:
+            args[m.group(1).lower()] = value
+    return args
+
+
 async def _expand_prompt(query: str) -> str:
-    """Replace a slash-menu prompt invocation with the MCP prompt's text."""
+    """Replace a slash-menu prompt invocation with the MCP prompt's text.
+
+    Only the arguments the prompt declares are sent. An unknown prompt or any MCP error
+    leaves the query as it was.
+    """
     m = _PROMPT_RE.match(query)
     if not m:
         return query
     prompt_name, args_str = m.group(1), m.group(2) or ""
-    # Accept both comma-separated and space-separated key=value pairs
-    args = {
-        k.strip(): v.strip()
-        for pair in re.split(r"[,\s]+", args_str)
-        if "=" in pair
-        for k, v in [pair.split("=", 1)]
-    }
+    args = _parse_prompt_args(args_str)
     try:
+        declared = await asyncio.to_thread(mcp_gateway.prompt_argument_names, prompt_name)
+        if declared is None:
+            logger.warning("Unknown MCP prompt %s", prompt_name)
+            return query
+        args = {k: v for k, v in args.items() if k in declared}
         prompt_text = (await asyncio.to_thread(mcp_gateway.get_prompt_text, prompt_name, args))[:2000]
     except Exception as exc:
         logger.warning("Could not fetch prompt %s: %s", prompt_name, exc)
