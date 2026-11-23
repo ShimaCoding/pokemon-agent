@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="conductor-theme" content="none">
+<title>Prompts interactivos — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#d4d4d4; --screen:#a0a0a0; --dark:#1a1a1a; --mid:#666; --light:#b8b8b8; --cream:#e8e8e8;
+  --gold:#555; --border:#3a3a3a; --red:#c03028; --tool:#3b6ea5; --res:#5a9e5a; --prompt:#c0547a;
+  --pixel:'Press Start 2P',monospace; --read:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2a2a2a;color:var(--cream);font-family:var(--read);font-size:14px;line-height:1.5;padding:24px 16px 60px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:disabled{cursor:not-allowed}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-family:var(--pixel);font-size:16px;line-height:1.6;color:var(--cream);margin-bottom:10px}
+h2{font-family:var(--pixel);font-size:11px;line-height:1.8;color:var(--cream);margin:34px 0 12px;border-bottom:2px solid var(--border);padding-bottom:6px}
+h3{font-size:14px;color:var(--cream);margin:14px 0 6px}
+p.lead{color:#bdbdbd;max-width:760px}
+.doc p,.doc li{color:#c8c8c8}
+.doc ul,.doc ol{margin:6px 0 10px 20px}
+.doc li{margin-bottom:4px}
+.doc code{font-family:var(--mono);font-size:12px;background:#111;border:1px solid var(--border);padding:1px 5px;color:#e6e6e6}
+.doc table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+.doc th,.doc td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top;color:#cfcfcf}
+.doc th{background:#1f1f1f;color:var(--cream);font-weight:600}
+.callout{border-left:4px solid var(--prompt);background:#1f1f1f;padding:10px 14px;margin:10px 0;color:#d6d6d6}
+.callout.bug{border-color:var(--red)}
+.callout b{color:#fff}
+
+/* ── toolbar ── */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 12px}
+.seg{display:inline-flex;border:2px solid var(--border)}
+.seg button{padding:7px 12px;font-family:var(--pixel);font-size:9px;color:#bbb}
+.seg button[aria-pressed=true]{background:var(--cream);color:var(--dark)}
+.toolbar .hint{color:#999;font-size:12px;margin-left:auto}
+.tbtn{border:2px solid var(--border);padding:7px 12px;font-family:var(--pixel);font-size:9px;color:#bbb}
+.tbtn:hover{border-color:var(--cream);color:var(--cream)}
+
+/* ── device ── */
+.stage{display:flex;justify-content:center}
+.device{position:relative;width:100%;max-width:960px;height:720px;display:flex;flex-direction:column;background:var(--bg);color:var(--dark);border:3px solid #111;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.device.mobile{max-width:390px;height:800px;border-radius:28px;border-width:10px}
+.titlebar{flex:none;display:flex;align-items:center;gap:10px;background:var(--dark);color:var(--cream);padding:10px 14px;border-bottom:2px solid var(--border)}
+.titlebar .logo{width:18px;height:18px;border-radius:50%;background:linear-gradient(var(--red) 0 45%,#111 45% 55%,#eee 55%);border:2px solid #111}
+.titlebar .name{font-family:var(--pixel);font-size:12px}
+.titlebar .badges{margin-left:auto;display:flex;gap:4px}
+.titlebar .badges span{font-family:var(--pixel);font-size:7px;padding:3px 5px;color:#fff}
+.chat{flex:1;overflow-y:auto;padding:18px 16px 24px}
+.inner{max-width:760px;margin:0 auto}
+
+/* welcome */
+.dialog{background:var(--cream);border:3px solid var(--dark);box-shadow:4px 4px 0 var(--dark);padding:16px 18px;font-family:var(--pixel);font-size:10px;line-height:2}
+.dialog p+p{margin-top:6px}
+.sectionLabel{font-family:var(--pixel);font-size:9px;color:var(--mid);margin:22px 0 10px;display:flex;gap:8px;align-items:center}
+.sectionLabel .new{background:var(--prompt);color:#fff;padding:2px 5px;font-size:7px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mobile .cards{grid-template-columns:1fr 1fr;gap:8px}
+.card{text-align:left;background:var(--cream);border:2px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:6px;transition:transform .1s,box-shadow .1s}
+.card:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--dark)}
+.card .ct{font-family:var(--pixel);font-size:9px;line-height:1.6;display:flex;gap:6px;align-items:center}
+.card .cd{font-size:12px;color:#444;line-height:1.4}
+.card .cg{font-size:10px;color:var(--mid);margin-top:auto;font-family:var(--mono)}
+.mobile .card .cd{display:none}
+.ico{display:inline-grid;place-items:center;width:20px;height:20px;flex:none;background:var(--dark);color:var(--cream);font-size:11px;font-family:var(--read)}
+
+/* composer */
+.composer{flex:none;position:relative;background:var(--dark);border-top:2px solid var(--border);padding:12px}
+.composer .row{display:flex;gap:8px;align-items:flex-end;max-width:760px;margin:0 auto}
+.composer textarea{flex:1;min-width:0;height:44px;resize:none;font-family:var(--pixel);font-size:10px;line-height:1.8;background:var(--bg);color:#000;border:2px solid var(--border);padding:11px 12px}
+.composer textarea:focus{outline:2px solid #888;outline-offset:2px}
+.pbtn{height:44px;padding:0 12px;border:2px solid var(--prompt);color:#f3c1d3;font-family:var(--pixel);font-size:9px;display:flex;align-items:center;gap:6px;flex:none}
+.pbtn:hover,.pbtn[aria-expanded=true]{background:var(--prompt);color:#fff}
+.mobile .pbtn .lbl{display:none}
+.send{height:44px;padding:0 14px;background:var(--gold);color:var(--cream);font-family:var(--pixel);font-size:9px;flex:none}
+
+/* prompt menu */
+.menu{position:absolute;left:12px;right:12px;bottom:calc(100% + 4px);max-width:760px;margin:0 auto;background:var(--dark);border:2px solid var(--gold);max-height:430px;overflow-y:auto;z-index:20;color:var(--cream)}
+.menu .mh{font-family:var(--pixel);font-size:8px;color:#9a9a9a;padding:8px 12px;background:rgba(255,255,255,.05)}
+.menu .mi{display:flex;gap:10px;width:100%;text-align:left;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+.menu .mi.sel,.menu .mi:hover{background:#3d3d3d}
+.menu .mi .ico{background:var(--prompt)}
+.menu .mt{font-family:var(--pixel);font-size:9px;line-height:1.6}
+.menu .md{font-size:12px;color:#aaa}
+.menu .ma{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.menu .ma span{font-size:10px;border:1px solid #555;padding:0 5px;color:#ccc}
+.menu .ma span.req{border-color:var(--prompt);color:#f3c1d3}
+.menu .empty{padding:14px;color:#999;font-size:12px}
+
+/* sheet */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:25}
+.sheet{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;width:min(720px,calc(100% - 24px));max-height:calc(100% - 70px);display:flex;flex-direction:column;background:var(--cream);color:var(--dark);border:3px solid var(--dark);box-shadow:6px 6px 0 rgba(0,0,0,.6);z-index:30}
+.mobile .sheet{left:0;right:0;transform:none;width:auto;bottom:0;max-height:92%;border-width:3px 0 0;box-shadow:0 -6px 20px rgba(0,0,0,.4)}
+.mobile .sheet::before{content:"";display:block;width:44px;height:4px;background:#999;margin:8px auto 0}
+.sh{flex:none;display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:2px solid var(--border)}
+.sh .ico{background:var(--prompt);width:26px;height:26px;font-size:14px}
+.sh .st{font-family:var(--pixel);font-size:11px;line-height:1.5}
+.sh .ss{font-size:12px;color:var(--mid)}
+.sh .x{margin-left:auto;font-size:20px;width:32px;height:32px;line-height:1}
+.sb{flex:1;overflow-y:auto;padding:14px 16px 18px;display:flex;flex-direction:column;gap:18px}
+.field>label,.field>.fl{display:flex;align-items:baseline;gap:8px;font-family:var(--pixel);font-size:9px;line-height:1.6;margin-bottom:8px}
+.field .req{color:var(--prompt);font-family:var(--read);font-size:11px}
+.field .cnt{margin-left:auto;font-family:var(--read);font-size:12px;color:var(--mid)}
+.field .help{font-size:12px;color:var(--mid);margin-top:-4px;margin-bottom:8px}
+.sf{flex:none;border-top:2px solid var(--border);padding:12px 16px;background:#dcdcdc}
+.preview{font-size:13px;color:#222;margin-bottom:10px}
+.preview .pl{font-family:var(--pixel);font-size:8px;color:var(--mid);display:block;margin-bottom:4px}
+.preview .ptext{background:#fff;border:2px dashed var(--mid);padding:8px 10px}
+.preview .ptext b{background:rgba(192,84,122,.15);font-weight:600;padding:0 2px}
+.jsonToggle{font-size:12px;color:var(--tool);text-decoration:underline;margin-top:6px}
+pre.json{font-family:var(--mono);font-size:11px;background:#111;color:#ddd;padding:8px 10px;margin-top:6px;overflow-x:auto;white-space:pre-wrap}
+.actions{display:flex;gap:8px;align-items:center}
+.actions .missing{font-size:12px;color:var(--red);margin-right:auto}
+.actions .ok{font-size:12px;color:var(--res);margin-right:auto}
+.btn{font-family:var(--pixel);font-size:9px;padding:11px 14px;border:2px solid var(--dark)}
+.btn.primary{background:var(--dark);color:var(--cream)}
+.btn.primary:disabled{opacity:.35}
+.btn.ghost{background:transparent}
+
+/* segmented / chips */
+.choices{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:2px solid var(--border);background:#f4f4f4;padding:6px 10px;font-size:13px;line-height:1.2}
+.chip[aria-pressed=true]{background:var(--dark);color:var(--cream)}
+.chip .hint{display:block;font-size:10px;opacity:.7}
+.chip.small{padding:4px 8px;font-size:12px}
+
+/* team slots */
+.slots{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.slots.n1{grid-template-columns:1fr;max-width:260px}
+.slots.n2{grid-template-columns:repeat(2,1fr)}
+.mobile .slots{grid-template-columns:repeat(3,1fr)}
+.mobile .slots.n1{grid-template-columns:1fr}
+.slot{position:relative;height:86px;border:2px dashed #999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:var(--mid);background:#f1f1f1}
+.slots.n1 .slot{height:64px;flex-direction:row;justify-content:flex-start;padding:0 12px;gap:10px}
+.slot.filled{border-style:solid;border-color:var(--dark);color:var(--dark);background:#fff}
+.slot.focus{border-color:var(--prompt);border-style:solid;box-shadow:0 0 0 2px rgba(192,84,122,.25)}
+.slot .nm{font-size:12px;font-weight:600;text-align:center;line-height:1.1}
+.slot .rm{position:absolute;top:2px;right:4px;font-size:15px;color:var(--mid);width:20px;height:20px}
+.slot .rm:hover{color:var(--red)}
+.slot .tps{display:flex;gap:2px}
+.spr{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),transparent 55%),var(--c);border:2px solid var(--dark);color:#111;font-family:var(--pixel);font-size:7px;flex:none}
+.spr.sm{width:26px;height:26px;font-size:6px}
+.spr.xs{width:20px;height:20px;font-size:0;border-width:1px}
+.tb{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#fff;padding:1px 5px;background:var(--c);text-shadow:0 1px 0 rgba(0,0,0,.35)}
+.search{position:relative;margin-top:8px}
+.search input{width:100%;font-size:14px;padding:10px 12px 10px 34px;border:2px solid var(--border);background:#fff}
+.search input:focus{outline:2px solid var(--prompt);outline-offset:1px}
+.search .mag{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--mid)}
+.results{border:2px solid var(--border);border-top:0;background:#fff;max-height:228px;overflow-y:auto}
+.res{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:6px 10px;border-bottom:1px solid #e3e3e3}
+.res:hover,.res.sel{background:#f3e3ea}
+.res:disabled{opacity:.4;background:#fff}
+.res .num{font-family:var(--mono);font-size:11px;color:var(--mid);width:38px}
+.res .rn{font-size:14px;font-weight:600;flex:1}
+.res .tps{display:flex;gap:3px}
+.res .add{font-size:11px;color:var(--prompt);font-weight:700}
+.res.none{color:var(--mid);font-size:12px;cursor:default}
+.subrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--mid)}
+.linkbtn{font-size:12px;color:var(--tool);text-decoration:underline}
+.coverage{display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-top:8px;font-size:12px;color:var(--mid)}
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:start}
+.mobile .vs{grid-template-columns:1fr}
+.vs .vsl{font-family:var(--pixel);font-size:14px;align-self:center;color:var(--red);text-align:center}
+
+/* type grid */
+.types{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+.mobile .types{grid-template-columns:repeat(3,1fr)}
+.tbtn2{padding:8px 4px;font-size:12px;font-weight:700;color:#fff;background:var(--c);border:2px solid transparent;text-shadow:0 1px 0 rgba(0,0,0,.4);position:relative;opacity:.55}
+.tbtn2:hover{opacity:.85}
+.tbtn2[aria-pressed=true]{opacity:1;border-color:var(--dark);box-shadow:inset 0 0 0 2px #fff}
+.tbtn2[aria-pressed=true]::after{content:"✓";position:absolute;top:0;right:4px;font-size:11px}
+.tbtn2:disabled{opacity:.2}
+textarea.free,input.free{width:100%;font:inherit;font-size:13px;padding:8px 10px;border:2px solid var(--border);background:#fff;resize:vertical}
+
+/* chat messages */
+.msg{margin-bottom:18px}
+.who{font-family:var(--pixel);font-size:8px;color:var(--mid);margin-bottom:6px}
+.msg.user{display:flex;flex-direction:column;align-items:flex-end}
+.pcard{max-width:520px;background:var(--dark);color:var(--cream);border:2px solid var(--dark);padding:10px 12px}
+.pcard .pt{font-family:var(--pixel);font-size:9px;line-height:1.6;display:flex;gap:8px;align-items:center}
+.pcard .pt .ico{background:var(--prompt)}
+.pcard .pt .tag{margin-left:auto;font-family:var(--mono);font-size:10px;color:#999}
+.pcard .pq{font-size:13px;margin-top:6px;color:#ddd}
+.pcard .pteam{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.pcard .pteam .spr{border-color:#000}
+.pcard .pedit{margin-top:8px;font-size:12px;color:#f3c1d3;text-decoration:underline}
+.bot{background:var(--cream);border:2px solid var(--border);padding:12px 14px;font-size:13px;color:#333}
+.bot .tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.bot .tools span{font-family:var(--mono);font-size:11px;background:var(--tool);color:#fff;padding:1px 6px}
+.blink{animation:blink 1s step-start infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* random */
+.rbtn{border:2px solid var(--dark);background:#fff;padding:5px 10px;font-size:12px;font-weight:600;color:var(--dark)}
+.rbtn:hover{background:var(--dark);color:var(--cream)}
+.slot .rr{position:absolute;top:2px;left:4px;font-size:14px;width:22px;height:22px;line-height:1;opacity:.75}
+.slot .rr:hover{opacity:1;transform:rotate(25deg)}
+.slot.rand{background:repeating-linear-gradient(45deg,#fff 0 8px,#f6eef2 8px 16px)}
+
+/* widget variant */
+.wframe{margin-top:8px;border:2px solid var(--border);background:var(--cream);box-shadow:3px 3px 0 rgba(0,0,0,.25)}
+.wbar{display:flex;gap:8px;justify-content:space-between;font-family:var(--mono);font-size:10px;color:#777;padding:4px 10px;border-bottom:1px solid #bbb;background:#ddd}
+.wform .sb{overflow:visible}
+.wform .sf{background:#e0e0e0;position:sticky;bottom:0;z-index:2;box-shadow:0 -4px 10px rgba(0,0,0,.12)}
+.wdone{padding:10px 12px;font-size:13px;color:#555;display:flex;gap:8px;align-items:center}
+.wdone .ok{color:var(--res);font-weight:700}
+.bot.intro{padding:10px 12px}
+.ubub{max-width:520px;background:var(--dark);color:var(--cream);padding:10px 12px;font-size:13px}
+.vbadge{font-family:var(--pixel);font-size:7px;padding:3px 6px;border:1px dashed #f3c1d3;color:#f3c1d3}
+.mobile .titlebar .badges{display:none}
+.cmp td:first-child{white-space:nowrap;color:#eee}
+.win{color:#9fe09f}
+
+/* annotations */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.note{background:#1f1f1f;border:1px solid var(--border);padding:10px 12px;font-size:13px;color:#cfcfcf}
+.note b{display:block;font-family:var(--pixel);font-size:8px;line-height:1.7;color:#f3c1d3;margin-bottom:6px}
+@media (max-width:760px){.notes{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Prompts interactivos · mockup</h1>
+  <p class="lead">Propuesta para dejar de escribir <code style="font-family:var(--mono);background:#111;padding:1px 5px">Usa el prompt battle/team-preview con team=…</code> a mano: cada prompt MCP abre un formulario con buscador de Pokémon, selector de tipos y opciones como botones. El mockup es interactivo: abre un prompt desde las tarjetas, desde el botón <b>⚡ Prompts</b> o escribiendo <b>/</b> en el cuadro.</p>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Dispositivo">
+      <button data-action="device" data-v="desktop" aria-pressed="true">Escritorio</button>
+      <button data-action="device" data-v="mobile" aria-pressed="false">Móvil 390 px</button>
+    </div>
+    <div class="seg" role="group" aria-label="Formulario">
+      <button data-action="place" data-v="widget" aria-pressed="true">B · Widget ✓ elegida</button>
+      <button data-action="place" data-v="sheet" aria-pressed="false">A · Hoja (descartada)</button>
+    </div>
+    <div class="seg" role="group" aria-label="Abrir directo">
+      <button data-action="jump" data-v="battle/team-preview" aria-pressed="false">Equipo</button>
+      <button data-action="jump" data-v="educational/type-effectiveness" aria-pressed="false">Tipos</button>
+      <button data-action="jump" data-v="battle/matchup-analysis" aria-pressed="false">VS</button>
+    </div>
+    <button class="tbtn" data-action="reset">↺ Reiniciar</button>
+    <span class="hint">Sprites = círculos de color (el mockup no carga imágenes). En la app real, sprite de PokeAPI.</span>
+  </div>
+
+  <div class="stage"><div class="device" id="device"></div></div>
+
+  <div class="notes">
+    <div class="note"><b>1 · Descubrir</b>Los 6 prompts dejan de esconderse detrás de “/”: tarjetas en la bienvenida y un botón fijo en el composer. Nombres en español; el id MCP (<code>battle/strategy</code>) queda como detalle.</div>
+    <div class="note"><b>2 · Completar</b>Un control por tipo de argumento: buscador con slots para equipos, rejilla de 18 tipos, botones para valores cerrados, chips + texto para restricciones. Nada de defaults inventados (<i>pikachu</i>).</div>
+    <div class="note"><b>3 · Confirmar</b>Antes de ejecutar se ve la frase que quedará en el chat y, opcional, la llamada MCP exacta. En el chat el mensaje es una tarjeta con “Editar y reenviar”.</div>
+  </div>
+
+  <div class="doc">
+  <h2>Investigación: cómo funciona hoy</h2>
+  <ol>
+    <li><code>GET /api/prompts</code> lista los 6 prompts del servidor MCP (<code>mcp_gateway.list_prompts</code>).</li>
+    <li><code>usePrompts.ts</code> arma un texto con valores por defecto fijos (<code>PROMPT_ARG_DEFAULTS</code>: pikachu, charizard…) y el menú “/” lo pega en el cuadro. El usuario tiene que editar <code>clave=valor</code> a mano.</li>
+    <li>El backend reconoce ese texto con una regex (<code>_PROMPT_RE</code> en <code>main.py</code>), pide el prompt a MCP (<code>get_prompt_text</code>) y se lo pasa al agente en lugar del mensaje.</li>
+  </ol>
+  <div class="callout bug"><b>Bug encontrado:</b> <code>_expand_prompt</code> separa los pares con <code>re.split(r"[,\s]+")</code>, así que también parte por comas. <code>user_team=pikachu,charizard,bulbasaur</code> llega como <code>{"user_team": "pikachu"}</code>: los prompts de equipo hoy solo reciben el primer Pokémon. Verificado en local con el mismo código.</div>
+  <div class="callout"><b>Los argumentos MCP no traen metadata útil:</b> <code>description</code> vacía, sin enum ni tipo. Los valores válidos (<i>quick / standard / comprehensive</i>) solo están en el docstring del prompt. La UI necesita su propio esquema por prompt.</div>
+
+  <h2>Mapa argumento → control</h2>
+  <table>
+    <tr><th>Prompt (título propuesto)</th><th>Argumentos</th><th>Controles</th></tr>
+    <tr><td><code>educational/pokemon-analysis</code><br>Analizar un Pokémon</td><td>pokemon_name*, analysis_type, user_level</td><td>Buscador 1 slot · botones General/Combate/Competitivo · botones Principiante/Intermedio/Avanzado</td></tr>
+    <tr><td><code>educational/team-building</code><br>Armar un equipo</td><td>theme, format, restrictions</td><td>Botones de tema (si “de un tipo” → rejilla de tipos) · formato · chips de restricción + “Incluir a…” con buscador + texto libre. Todo eso se compone en <code>restrictions</code>.</td></tr>
+    <tr><td><code>educational/type-effectiveness</code><br>Aprender de tipos</td><td>scenario, attacking_type, defending_types</td><td>Botones de escenario · rejilla de tipos, 1 atacante · rejilla de tipos, hasta 2 defensores</td></tr>
+    <tr><td><code>battle/strategy</code><br>Plan de batalla</td><td>user_team*, opponent_team, battle_format, strategy_focus</td><td>Buscador 6 slots × 2 equipos · botones Individual/Dobles/Múltiple · botones de enfoque</td></tr>
+    <tr><td><code>battle/matchup-analysis</code><br>Duelo 1 vs 1</td><td>pokemon1*, pokemon2*, scenario, environment</td><td>Dos buscadores de 1 slot con “VS” · botones de escenario y entorno</td></tr>
+    <tr><td><code>battle/team-preview</code><br>Analizar mi equipo</td><td>team*, analysis_depth, focus_areas</td><td>Buscador 6 slots (+ “Traer de la Caja de Bill”) · botones de profundidad · chips múltiples de foco</td></tr>
+  </table>
+  <p><b>Ojo con “team building”:</b> el prompt <code>educational/team-building</code> no recibe Pokémon (solo tema, formato y restricciones). Elegir Pokémon uno a uno y armar el equipo es <code>battle/team-preview</code> y <code>battle/strategy</code>. En el mockup “Armar un equipo” ofrece “Incluir a…” para fijar algunos y deja que Dexter complete el resto.</p>
+
+  <h2>Propuesta técnica (para la fase de implementación)</h2>
+  <table>
+    <tr><th>Pieza</th><th>Qué</th></tr>
+    <tr><td>Esquema de formularios</td><td><code>frontend/src/lib/promptForms.ts</code>: por nombre de prompt, título, ícono y un control por argumento (<code>team</code>, <code>pokemon</code>, <code>type</code>, <code>types</code>, <code>choice</code>, <code>multi</code>, <code>text</code>) con sus opciones en español. Un prompt o argumento desconocido cae a un campo de texto, así un prompt nuevo del servidor sigue funcionando.</td></tr>
+    <tr><td>Envío estructurado</td><td><code>RunRequest</code> gana <code>prompt: {name, arguments}</code> opcional. <code>query</code> = la frase legible (lo que se ve en el chat, la historia y el log). El backend valida contra la lista de prompts y llama <code>get_prompt</code> con los argumentos tal cual: se elimina la regex y el bug de las comas.</td></tr>
+    <tr><td>Lista de Pokémon</td><td>Nuevo <code>GET /api/pokemon/names</code> (id, slug, nombre, tipos), cacheado; ~1 025 especies + formas caben en ~40 KB gzip y se filtra en el cliente al instante (nombre, <code>#25</code>, tipo en español). Fuente: PokeAPI vía el servidor MCP o un JSON generado.</td></tr>
+    <tr><td>Guards</td><td><code>GroundedPokemonNames</code> exige que los nombres aparezcan en la conversación: la frase de <code>query</code> los incluye, así que pasa. <code>NormalizePokemonNames</code> sigue aplicando a los slugs.</td></tr>
+    <tr><td>Evals</td><td>Casos nuevos con <code>prompt</code> estructurado (equipos de 6, tipos dobles) en <code>cases.json</code>; el harness tendría que mandar el campo.</td></tr>
+  </table>
+
+  <h2>A · Hoja vs B · Widget en el chat</h2>
+  <p>Cambia entre las dos con el selector de arriba. En B, además de las tarjetas y ⚡, puedes escribir en lenguaje natural (“quiero analizar mi equipo con gengar y lapras”, “pikachu vs gyarados”, “enséñame tipos de fuego”) y Dexter responde con el formulario ya prellenado.</p>
+  <table class="cmp">
+    <tr><th></th><th>A · Hoja sobre el composer</th><th>B · Widget dentro del chat</th></tr>
+    <tr><td>Cómo se abre</td><td>⚡, “/” o tarjetas. Instantáneo.</td><td>Igual, <b>y además</b> Dexter lo abre cuando entiende el pedido en lenguaje natural.</td></tr>
+    <tr><td>Costo de abrir</td><td class="win">Cero: no llama al modelo.</td><td>Desde el menú, cero. Desde lenguaje natural, una llamada al modelo (~1–2 s + tokens), y depende de que elija bien la tool.</td></tr>
+    <tr><td>Prellenado</td><td>Vacío (o lo del mensaje que editas).</td><td class="win">Dexter pone los Pokémon y tipos que entendió.</td></tr>
+    <tr><td>Mientras llenas</td><td>Tapa el chat (en escritorio se ve detrás atenuado).</td><td class="win">Se puede hacer scroll y releer respuestas anteriores.</td></tr>
+    <tr><td>Historia</td><td>Solo queda la tarjeta enviada.</td><td>Queda el formulario (enviado / cerrado) en la conversación. Más ruido si se abren varios.</td></tr>
+    <tr><td>Móvil</td><td class="win">Bottom sheet nativo: campos grandes, teclado no tapa el botón.</td><td>Formulario largo dentro del scroll del chat; el botón Ejecutar queda abajo, a veces fuera de vista.</td></tr>
+    <tr><td>Caja de Bill</td><td class="win">El frontend llama a un endpoint nuevo con su <code>trainer_id</code>.</td><td>Igual si el widget es un componente del frontend. Si fuera un iframe MCP Apps no podría: el <code>trainer_id</code> no puede llegar al servidor MCP ni a argumentos de tools.</td></tr>
+    <tr><td>Implementación</td><td class="win">Solo frontend + <code>prompt</code> en <code>RunRequest</code> + 2 endpoints (nombres, caja).</td><td>Todo lo de A + una tool del backend <code>show_prompt_form(prompt, prefill)</code> que el frontend dibuja como componente propio (no iframe), su regla en <code>SYSTEM_PROMPT</code>, el evento SSE nuevo y casos de evals para que la elija bien sin romper <code>EXPECTED_TOOLS</code>.</td></tr>
+    <tr><td>Riesgo</td><td>Bajo.</td><td>Medio: el modelo puede abrir el formulario cuando el usuario solo quería la respuesta (“¿qué tal es mi equipo?”) y agrega un paso.</td></tr>
+  </table>
+  <p><b>Elegida: B.</b> Los puntos débiles de B en la tabla pasan a ser requisitos de la implementación (abajo).</p>
+
+  <h2>Decidido</h2>
+  <ul>
+    <li><b>Formulario B · widget en el chat</b>, como componente del frontend (no iframe MCP Apps): comparte controles con el menú, lee la lista de Pokémon y la Caja de Bill, y no cambia <code>mcp-pokemon-server</code>.</li>
+    <li><b>Botón aleatorio</b> en cada campo de Pokémon (“Equipo al azar”, “Completar al azar”, “Uno al azar”), 🎲 por espacio para cambiar solo ese, y “Tipo(s) al azar” en las rejillas de tipos. En lenguaje natural: “analiza un equipo al azar” abre el formulario con 6 al azar.</li>
+    <li><b>“Traer de la Caja de Bill” entra en la primera versión.</b></li>
+    <li><b>La sintaxis “Usa el prompt X con …” se mantiene</b>, con el parser arreglado: issue #91.</li>
+  </ul>
+
+  <h2>Requisitos de B para la implementación</h2>
+  <table>
+    <tr><th>Pieza</th><th>Qué</th></tr>
+    <tr><td>Tool <code>show_prompt_form</code></td><td>Tool del backend (como <code>bill</code>, en <code>AGENT_TOOLS</code> / <code>EXPECTED_TOOLS</code>) con <code>prompt</code> (enum de los prompts listados) y <code>prefill</code> opcional. No ejecuta nada: su resultado le dice al modelo “formulario mostrado, espera al usuario” y el turno termina sin narrar. Su <code>prefill</code> pasa por <code>PokemonNames</code> como cualquier tool, así que un nombre inventado por el modelo se cancela.</td></tr>
+    <tr><td>Evento SSE</td><td>Nuevo tipo <code>prompt_form</code> (<code>tool_id</code>, <code>prompt</code>, <code>prefill</code>) en el contrato y en <code>EVENTS_CATALOG</code>. El frontend lo dibuja como parte del mensaje de Dexter, igual que un <code>ui_resource</code> pero sin iframe.</td></tr>
+    <tr><td>Abrir sin modelo</td><td>Desde ⚡, “/” o las tarjetas el frontend inserta el formulario directo, sin turno del modelo ni tokens. Solo el lenguaje natural pasa por <code>show_prompt_form</code>.</td></tr>
+    <tr><td>Cuándo abrirlo</td><td>Regla en <code>SYSTEM_PROMPT</code>: solo si el pedido calza con un prompt <b>y</b> faltan datos o el usuario pide armar / elegir. “¿Qué tal es mi equipo de gengar, lapras y snorlax?” se responde directo con <code>analyze_team</code>, sin formulario. Medirlo con casos nuevos en <code>cases.json</code> (abre / no abre) antes de promover.</td></tr>
+    <tr><td>Envío</td><td>Ejecutar manda <code>RunRequest</code> con <code>prompt: {name, arguments}</code> y <code>query</code> = la frase legible. El formulario queda “✓ Enviado” en la historia; uno abierto se cierra si se abre otro.</td></tr>
+    <tr><td>Móvil</td><td>El pie con la frase y “Ejecutar” va <code>position: sticky</code> al fondo del chat mientras el formulario está a la vista, para que no quede fuera de pantalla.</td></tr>
+    <tr><td>Historia y contexto</td><td>El formulario no entra a la historia del modelo como texto; <code>context.py</code> ve solo la llamada a <code>show_prompt_form</code> (y la compacta como cualquier tool).</td></tr>
+    <tr><td>Aleatorio</td><td>Lo elige el frontend sobre la lista completa de <code>/api/pokemon/names</code>, nunca el modelo: los nombres quedan en la frase enviada y <code>GroundedPokemonNames</code> los acepta. Resuelve el trade-off documentado (“analiza un equipo al azar” ya no podía elegir nombres solo).</td></tr>
+    <tr><td>Caja de Bill</td><td><code>GET /api/box</code> con el <code>trainer_id</code> del navegador; devuelve slugs y tipos. El <code>trainer_id</code> sigue sin aparecer en logs, spans, eventos ni <code>query_logs</code> (<code>test_main.py</code> lo vigila).</td></tr>
+  </table>
+
+  <h2>Pendiente</h2>
+  <ul>
+    <li>¿El aleatorio excluye legendarios y míticos por defecto? (Hace falta el dato en <code>/api/pokemon/names</code>.)</li>
+    <li>Partir el trabajo en issues: #91 primero (independiente), luego backend (endpoints + <code>prompt</code> en <code>RunRequest</code>), luego el formulario y el menú, y al final <code>show_prompt_form</code> + evals.</li>
+  </ul>
+  </div>
+</div>
+
+<script>
+/* ───────────────────────── data ───────────────────────── */
+const TYPES = {
+  normal:['Normal','#a8a878'], fire:['Fuego','#f08030'], water:['Agua','#6890f0'], grass:['Planta','#78c850'],
+  electric:['Eléctrico','#f8d030'], ice:['Hielo','#98d8d8'], fighting:['Lucha','#c03028'], poison:['Veneno','#a040a0'],
+  ground:['Tierra','#e0c068'], flying:['Volador','#a890f0'], psychic:['Psíquico','#f85888'], bug:['Bicho','#a8b820'],
+  rock:['Roca','#b8a038'], ghost:['Fantasma','#705898'], dragon:['Dragón','#7038f8'], dark:['Siniestro','#705848'],
+  steel:['Acero','#b8b8d0'], fairy:['Hada','#ee99ac'],
+};
+const RAW = `1 bulbasaur grass poison|2 ivysaur grass poison|3 venusaur grass poison|4 charmander fire|5 charmeleon fire|6 charizard fire flying|7 squirtle water|8 wartortle water|9 blastoise water|10 caterpie bug|11 metapod bug|12 butterfree bug flying|13 weedle bug poison|14 kakuna bug poison|15 beedrill bug poison|16 pidgey normal flying|17 pidgeotto normal flying|18 pidgeot normal flying|19 rattata normal|20 raticate normal|21 spearow normal flying|22 fearow normal flying|23 ekans poison|24 arbok poison|25 pikachu electric|26 raichu electric|27 sandshrew ground|28 sandslash ground|29 nidoran-f poison|30 nidorina poison|31 nidoqueen poison ground|32 nidoran-m poison|33 nidorino poison|34 nidoking poison ground|35 clefairy fairy|36 clefable fairy|37 vulpix fire|38 ninetales fire|39 jigglypuff normal fairy|40 wigglytuff normal fairy|41 zubat poison flying|42 golbat poison flying|43 oddish grass poison|44 gloom grass poison|45 vileplume grass poison|46 paras bug grass|47 parasect bug grass|48 venonat bug poison|49 venomoth bug poison|50 diglett ground|51 dugtrio ground|52 meowth normal|53 persian normal|54 psyduck water|55 golduck water|56 mankey fighting|57 primeape fighting|58 growlithe fire|59 arcanine fire|60 poliwag water|61 poliwhirl water|62 poliwrath water fighting|63 abra psychic|64 kadabra psychic|65 alakazam psychic|66 machop fighting|67 machoke fighting|68 machamp fighting|69 bellsprout grass poison|70 weepinbell grass poison|71 victreebel grass poison|72 tentacool water poison|73 tentacruel water poison|74 geodude rock ground|75 graveler rock ground|76 golem rock ground|77 ponyta fire|78 rapidash fire|79 slowpoke water psychic|80 slowbro water psychic|81 magnemite electric steel|82 magneton electric steel|83 farfetchd normal flying|84 doduo normal flying|85 dodrio normal flying|86 seel water|87 dewgong water ice|88 grimer poison|89 muk poison|90 shellder water|91 cloyster water ice|92 gastly ghost poison|93 haunter ghost poison|94 gengar ghost poison|95 onix rock ground|96 drowzee psychic|97 hypno psychic|98 krabby water|99 kingler water|100 voltorb electric|101 electrode electric|102 exeggcute grass psychic|103 exeggutor grass psychic|104 cubone ground|105 marowak ground|106 hitmonlee fighting|107 hitmonchan fighting|108 lickitung normal|109 koffing poison|110 weezing poison|111 rhyhorn ground rock|112 rhydon ground rock|113 chansey normal|114 tangela grass|115 kangaskhan normal|116 horsea water|117 seadra water|118 goldeen water|119 seaking water|120 staryu water|121 starmie water psychic|122 mr-mime psychic fairy|123 scyther bug flying|124 jynx ice psychic|125 electabuzz electric|126 magmar fire|127 pinsir bug|128 tauros normal|129 magikarp water|130 gyarados water flying|131 lapras water ice|132 ditto normal|133 eevee normal|134 vaporeon water|135 jolteon electric|136 flareon fire|137 porygon normal|138 omanyte rock water|139 omastar rock water|140 kabuto rock water|141 kabutops rock water|142 aerodactyl rock flying|143 snorlax normal|144 articuno ice flying|145 zapdos electric flying|146 moltres fire flying|147 dratini dragon|148 dragonair dragon|149 dragonite dragon flying|150 mewtwo psychic|151 mew psychic|175 togepi fairy|196 espeon psychic|197 umbreon dark|202 wobbuffet psychic|212 scizor bug steel|213 shuckle bug rock|242 blissey normal|248 tyranitar rock dark|249 lugia psychic flying|250 ho-oh fire flying|282 gardevoir psychic fairy|289 slaking normal|291 ninjask bug flying|373 salamence dragon flying|376 metagross steel psychic|392 infernape fire fighting|445 garchomp dragon ground|448 lucario fighting steel|475 gallade psychic fighting|487 giratina-altered ghost dragon|635 hydreigon dark dragon|658 greninja water dark|778 mimikyu ghost fairy|887 dragapult dragon ghost`;
+const SPECIAL = {'mr-mime':'Mr. Mime','nidoran-f':'Nidoran♀','nidoran-m':'Nidoran♂','farfetchd':"Farfetch'd",'ho-oh':'Ho-Oh','giratina-altered':'Giratina'};
+const DEX = RAW.split('|').map(s => { const [n, slug, ...t] = s.split(' '); return { n:+n, slug, t, name: SPECIAL[slug] || slug[0].toUpperCase() + slug.slice(1) }; });
+const BY_SLUG = Object.fromEntries(DEX.map(p => [p.slug, p]));
+const BOX = ['gengar','lapras','snorlax','scizor'];  // mock: lo que habría en la Caja de Bill
+
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+const TYPE_ALIAS = {}; Object.entries(TYPES).forEach(([k, [es]]) => { TYPE_ALIAS[norm(es)] = k; TYPE_ALIAS[k] = k; });
+
+/* ───────────────────────── prompts schema (lo que sería promptForms.ts) ───────────────────────── */
+const PROMPTS = [
+  { id:'battle/team-preview', group:'Batalla', icon:'⚔', title:'Analizar mi equipo', desc:'Sinergia, cobertura y huecos de un equipo de hasta 6.',
+    fields:[
+      { arg:'team', label:'Tu equipo', kind:'team', max:6, req:true, box:true },
+      { arg:'analysis_depth', label:'Profundidad', kind:'choice', def:'standard', opts:[['quick','Rápido','un párrafo'],['standard','Estándar',''],['comprehensive','Completo','rol por rol']] },
+      { arg:'focus_areas', label:'Enfocarse en', kind:'multi', def:['synergy'], opts:[['offense','Ataque'],['defense','Defensa'],['synergy','Sinergia'],['speed','Velocidad'],['coverage','Cobertura de tipos']] },
+    ],
+    sentence:v => `Analiza mi equipo: <b>${names(v.team)}</b> — análisis ${lbl('analysis_depth',v).toLowerCase()}${v.focus_areas.length?`, foco en ${lbls('focus_areas',v)}`:''}` },
+  { id:'battle/strategy', group:'Batalla', icon:'♟', title:'Plan de batalla', desc:'Estrategia para tu equipo, contra un rival si lo conoces.',
+    fields:[
+      { arg:'user_team', label:'Tu equipo', kind:'team', max:6, req:true, box:true },
+      { arg:'opponent_team', label:'Equipo rival', kind:'team', max:6, help:'Opcional: si lo dejas vacío, Dexter planea contra amenazas comunes.' },
+      { arg:'battle_format', label:'Formato', kind:'choice', def:'singles', opts:[['singles','Individual'],['doubles','Dobles'],['multi','Múltiple']] },
+      { arg:'strategy_focus', label:'Enfoque', kind:'choice', def:'balanced', opts:[['offensive','Ofensivo'],['defensive','Defensivo'],['balanced','Equilibrado'],['utility','Apoyo']] },
+    ],
+    sentence:v => `Plan de batalla para <b>${names(v.user_team)}</b>${v.opponent_team.length?` contra <b>${names(v.opponent_team)}</b>`:''} — ${lbl('battle_format',v).toLowerCase()}, enfoque ${lbl('strategy_focus',v).toLowerCase()}` },
+  { id:'battle/matchup-analysis', group:'Batalla', icon:'✕', title:'Duelo 1 vs 1', desc:'Quién gana entre dos Pokémon y por qué.',
+    fields:[
+      { arg:'pokemon1', label:'Pokémon 1', kind:'pokemon', req:true, pair:'a' },
+      { arg:'pokemon2', label:'Pokémon 2', kind:'pokemon', req:true, pair:'b' },
+      { arg:'scenario', label:'Escenario', kind:'choice', def:'1v1', opts:[['1v1','1 contra 1'],['team-context','Dentro de un equipo'],['switch-prediction','Predicción de cambio']] },
+      { arg:'environment', label:'Entorno', kind:'choice', def:'neutral', opts:[['neutral','Neutral'],['weather','Con clima'],['terrain','Con campo']] },
+    ],
+    sentence:v => `Duelo: <b>${names(v.pokemon1)}</b> vs <b>${names(v.pokemon2)}</b> — ${lbl('scenario',v).toLowerCase()}, entorno ${lbl('environment',v).toLowerCase()}` },
+  { id:'educational/pokemon-analysis', group:'Aprender', icon:'◎', title:'Analizar un Pokémon', desc:'Fortalezas, debilidades y rol, a tu nivel.',
+    fields:[
+      { arg:'pokemon_name', label:'Pokémon', kind:'pokemon', req:true },
+      { arg:'analysis_type', label:'Tipo de análisis', kind:'choice', def:'general', opts:[['general','General'],['battle','Combate'],['competitive','Competitivo']] },
+      { arg:'user_level', label:'Tu nivel', kind:'choice', def:'beginner', opts:[['beginner','Principiante'],['intermediate','Intermedio'],['advanced','Avanzado']] },
+    ],
+    sentence:v => `Analiza a <b>${names(v.pokemon_name)}</b> — enfoque ${lbl('analysis_type',v).toLowerCase()}, nivel ${lbl('user_level',v).toLowerCase()}` },
+  { id:'educational/team-building', group:'Aprender', icon:'✚', title:'Armar un equipo', desc:'Dexter propone un equipo según tema, formato y reglas.',
+    fields:[
+      { arg:'theme', label:'Tema', kind:'choice', def:'balanced', opts:[['balanced','Equilibrado'],['offensive','Ofensivo'],['defensive','Defensivo'],['type-specific','De un tipo']] },
+      { arg:'_theme_type', label:'¿Qué tipo?', kind:'type', showIf:v => v.theme === 'type-specific', virtual:true },
+      { arg:'format', label:'Formato', kind:'choice', def:'casual', opts:[['casual','Casual'],['competitive','Competitivo'],['tournament','Torneo']] },
+      { arg:'_include', label:'Incluir a', kind:'team', max:5, virtual:true, help:'Opcional: Pokémon que sí o sí quieres; Dexter completa el resto.' },
+      { arg:'_rules', label:'Restricciones', kind:'multi', def:[], virtual:true, opts:[['no-legend','Sin legendarios'],['gen1','Solo 1ª generación'],['no-repeat','Sin tipos repetidos'],['no-mega','Sin megas']] },
+      { arg:'_free', label:'Otra regla', kind:'text', virtual:true, placeholder:'p. ej. que tenga un Pokémon con Intimidación' },
+    ],
+    derive:v => ({ restrictions: [
+      v.theme === 'type-specific' && v._theme_type ? `solo tipo ${TYPES[v._theme_type][0].toLowerCase()}` : '',
+      v._include.length ? `incluir ${v._include.join(', ')}` : '',
+      ...v._rules.map(r => optLabel('_rules', r).toLowerCase()), v._free.trim(),
+    ].filter(Boolean).join('; ') }),
+    sentence:v => { const r = PROMPT('educational/team-building').derive(v).restrictions;
+      return `Ayúdame a armar un equipo <b>${lbl('theme',v).toLowerCase()}${v.theme==='type-specific'&&v._theme_type?` de tipo ${TYPES[v._theme_type][0].toLowerCase()}`:''}</b> para formato ${lbl('format',v).toLowerCase()}${v._include.length?`, con <b>${names(v._include)}</b>`:''}${r && (v._rules.length||v._free.trim())?` — ${[...v._rules.map(x=>optLabel('_rules',x).toLowerCase()), v._free.trim()].filter(Boolean).join(', ')}`:''}`; } },
+  { id:'educational/type-effectiveness', group:'Aprender', icon:'◆', title:'Aprender de tipos', desc:'Qué es súper eficaz contra qué, con quiz si quieres.',
+    fields:[
+      { arg:'scenario', label:'Modo', kind:'choice', def:'learning', opts:[['learning','Explicación'],['quiz','Quiz'],['battle-analysis','Análisis de combate']] },
+      { arg:'attacking_type', label:'Tipo atacante', kind:'type', help:'Elige uno.' },
+      { arg:'defending_types', label:'Tipos defensores', kind:'types', max:2, help:'Hasta 2: un Pokémon de tipo doble.' },
+    ],
+    sentence:v => `Enséñame efectividad de tipos (${lbl('scenario',v).toLowerCase()})${v.attacking_type?`: ataque <b>${TYPES[v.attacking_type][0]}</b>`:''}${v.defending_types.length?` contra <b>${v.defending_types.map(t=>TYPES[t][0]).join('/')}</b>`:''}` },
+];
+const PROMPT = id => PROMPTS.find(p => p.id === id);
+
+/* ───────────────────────── state ───────────────────────── */
+const S = { device:'desktop', place:'widget', rnd:{}, draft:'', scrollTo:null, view:'welcome', messages:[], menu:null, menuSel:0, active:null, v:{}, q:{}, sel:{}, focusField:null, json:false };
+
+function freshValues(p){ const v = {}; p.fields.forEach(f => {
+  v[f.arg] = f.kind==='team'||f.kind==='types' ? [] : f.kind==='multi' ? [...(f.def||[])] : f.kind==='pokemon' ? [] : f.kind==='text' ? '' : f.kind==='type' ? null : f.def;
+}); return v; }
+function field(arg){ return PROMPT(S.active).fields.find(f => f.arg === arg); }
+function optLabel(arg, val){ const f = PROMPT(S.active).fields.find(x => x.arg === arg); const o = f.opts.find(o => o[0] === val); return o ? o[1] : val; }
+function lbl(arg, v){ return optLabel(arg, v[arg]); }
+function lbls(arg, v){ return v[arg].map(x => optLabel(arg, x).toLowerCase()).join(', '); }
+function names(list){ return list.map(s => BY_SLUG[s].name).join(', '); }
+function visible(p, f){ return !f.showIf || f.showIf(S.v); }
+function missing(p){ return p.fields.filter(f => f.req && visible(p,f) && (Array.isArray(S.v[f.arg]) ? !S.v[f.arg].length : !S.v[f.arg])).map(f => f.label); }
+function mcpArgs(p){
+  const out = {};
+  p.fields.forEach(f => { if (f.virtual || !visible(p,f)) return; const val = S.v[f.arg];
+    if (Array.isArray(val)) { if (val.length) out[f.arg] = val.join(','); } else if (val) out[f.arg] = val; });
+  if (p.derive) Object.entries(p.derive(S.v)).forEach(([k, val]) => { if (val) out[k] = val; });
+  return out;
+}
+
+/* ───────────────────────── search ───────────────────────── */
+function search(q){
+  const n = norm(q); if (!n) return [];
+  const num = n.replace(/^#/, '');
+  if (/^\d+$/.test(num)) return DEX.filter(p => String(p.n).startsWith(num)).slice(0, 8);
+  if (TYPE_ALIAS[n]) return DEX.filter(p => p.t.includes(TYPE_ALIAS[n])).slice(0, 12);
+  const starts = DEX.filter(p => norm(p.name).startsWith(n) || p.slug.startsWith(n));
+  const inc = DEX.filter(p => !starts.includes(p) && (norm(p.name).includes(n) || p.slug.includes(n)));
+  return [...starts, ...inc].slice(0, 8);
+}
+
+/* ───────────────────────── render helpers ───────────────────────── */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const spr = (p, cls='') => `<span class="spr ${cls}" style="--c:${TYPES[p.t[0]][1]}">#${p.n}</span>`;
+const tb = t => `<span class="tb" style="--c:${TYPES[t][1]}">${TYPES[t][0]}</span>`;
+
+function renderWelcome(){
+  const groups = ['Batalla','Aprender'];
+  return `<div class="inner">
+    <div class="dialog"><p>¡Hola, entrenador! Soy DEXTER, la Pokédex del Profesor Oak.</p><p>Pregúntame lo que quieras, o elige un prompt guiado.</p></div>
+    ${groups.map(g => `<div class="sectionLabel">── PROMPTS · ${g.toUpperCase()} ──</div>
+      <div class="cards">${PROMPTS.filter(p => p.group === g).map(p => `
+        <button class="card" data-action="open" data-v="${p.id}">
+          <span class="ct"><span class="ico">${p.icon}</span>${p.title}</span>
+          <span class="cd">${p.desc}</span>
+          <span class="cg">${p.id}</span>
+        </button>`).join('')}</div>`).join('')}
+  </div>`;
+}
+
+function renderChat(){
+  return `<div class="inner">${S.messages.map((m, i) => {
+    if (m.role === 'user') return `
+    <div class="msg user"><div class="who">TÚ</div>
+      <div class="pcard"><div class="pt"><span class="ico">${PROMPT(m.id).icon}</span>${PROMPT(m.id).title}<span class="tag">${m.id}</span></div>
+        <div class="pq">${m.sentence}</div>
+        ${m.team.length ? `<div class="pteam">${m.team.map(s => spr(BY_SLUG[s], 'sm')).join('')}</div>` : ''}
+        <button class="pedit" data-action="edit" data-v="${i}">✎ Editar y reenviar</button>
+      </div></div>`;
+    if (m.role === 'text') return `<div class="msg user"><div class="who">TÚ</div><div class="ubub">${esc(m.text)}</div></div>`;
+    if (m.role === 'plain') return `<div class="msg"><div class="who">DEXTER</div><div class="bot">${m.done ? m.text : '<span class="blink">▌</span>'}</div></div>`;
+    if (m.role === 'form') { const p = PROMPT(m.id);
+      const bar = `<div class="wbar"><span>${m.viaModel ? 'tool show_prompt_form · elegido por Dexter' : 'abierto desde el menú · sin llamar al modelo'}</span><span>${p.id}</span></div>`;
+      return `<div class="msg"><div class="who">DEXTER</div>
+        ${m.viaModel ? `<div class="bot intro"><div class="tools"><span>show_prompt_form</span></div>${m.intro}</div>` : ''}
+        ${m.status === 'open' ? `<div class="wframe open">${bar}<div class="wform">${formHead(p)}${formBody(p)}${formFoot(p)}</div></div>`
+          : `<div class="wframe">${bar}<div class="wdone">${m.status === 'sent' ? `<span class="ok">✓ Enviado</span> ${p.title}` : `Formulario cerrado · <button class="linkbtn" data-action="reopen" data-v="${i}">volver a abrir</button>`}</div></div>`}
+      </div>`; }
+    return `
+    <div class="msg"><div class="who">DEXTER</div>
+      <div class="bot"><div class="tools">${m.tools.map(t => `<span>${t}</span>`).join('')}</div>
+        ${m.done ? 'Aquí va la respuesta narrada de Dexter (fuera del alcance del mockup). El prompt MCP llegó con estos argumentos:' : '<span class="blink">▌</span> Consultando la Pokédex…'}
+        ${m.done ? `<pre class="json">${esc(JSON.stringify(m.args, null, 2))}</pre>` : ''}
+      </div></div>`; }).join('')}</div>`;
+}
+
+function renderMenu(){
+  if (S.menu === null) return '';
+  const f = norm(S.menu);
+  const list = PROMPTS.filter(p => !f || norm(p.title + ' ' + p.desc + ' ' + p.id).includes(f));
+  S.menuList = list; if (S.menuSel >= list.length) S.menuSel = 0;
+  if (!list.length) return `<div class="menu" id="menu"><div class="empty">Ningún prompt coincide con “${esc(S.menu)}”.</div></div>`;
+  return `<div class="menu" id="menu" role="listbox">${list.map((p, i) => `
+    ${i === 0 || list[i-1].group !== p.group ? `<div class="mh">── ${p.group.toUpperCase()} ──</div>` : ''}
+    <button class="mi ${i === S.menuSel ? 'sel' : ''}" data-action="open" data-v="${p.id}" role="option">
+      <span class="ico">${p.icon}</span>
+      <span><span class="mt">${p.title}</span><br><span class="md">${p.desc}</span>
+        <span class="ma">${p.fields.filter(x => !x.showIf).map(x => `<span class="${x.req ? 'req' : ''}">${x.label}${x.req ? '*' : ''}</span>`).join('')}</span></span>
+    </button>`).join('')}</div>`;
+}
+
+function renderPicker(f){
+  const isOne = f.kind === 'pokemon'; const max = isOne ? 1 : f.max; const list = S.v[f.arg];
+  const full = list.length >= max;
+  const slotsN = isOne ? 1 : max;
+  const slots = Array.from({length: slotsN}, (_, i) => { const s = list[i]; const p = s && BY_SLUG[s];
+    const isR = S.rnd[f.arg]?.has(s);
+    return p ? `<div class="slot filled ${isR ? 'rand' : ''}">${isR ? `<button class="rr" title="Otro al azar" data-action="reroll" data-f="${f.arg}" data-v="${s}">🎲</button>` : ''}${spr(p)}<div><div class="nm">${p.name}</div><div class="tps">${p.t.map(tb).join('')}</div></div><button class="rm" title="Quitar" data-action="rm" data-f="${f.arg}" data-v="${s}">×</button></div>`
+             : `<div class="slot ${i === list.length && S.focusField === f.arg ? 'focus' : ''}">${i === list.length ? '＋' : ''}<span>${i === list.length ? (isOne ? 'Busca abajo' : 'Siguiente') : ''}</span></div>`; }).join('');
+  const typesInTeam = [...new Set(list.flatMap(s => BY_SLUG[s].t))];
+  return `
+    <div class="slots ${isOne ? 'n1' : ''}">${slots}</div>
+    ${full && !isOne ? '' : `<div class="search"><span class="mag">⌕</span>
+      <input id="q-${f.arg}" data-search="${f.arg}" autocomplete="off" placeholder="${isOne && full ? 'Cambiar Pokémon…' : 'Busca por nombre, #número o tipo (“fuego”)'}" value="${esc(S.q[f.arg] || '')}"></div>
+      <div id="r-${f.arg}">${renderResults(f)}</div>`}
+    ${`<div class="subrow">
+      ${!full || isOne ? `<button class="rbtn" data-action="random" data-f="${f.arg}">🎲 ${isOne ? (full ? 'Otro al azar' : 'Uno al azar') : list.length ? `Completar al azar (${max - list.length})` : 'Equipo al azar'}</button>` : ''}
+      ${typesInTeam.length && !isOne ? `<span class="coverage">Tipos del equipo: ${typesInTeam.map(tb).join(' ')}</span>` : ''}
+      ${f.box && !list.length ? `<button class="linkbtn" data-action="box" data-f="${f.arg}">⬚ Traer de la Caja de Bill (${BOX.length})</button>` : ''}
+      ${list.length && !isOne ? `<button class="linkbtn" data-action="clear" data-f="${f.arg}">Vaciar</button>` : ''}
+    </div>`}`;
+}
+
+function renderResults(f){
+  const q = S.q[f.arg] || ''; if (!q.trim()) return '';
+  const res = search(q); const list = S.v[f.arg]; const isOne = f.kind === 'pokemon';
+  const full = !isOne && list.length >= f.max; const sel = S.sel[f.arg] || 0;
+  if (!res.length) return `<div class="results"><div class="res none">Ningún Pokémon coincide. Prueba con el número (#25) o un tipo.</div></div>`;
+  return `<div class="results">${res.map((p, i) => { const taken = list.includes(p.slug);
+    return `<button class="res ${i === sel ? 'sel' : ''}" data-action="add" data-f="${f.arg}" data-v="${p.slug}" ${taken || full ? 'disabled' : ''}>
+      ${spr(p, 'sm')}<span class="num">#${String(p.n).padStart(3, '0')}</span><span class="rn">${p.name}</span>
+      <span class="tps">${p.t.map(tb).join('')}</span><span class="add">${taken ? 'en el equipo' : isOne ? 'elegir' : '＋ agregar'}</span></button>`; }).join('')}</div>`;
+}
+
+function renderField(p, f){
+  if (!visible(p, f)) return '';
+  const val = S.v[f.arg];
+  const head = (count='') => `<div class="fl">${f.label}${f.req ? '<span class="req">obligatorio</span>' : ''}${count ? `<span class="cnt">${count}</span>` : ''}</div>${f.help ? `<div class="help">${f.help}</div>` : ''}`;
+  if (f.kind === 'team') return `<div class="field">${head(`${val.length}/${f.max}`)}${renderPicker(f)}</div>`;
+  if (f.kind === 'pokemon') return `<div class="field">${head()}${renderPicker(f)}</div>`;
+  if (f.kind === 'choice') return `<div class="field">${head()}<div class="choices">${f.opts.map(o => `<button class="chip" data-action="choose" data-f="${f.arg}" data-v="${o[0]}" aria-pressed="${val === o[0]}">${o[1]}${o[2] ? `<span class="hint">${o[2]}</span>` : ''}</button>`).join('')}</div></div>`;
+  if (f.kind === 'multi') return `<div class="field">${head(val.length ? `${val.length} elegidos` : '')}<div class="choices">${f.opts.map(o => `<button class="chip small" data-action="toggle" data-f="${f.arg}" data-v="${o[0]}" aria-pressed="${val.includes(o[0])}">${val.includes(o[0]) ? '✓ ' : ''}${o[1]}</button>`).join('')}</div></div>`;
+  if (f.kind === 'text') return `<div class="field">${head()}<input class="free" data-text="${f.arg}" placeholder="${esc(f.placeholder || '')}" value="${esc(val)}"></div>`;
+  if (f.kind === 'type' || f.kind === 'types') {
+    const multi = f.kind === 'types'; const arr = multi ? val : (val ? [val] : []);
+    return `<div class="field">${head(multi ? `${arr.length}/${f.max}` : '')}<div class="choices" style="margin-bottom:8px"><button class="rbtn" data-action="trandom" data-f="${f.arg}">🎲 ${multi ? 'Tipos al azar' : 'Tipo al azar'}</button></div><div class="types">${Object.entries(TYPES).map(([k, [es, c]]) =>
+      `<button class="tbtn2" style="--c:${c}" data-action="${multi ? 'ttoggle' : 'tpick'}" data-f="${f.arg}" data-v="${k}" aria-pressed="${arr.includes(k)}" ${multi && !arr.includes(k) && arr.length >= f.max ? 'disabled' : ''}>${es}</button>`).join('')}</div></div>`;
+  }
+  return '';
+}
+
+function formHead(p){ return `<div class="sh"><span class="ico">${p.icon}</span><div><div class="st">${p.title}</div><div class="ss">${p.desc}</div></div><button class="x" data-action="close" aria-label="Cerrar">×</button></div>`; }
+function formBody(p){
+  const fields = p.fields.filter(f => f.pair !== 'b').map(f => f.pair === 'a'
+    ? `<div class="vs"><div>${renderField(p, f)}</div><div class="vsl">VS</div><div>${renderField(p, p.fields.find(x => x.pair === 'b'))}</div></div>`
+    : renderField(p, f)).join('');
+  return `<div class="sb" id="sb">${fields}</div>`;
+}
+function formFoot(p){ const miss = missing(p);
+  return `<div class="sf">
+      <div class="preview"><span class="pl">SE ENVIARÁ A DEXTER</span><div class="ptext">${miss.length ? '<span style="color:#888">Completa los campos obligatorios para ver el mensaje.</span>' : p.sentence(S.v)}</div>
+        <button class="jsonToggle" data-action="json">${S.json ? 'Ocultar' : 'Ver'} llamada MCP</button>
+        ${S.json ? `<pre class="json">${esc(JSON.stringify({ prompt: p.id, arguments: mcpArgs(p) }, null, 2))}</pre>` : ''}</div>
+      <div class="actions">${miss.length ? `<span class="missing">Falta: ${miss.join(', ')}</span>` : '<span class="ok">✓ Listo</span>'}
+        <button class="btn ghost" data-action="close">Cancelar</button>
+        <button class="btn primary" data-action="run" ${miss.length ? 'disabled' : ''}>Ejecutar ▶</button></div>
+    </div>`;
+}
+function renderSheet(){
+  if (!S.active || S.place !== 'sheet') return '';
+  const p = PROMPT(S.active);
+  return `<div class="scrim" data-action="close"></div>
+  <div class="sheet" role="dialog" aria-label="${p.title}">${formHead(p)}${formBody(p)}${formFoot(p)}</div>`;
+}
+
+function render(keepFocus){
+  const d = document.getElementById('device');
+  const sbScroll = document.getElementById('sb')?.scrollTop || 0;
+  const chatScroll = document.getElementById('chat')?.scrollTop || 0;
+  d.className = 'device' + (S.device === 'mobile' ? ' mobile' : '');
+  d.innerHTML = `
+    <div class="titlebar"><span class="logo"></span><span class="name">MCPokédex</span><span class="vbadge">${S.place === 'sheet' ? 'A · HOJA' : 'B · WIDGET'}</span>
+      <span class="badges"><span style="background:var(--tool)">8 TOOLS</span><span style="background:var(--res)">6 UI</span><span style="background:var(--prompt)">6 PROMPTS</span></span></div>
+    <div class="chat" id="chat">${S.view === 'welcome' ? renderWelcome() : renderChat()}</div>
+    <div class="composer">${renderMenu()}
+      <div class="row">
+        <button class="pbtn" data-action="menu" aria-expanded="${S.menu !== null}" title="Prompts guiados"><span>⚡</span><span class="lbl">Prompts</span></button>
+        <textarea id="input" placeholder="${S.place === 'widget' ? 'Ej.: analiza mi equipo con gengar y lapras' : 'Pregunta, o escribe / para un prompt'}" aria-label="Mensaje">${S.menu !== null ? '/' + esc(S.menu) : esc(S.draft || '')}</textarea>
+        <button class="send" data-action="send">ENVIAR</button>
+      </div></div>
+    ${renderSheet()}`;
+  const sb = document.getElementById('sb'); if (sb && S.place === 'sheet') sb.scrollTop = sbScroll;
+  const chat = document.getElementById('chat');
+  if (S.scrollTo === 'form') { const w = chat.querySelector('.wframe.open'); if (w) chat.scrollTop = w.offsetTop - chat.offsetTop - 60; }
+  else if (S.scrollTo === 'end') chat.scrollTop = chat.scrollHeight;
+  else chat.scrollTop = chatScroll;
+  S.scrollTo = null;
+  document.querySelectorAll('[data-action=device]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === S.device));
+  document.querySelectorAll('[data-action=place]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === S.place));
+  if (keepFocus) { const el = document.getElementById(keepFocus); if (el) { el.focus({ preventScroll: true }); const l = el.value.length; el.setSelectionRange?.(l, l); } }
+}
+
+/* ───────────────────────── actions ───────────────────────── */
+function cancelOpenForm(){ S.messages.forEach(m => { if (m.role === 'form' && m.status === 'open') m.status = 'cancelled'; }); }
+function openPrompt(id, values, opts = {}){
+  cancelOpenForm();
+  S.active = id; S.v = values ? structuredClone(values) : freshValues(PROMPT(id)); S.rnd = {}; S.q = {}; S.sel = {}; S.menu = null; S.json = false;
+  const first = PROMPT(id).fields.find(f => f.kind === 'team' || f.kind === 'pokemon'); S.focusField = first?.arg || null;
+  if (S.place === 'widget') { S.messages.push({ role:'form', id, status:'open', viaModel: !!opts.viaModel, intro: opts.intro || '' }); S.view = 'chat'; S.scrollTo = 'form'; }
+  render(first && !opts.viaModel ? 'q-' + first.arg : null); }
+function closeForm(){ cancelOpenForm(); S.active = null; render(); }
+
+/* Aleatorio: lo elige la UI (no el modelo), así los nombres quedan escritos en la frase y GroundedPokemonNames los acepta. */
+const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function taken(arg){ const p = PROMPT(S.active); const f = p.fields.find(x => x.arg === arg);
+  const other = f.pair ? p.fields.find(x => x.pair && x.pair !== f.pair) : null;
+  return new Set([...S.v[arg], ...(other ? S.v[other.arg] : [])]); }
+function pickRandom(exclude, n){ return shuffle(DEX.filter(p => !exclude.has(p.slug))).slice(0, n).map(p => p.slug); }
+function markRnd(arg, slugs){ (S.rnd[arg] ||= new Set()); slugs.forEach(x => S.rnd[arg].add(x)); }
+
+/* Variante B: Dexter entiende lenguaje natural y responde con el formulario ya prellenado. */
+function intent(text){
+  const n = norm(text);
+  const mons = DEX.filter(p => new RegExp(`\\b${p.slug.split('-')[0]}\\b`).test(n)).map(p => p.slug);
+  let id = null;
+  if (/\b(vs|contra|duelo|gana)\b/.test(n) && mons.length >= 2) id = 'battle/matchup-analysis';
+  else if (/\b(arma|armar|armame|construir)\b.*equipo/.test(n)) id = mons.length ? 'battle/team-preview' : 'educational/team-building';
+  else if (/equipo/.test(n) && /(estrategia|batalla|plan)/.test(n)) id = 'battle/strategy';
+  else if (/equipo/.test(n)) id = 'battle/team-preview';
+  else if (/\btipos?\b|eficaz|efectividad/.test(n)) id = 'educational/type-effectiveness';
+  else if (mons.length === 1) id = 'educational/pokemon-analysis';
+  const azar = /\b(azar|aleatori[oa]s?|random|sorprendeme)\b/.test(n);
+  if (!id && azar) id = 'battle/team-preview';
+  if (!id) return null;
+  const p = PROMPT(id); const v = freshValues(p); const left = [...mons]; const rnd = {};
+  p.fields.forEach(f => { if (f.kind === 'pokemon' && left.length) v[f.arg] = [left.shift()];
+    else if (f.kind === 'team' && !f.virtual && left.length) v[f.arg] = left.splice(0, f.max); });
+  const tname = Object.entries(TYPES).find(([k, [es]]) => n.includes(norm(es)));
+  if (id === 'educational/type-effectiveness' && tname) v.attacking_type = tname[0];
+  let dice = '';
+  if (azar) { const f = p.fields.find(x => (x.kind === 'team' || x.kind === 'pokemon') && !x.virtual);
+    const max = f.kind === 'pokemon' ? 1 : f.max; const extra = shuffle(DEX.filter(x => !v[f.arg].includes(x.slug))).slice(0, max - v[f.arg].length).map(x => x.slug);
+    v[f.arg] = [...v[f.arg], ...extra]; rnd[f.arg] = extra;
+    dice = `Elegí ${extra.length} al azar: ${extra.map(s => BY_SLUG[s].name).join(', ')}. Cambia los que quieras con 🎲 o ×. `; }
+  const got = mons.length ? `Ya puse a ${mons.map(s => BY_SLUG[s].name).join(', ')}. ` : '';
+  return { id, v, rnd, intro: `${got}${dice}${dice ? '' : 'Revisa o completa lo que falta y presiona Ejecutar.'}` };
+}
+function sendText(){
+  const text = (S.draft || '').trim(); if (!text) return;
+  S.draft = ''; S.messages.push({ role:'text', text }); S.view = 'chat'; S.scrollTo = 'end';
+  const it = S.place === 'widget' ? intent(text) : null;
+  if (it) { const bot = { role:'plain', done:false }; S.messages.push(bot); render('input');
+    setTimeout(() => { S.messages.splice(S.messages.indexOf(bot), 1); openPrompt(it.id, it.v, { viaModel:true, intro:it.intro }); Object.entries(it.rnd).forEach(([k, l]) => markRnd(k, l)); render(); }, 900); }
+  else { const bot = { role:'plain', done:false, text: S.place === 'widget' ? 'Respuesta normal de Dexter (no detecté un prompt guiado en el mensaje).' : 'Respuesta normal de Dexter. En la variante A, escribir en lenguaje natural no abre formularios: se abren con ⚡, “/” o las tarjetas.' };
+    S.messages.push(bot); render('input'); setTimeout(() => { bot.done = true; S.scrollTo = 'end'; render(); }, 700); }
+}
+function addMon(arg, slug){ const f = field(arg); const list = S.v[arg];
+  if (f.kind === 'pokemon') S.v[arg] = [slug]; else if (!list.includes(slug) && list.length < f.max) list.push(slug);
+  S.q[arg] = ''; S.sel[arg] = 0; S.focusField = arg; render(S.v[arg].length < (f.max || 1) ? 'q-' + arg : null); }
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-action]'); if (!t) return;
+  const { action: a, v, f } = t.dataset;
+  if (a === 'device') { S.device = v; render(); }
+  else if (a === 'reset') { Object.assign(S, { view:'welcome', messages:[], menu:null, active:null, draft:'' }); render(); }
+  else if (a === 'place') { Object.assign(S, { place:v, view:'welcome', messages:[], menu:null, active:null, draft:'' }); render(); }
+  else if (a === 'send') { sendText(); }
+  else if (a === 'reopen') { const m = S.messages[+v]; openPrompt(m.id, S.v); }
+  else if (a === 'jump') { openPrompt(v); }
+  else if (a === 'menu') { S.menu = S.menu === null ? '' : null; S.menuSel = 0; render(S.menu !== null ? 'input' : null); }
+  else if (a === 'open') { openPrompt(v); }
+  else if (a === 'close') { closeForm(); }
+  else if (a === 'add') { addMon(f, v); }
+  else if (a === 'rm') { S.v[f] = S.v[f].filter(s => s !== v); S.rnd[f]?.delete(v); S.focusField = f; render('q-' + f); }
+  else if (a === 'random') { const fd = field(f); const max = fd.kind === 'pokemon' ? 1 : fd.max;
+    if (fd.kind === 'pokemon') { const x = pickRandom(taken(f), 1); S.v[f] = x; S.rnd[f] = new Set(x); }
+    else { const x = pickRandom(taken(f), max - S.v[f].length); S.v[f].push(...x); markRnd(f, x); }
+    render(); }
+  else if (a === 'reroll') { const [x] = pickRandom(taken(f), 1); const i = S.v[f].indexOf(v); S.v[f][i] = x; S.rnd[f].delete(v); S.rnd[f].add(x); render(); }
+  else if (a === 'trandom') { const fd = field(f); const ks = shuffle(Object.keys(TYPES));
+    S.v[f] = fd.kind === 'type' ? ks[0] : ks.slice(0, 1 + Math.floor(Math.random() * fd.max)); render(); }
+  else if (a === 'clear') { S.v[f] = []; render('q-' + f); }
+  else if (a === 'box') { S.v[f] = BOX.slice(0, field(f).max); render(); }
+  else if (a === 'choose') { S.v[f] = v; render(); }
+  else if (a === 'toggle') { const l = S.v[f]; S.v[f] = l.includes(v) ? l.filter(x => x !== v) : [...l, v]; render(); }
+  else if (a === 'tpick') { S.v[f] = S.v[f] === v ? null : v; render(); }
+  else if (a === 'ttoggle') { const l = S.v[f]; S.v[f] = l.includes(v) ? l.filter(x => x !== v) : [...l, v]; render(); }
+  else if (a === 'json') { S.json = !S.json; render(); }
+  else if (a === 'edit') { const m = S.messages[+v]; openPrompt(m.id, m.values); }
+  else if (a === 'run') {
+    const p = PROMPT(S.active); if (missing(p).length) return;
+    const teamArgs = p.fields.filter(x => (x.kind === 'team' || x.kind === 'pokemon') && !x.virtual || x.arg === '_include');
+    const team = teamArgs.flatMap(x => S.v[x.arg]);
+    const tools = { 'battle/team-preview':['analyze_team'], 'battle/strategy':['analyze_team'], 'battle/matchup-analysis':['compare_pokemon','get_type_effectiveness'], 'educational/pokemon-analysis':['get_pokedex_entry','analyze_pokemon_stats'], 'educational/team-building':['search_pokemon','analyze_team'], 'educational/type-effectiveness':['get_type_effectiveness'] }[p.id];
+    S.messages.forEach(m => { if (m.role === 'form' && m.status === 'open') m.status = 'sent'; });
+    S.messages.push({ role:'user', id:p.id, sentence:p.sentence(S.v), team, values:structuredClone(S.v) });
+    const bot = { role:'bot', tools, done:false, args:{ prompt:p.id, arguments:mcpArgs(p) } };
+    S.messages.push(bot); S.view = 'chat'; S.active = null; S.scrollTo = 'end'; render();
+    setTimeout(() => { bot.done = true; S.scrollTo = 'end'; render(); }, 900);
+  }
+});
+
+document.addEventListener('input', e => {
+  const s = e.target.dataset.search;
+  if (s) { S.q[s] = e.target.value; S.sel[s] = 0; S.focusField = s; document.getElementById('r-' + s).innerHTML = renderResults(field(s)); return; }
+  const tx = e.target.dataset.text;
+  if (tx) { S.v[tx] = e.target.value; const pt = document.querySelector('.ptext'); const p = PROMPT(S.active); if (pt && !missing(p).length) pt.innerHTML = p.sentence(S.v); return; }
+  if (e.target.id === 'input') { const val = e.target.value; S.draft = val.startsWith('/') ? '' : val;
+    if (val.startsWith('/')) { S.menu = val.slice(1); S.menuSel = 0; render('input'); }
+    else if (S.menu !== null) { S.menu = null; render('input'); } }
+});
+
+document.addEventListener('keydown', e => {
+  const s = e.target.dataset?.search;
+  if (s) { const res = search(S.q[s] || ''); const n = res.length;
+    if (e.key === 'ArrowDown' && n) { e.preventDefault(); S.sel[s] = Math.min((S.sel[s] || 0) + 1, n - 1); document.getElementById('r-' + s).innerHTML = renderResults(field(s)); }
+    else if (e.key === 'ArrowUp' && n) { e.preventDefault(); S.sel[s] = Math.max((S.sel[s] || 0) - 1, 0); document.getElementById('r-' + s).innerHTML = renderResults(field(s)); }
+    else if (e.key === 'Enter' && n) { e.preventDefault(); const p = res[S.sel[s] || 0]; if (p && !S.v[s].includes(p.slug)) addMon(s, p.slug); }
+    else if (e.key === 'Backspace' && !e.target.value && S.v[s].length) { S.v[s].pop(); render('q-' + s); }
+    return; }
+  if (e.target.id === 'input' && S.menu !== null && S.menuList?.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); S.menuSel = Math.min(S.menuSel + 1, S.menuList.length - 1); render('input'); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); S.menuSel = Math.max(S.menuSel - 1, 0); render('input'); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); openPrompt(S.menuList[S.menuSel].id); }
+  }
+  else if (e.target.id === 'input' && S.menu === null && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+  if (e.key === 'Escape') { if (S.active) { closeForm(); } else if (S.menu !== null) { S.menu = null; render(); } }
+});
+
+render();
+</script>
+</body>
+</html>
